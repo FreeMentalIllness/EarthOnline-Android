@@ -34,6 +34,7 @@ import com.example.earthonline.BuildConfig
 import com.example.earthonline.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.earthonline.util.DownloadPhase
 import androidx.navigation.NavHostController
 import com.example.earthonline.data.network.UpdateRepository
 import com.example.earthonline.reminder.ReminderScheduler
@@ -91,6 +92,8 @@ fun AppearanceRoute(
     val albumCount = remember(memoryPhotosJson) {
         Regex("\"path\"").findAll(memoryPhotosJson).count()
     }
+    val wallpaperAlbum by vm.wallpaperAlbum.collectAsStateWithLifecycle(initialValue = "")
+    val albums by vm.albums.collectAsStateWithLifecycle(initialValue = emptyList())
 
     /* v1.2.4：壁纸导入改为「先选图 → 裁剪框缩放/移动（铺满屏幕）→ 确认」，
        裁剪输出无损 PNG（见 ui/components/ImageCropper.kt）。 */
@@ -181,6 +184,40 @@ fun AppearanceRoute(
                             },
                             enabled = albumCount > 0
                         )
+                    }
+                    // v1.0.6：轮换来源相册（空 = 全部照片，无数量限制）
+                    if (wallpaperRotate && albums.isNotEmpty()) {
+                        var albumMenu by remember { mutableStateOf(false) }
+                        val albumName = albums.firstOrNull { it.id == wallpaperAlbum }?.name ?: "全部照片"
+                        ExposedDropdownMenuBox(
+                            expanded = albumMenu,
+                            onExpandedChange = { albumMenu = it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = albumName,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("轮换来源相册") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = albumMenu) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = albumMenu,
+                                onDismissRequest = { albumMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("全部照片") },
+                                    onClick = { vm.setWallpaperAlbum(""); albumMenu = false }
+                                )
+                                albums.forEach { a ->
+                                    DropdownMenuItem(
+                                        text = { Text(a.name) },
+                                        onClick = { vm.setWallpaperAlbum(a.id); albumMenu = false }
+                                    )
+                                }
+                            }
+                        }
                     }
                     // v1.0.4：字号档位设置已移除。文字大小完全跟随系统字体缩放（无障碍），
                     // 应用内布局全部自适应（FlowRow / 横向滚动 / 权重布局），不再需要档位干预。
@@ -922,6 +959,67 @@ fun AboutRoute(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // v1.0.6：应用内更新的下载进度卡（多线路自动回退，实时百分比 / 已下载字节 / 当前线路）
+            val dlProgress by installer.progress.collectAsStateWithLifecycle()
+            dlProgress?.let { p ->
+                if (p.phase != DownloadPhase.Idle) {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    when (p.phase) {
+                                        DownloadPhase.Downloading -> "⬇️ 正在下载更新"
+                                        DownloadPhase.Retrying -> "🔁 正在切换下载线路"
+                                        DownloadPhase.Success -> "✅ 下载完成"
+                                        else -> "⚠️ 下载失败"
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { installer.clearProgress() }) { Text("收起") }
+                            }
+                            if (p.phase == DownloadPhase.Downloading) {
+                                if (p.percent >= 0) {
+                                    LinearProgressIndicator(
+                                        progress = p.percent / 100f,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Text(
+                                        "${p.percent}% · ${formatBytes(p.receivedBytes)} / ${formatBytes(p.totalBytes)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                    Text(
+                                        "已下载 ${formatBytes(p.receivedBytes)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            if (p.totalAttempts > 1) {
+                                Text(
+                                    "线路 ${p.attempt} / ${p.totalAttempts}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            p.message?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -986,21 +1084,8 @@ fun AboutRoute(
                         }
                         Text("检查更新")
                     }
-                    // v1.0.5：分享人生卡片长图（等级 / 连续 / 本月完成 / 关键词 / 签名）
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                runCatching {
-                                    val data = vm.lifeCardData()
-                                    com.example.earthonline.util.LifeCardRenderer.share(
-                                        context,
-                                        com.example.earthonline.util.LifeCardRenderer.render(context, data)
-                                    )
-                                }.onFailure { snackbar.showSnackbar("卡片生成失败：${it.message}") }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("📸 分享人生卡片") }
+                    // v1.0.7：分享人生卡片入口已去重 —— 统一收敛到「个人资料页」唯一入口
+                    // （com.example.earthonline.util.ShareCardRenderer），此处不再重复提供生成入口。
                 }
             }
         }
@@ -1109,4 +1194,12 @@ fun PersonChip(p: Person) {
             }
         }
     }
+}
+
+/** 字节数转人类可读（下载进度用）；未知大小（负数 / 0）返回 "--" */
+private fun formatBytes(bytes: Long): String = when {
+    bytes <= 0 -> "--"
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / 1024.0 / 1024.0)
+    bytes >= 1024 -> "%.0f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
 }

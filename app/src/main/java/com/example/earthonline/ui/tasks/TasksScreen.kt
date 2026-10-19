@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.SubdirectoryArrowRight
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.*
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,8 +46,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +70,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 private val CATEGORIES = listOf("main" to "主线", "side" to "支线", "todo" to "To Do")
+
+/** v1.0.7：「日常」下的二级分类（主线 / 支线）；To Do 走顶层独立 Tab + 表格视图。 */
+private val CATEGORIES_DAILY = listOf("main" to "主线", "side" to "支线")
 
 /** 任务状态（对应 TaskEntity.status；done 由 doneAt 口径统一维护） */
 private val STATUSES = listOf(
@@ -97,7 +106,11 @@ fun TasksScreen(
     val allTasks by vm.tasks.collectAsStateWithLifecycle()
     // v1.0.4：「隐藏已完成任务」开关（DataStore 持久化，跨会话记住）
     val hideDone by vm.hideDone.collectAsStateWithLifecycle(initialValue = false)
-    var category by remember { mutableStateOf("main") }
+    // v1.0.7：任务页两级 Tab。顶层「日常 / Todo」；「日常」下再分「主线 / 支线」。
+    // 已移除收集箱（QuickCaptureBar）—— 想法统一在「Todo」表格里记录整理。
+    var topTab by remember { mutableStateOf("daily") }   // daily | todo
+    var dailySub by remember { mutableStateOf("main") }  // main | side
+    val category = if (topTab == "daily") dailySub else "todo"
     val collapsed = remember { mutableStateOf(setOf<String>()) }
     var showAdd by remember { mutableStateOf(openAddOnEntry) }
     var addParentId by remember { mutableStateOf<String?>(null) }
@@ -185,9 +198,17 @@ fun TasksScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = CATEGORIES.indexOfFirst { it.first == category }.coerceAtLeast(0)) {
-                CATEGORIES.forEach { (key, label) ->
-                    Tab(selected = key == category, onClick = { category = key }, text = { Text(label) })
+            // 顶层 Tab：日常 / Todo
+            TabRow(selectedTabIndex = if (topTab == "daily") 0 else 1) {
+                Tab(selected = topTab == "daily", onClick = { topTab = "daily" }, text = { Text("日常") })
+                Tab(selected = topTab == "todo", onClick = { topTab = "todo" }, text = { Text("Todo") })
+            }
+            // 「日常」下的二级分类：主线 / 支线
+            if (topTab == "daily") {
+                TabRow(selectedTabIndex = CATEGORIES.indexOfFirst { it.first == dailySub }.coerceAtLeast(0)) {
+                    CATEGORIES_DAILY.forEach { (key, label) ->
+                        Tab(selected = key == dailySub, onClick = { dailySub = key }, text = { Text(label) })
+                    }
                 }
             }
 
@@ -406,14 +427,35 @@ fun TasksScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    // Todo 表格视图：表头
+                    if (topTab == "todo") {
+                        item(key = "__todo_header__") { TodoTableHeader() }
+                    }
                     itemsIndexed(
                         visible,
                         key = { _, node -> node.task.id },
                         // contentType 告诉 Compose「这些格子长得一样」，滚动时可以直接复用
                         // 上一个同类格子的测量结果与组合结果，省掉一次重新组合
-                        contentType = { _, _ -> "taskRow" }
+                        contentType = { _, _ -> if (topTab == "todo") "todoRow" else "taskRow" }
                     ) { index, node ->
                         val dragging = dragIndex == index
+                        if (topTab == "todo") {
+                            TodoTableRow(
+                                task = node.task,
+                                selectMode = selectMode,
+                                selected = node.task.id in selected.value,
+                                onToggleSelect = {
+                                    val id = node.task.id
+                                    selected.value = if (id in selected.value)
+                                        selected.value - id else selected.value + id
+                                },
+                                onToggleDone = {
+                                    if (node.task.status != "done") celebrate(node.task.id)
+                                    vm.toggleDone(node.task)
+                                },
+                                onEdit = { editing = node.task }
+                            )
+                        } else {
                         Box(
                             Modifier
                                 .animateItem()
@@ -451,6 +493,7 @@ fun TasksScreen(
                             onAddChild = { addParentId = node.task.id; showAdd = true },
                             onDelete = { vm.deleteCascade(node.task.id) }
                         )
+                        }
                         }
                     }
                 }
@@ -499,6 +542,96 @@ fun TasksScreen(
             onDelete = { vm.deleteCascade(t.id); editing = null }
         )
     }
+}
+
+/**
+ * v1.0.7：Todo 表格视图 —— 表头。列：完成勾选 / 任务 / 截止 / 状态。
+ */
+@Composable
+private fun TodoTableHeader() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = UiDimens.ListPad, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Spacer(Modifier.width(48.dp)) // 与行首勾选框对齐，让「任务」列左边缘一致
+        Text(
+            "任务",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(start = 8.dp)
+        )
+        Text(
+            "截止",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(72.dp)
+        )
+        Text(
+            "状态",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(56.dp)
+        )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/**
+ * v1.0.7：Todo 表格视图 —— 单行。
+ * 勾选框直接切换完成态（多选模式下改为切换选中）；点行进入编辑。
+ */
+@Composable
+private fun TodoTableRow(
+    task: TaskEntity,
+    selectMode: Boolean,
+    selected: Boolean,
+    onToggleSelect: () -> Unit,
+    onToggleDone: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val done = task.status == "done"
+    val statusLabel = STATUSES.firstOrNull { it.first == task.status }?.second ?: task.status
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { if (selectMode) onToggleSelect() else onEdit() }
+            .padding(horizontal = UiDimens.ListPad, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = if (selectMode) selected else done,
+            onCheckedChange = { if (selectMode) onToggleSelect() else onToggleDone() },
+            modifier = Modifier.size(44.dp)
+        )
+        Text(
+            task.title,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textDecoration = if (done) TextDecoration.LineThrough else null,
+            color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f).padding(start = 4.dp)
+        )
+        Text(
+            task.dueDate ?: "—",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(72.dp)
+        )
+        Text(
+            statusLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (done) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(56.dp)
+        )
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 /**

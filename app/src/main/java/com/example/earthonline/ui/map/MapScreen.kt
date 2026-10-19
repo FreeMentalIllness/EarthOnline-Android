@@ -6,11 +6,14 @@ import android.provider.Settings
 import android.view.View
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
@@ -89,6 +92,10 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     /** 是否正在定位（UI 显示进度，避免「点了没反应」） */
     var locating by remember { mutableStateOf(false) }
 
+    fun moveCameraTo(ll: LatLng, zoom: Float = 15f) {
+        mapRef.aMap?.let { runCatching { it.moveCamera(CameraUpdateFactory.newLatLngZoom(ll, zoom)) } }
+    }
+
     /**
      * 主动定位（调用前请自行确保已授权）。每一步都有明确反馈：
      * 旧实现只读 getLastKnownLocation（多数真机为 null）且失败静默，是「点定位没反应」的根因。
@@ -104,10 +111,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 is LocateResult.Success -> {
                     val ll = LatLng(result.lat, result.lng)
                     currentLatLng = ll
-                    mapRef.aMap?.let { map ->
-                        runCatching { map.moveCamera(CameraUpdateFactory.newLatLngZoom(ll, 15f)) }
-                        runCatching { map.addMarker(MarkerOptions().position(ll).title("我的位置")) }
-                    }
+                    mapRef.aMap?.let { runCatching { it.moveCamera(CameraUpdateFactory.newLatLngZoom(ll, 15f)) } }
                     if (!silent) scope.launch { snackbar.showSnackbar("已定位到当前位置") }
                 }
                 is LocateResult.Failure -> scope.launch {
@@ -144,8 +148,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         }
     }
 
-    // 足迹 marker 随数据变化刷新（容错：地图尚未就绪时静默跳过）
-    LaunchedEffect(locations, mapReady) {
+    // 统一重绘：足迹 marker + 当前位置 marker（任一项变化都重画，避免互相覆盖）
+    LaunchedEffect(locations, mapReady, currentLatLng) {
         if (!mapReady) return@LaunchedEffect
         val map = mapRef.aMap ?: return@LaunchedEffect
         runCatching {
@@ -154,6 +158,9 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 if (loc.lat != 0.0 || loc.lng != 0.0) {
                     map.addMarker(MarkerOptions().position(LatLng(loc.lat, loc.lng)).title(loc.name).snippet(loc.note ?: ""))
                 }
+            }
+            currentLatLng?.let {
+                map.addMarker(MarkerOptions().position(it).title("我的位置").snippet("当前定位"))
             }
         }
     }
@@ -308,6 +315,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         )
     }
 }
+
+/* ===================== 原有：足迹列表 / 添加对话框 ===================== */
 
 @Composable
 private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEntity) -> Unit) {

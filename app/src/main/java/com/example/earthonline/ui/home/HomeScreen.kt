@@ -8,9 +8,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +35,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -134,18 +139,6 @@ fun HomeScreen(
     onLevelCelebrated: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var memoInput by remember { mutableStateOf("") }
-    var memoType by remember { mutableStateOf("note") }
-
-    // 语音输入（系统 SpeechRecognizer；无识别服务的机型降级为手动输入弹窗）
-    val speech = remember(context) { SpeechInputController(context) }
-    DisposableEffect(speech) { onDispose { speech.destroy() } }
-    var voiceFallback by remember { mutableStateOf(false) }
-
-    val micPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startVoice(speech, context) { text -> memoInput = (memoInput + text).take(200) }
-        else Toast.makeText(context, "没有麦克风权限，请在系统设置中开启", Toast.LENGTH_SHORT).show()
-    }
 
     var showAddTimeline by remember { mutableStateOf(false) }
     // 主页速览「自定义入口」配置面板（BottomSheet）
@@ -214,66 +207,6 @@ fun HomeScreen(
             )
         }
 
-        item(key = "worldlog", contentType = "card") {
-            Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeader("🌍 世界日志")
-                    OutlinedTextField(
-                        value = memoInput,
-                        onValueChange = { memoInput = it },
-                        placeholder = { Text("记录一闪而过的想法…") },
-                        singleLine = true,
-                        leadingIcon = {
-                            IconButton(onClick = {
-                                if (speech.listening) { speech.stop(); return@IconButton }
-                                // 降级：设备没有可用识别服务（常见于模拟器/精简 ROM）→ 手动输入弹窗
-                                if (!speechAvailable(context)) { voiceFallback = true; return@IconButton }
-                                micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }) {
-                                Icon(
-                                    Icons.Filled.Mic,
-                                    contentDescription = if (speech.listening) "停止录音" else "语音输入",
-                                    tint = if (speech.listening) MaterialTheme.colorScheme.primary
-                                    else LocalContentColor.current
-                                )
-                            }
-                        },
-                        trailingIcon = {
-                            IconButton(
-                                onClick = {
-                                    onAddMemo(memoInput, memoType)
-                                    memoInput = ""
-                                },
-                                enabled = memoInput.isNotBlank()
-                            ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "记录") }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    MemoTypeRow(memoType) { memoType = it }
-                    if (state.recentMemos.isEmpty()) {
-                        EmptyHint("还没有记录，在上方输入第一条世界日志吧", emoji = "📭")
-                    } else {
-                        state.recentMemos.forEach { memo ->
-                            // key 稳定每个 MemoRow 的滑动状态（增删时不串位）
-                            key(memo.id) {
-                                MemoRow(
-                                    text = memo.text,
-                                    type = memo.type,
-                                    time = memo.createdAt.take(10),
-                                    onDelete = { onDeleteMemo(memo.id) }
-                                )
-                            }
-                        }
-                        if (state.totalMemos > state.recentMemos.size) {
-                            TextButton(onClick = { onNavigate("data") }, modifier = Modifier.fillMaxWidth()) {
-                                Text("查看全部 ${state.totalMemos} 条世界日志 ›")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         item(key = "acts", contentType = "card") {
             ActsCard(
                 allActs = state.allActs,
@@ -307,36 +240,10 @@ fun HomeScreen(
                 doneRatio = state.doneRatio,
                 badges = state.badges,
                 badgePool = state.badgePool,
-                onToggleBadge = onToggleBadge,
-                onShare = {
-                    val text = buildString {
-                        append("🌍 地球Online 人生卡片\n")
-                        append("角色：").append(state.displayName).append('\n')
-                        append("等级 Lv.").append(state.life.age)
-                        append(" · 成就 ").append(state.unlockedAch).append('/').append(state.totalAch)
-                        append(" · 足迹 ").append(state.locationCount)
-                        append(" · 任务完成率 ").append(state.doneRatio).append('%')
-                    }
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, text)
-                    }
-                    runCatching { context.startActivity(Intent.createChooser(send, "分享人生卡片")) }
-                }
+                onToggleBadge = onToggleBadge
             )
         }
     }
-
-        // 语音不可用时的降级入口：直接打字填入世界日志
-        if (voiceFallback) {
-            VoiceFallbackDialog(
-                onDismiss = { voiceFallback = false },
-                onConfirm = { text ->
-                    memoInput = (memoInput + text).take(200)
-                    voiceFallback = false
-                }
-            )
-        }
 
         // 时间轴：添加自定义里程碑
         if (showAddTimeline) {
@@ -634,14 +541,17 @@ private fun HeroBanner(state: HomeUiState, onAvatarClick: () -> Unit) {
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         state.displayName,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        // v1.0.7：自适应 —— 昵称再长也只占剩余空间并省略，绝不把称号徽章挤出屏幕或与之重叠
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     // v1.0.3：自定义称号徽章
                     val titleText = com.example.earthonline.util.XpRules.titleFor(state.customTitle)
@@ -653,6 +563,8 @@ private fun HeroBanner(state: HomeUiState, onAvatarClick: () -> Unit) {
                             titleText,
                             style = MaterialTheme.typography.labelSmall,
                             color = AmberPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                         )
                     }
@@ -779,6 +691,8 @@ private fun OverviewGrid(
     val allEntries = listOf(
         HomeEntry("tasks", "📋", "任务", "完成率 ${state.doneRatio}%", "tasks"),
         HomeEntry("backpack", "🎒", "背包", "${state.itemCount} 件物品", "backpack"),
+        HomeEntry("notes", "📝", "笔记", "${state.noteCount} 篇笔记", "notes"),
+        HomeEntry("album", "🖼️", "相册", "${state.albumCount} 张照片", "album"),
         HomeEntry("achievements", "🏆", "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
         HomeEntry("map", "🗺️", "地图", "${state.locationCount} 处足迹", "map"),
         HomeEntry("accounting", "📊", "记账", "账本与导出", null),
@@ -806,17 +720,22 @@ private fun OverviewGrid(
             }
         }
 
-        // 响应式列数：系统/应用大字号（fontScale ≥ 1.3）时降到 2 列，
-        // 避免 3 列挤压导致「完成率 xx%」「x/x」等副标题被截断
-        val cols = if (LocalDensity.current.fontScale >= 1.3f) 2 else 3
+        // v1.0.7：速览改为「华夫菜单」网格 —— 4 列方形图标格（大字号自动降列），
+        // 每格点击时有琥珀色聚光灯从触点扩散（高光跟随），低端机由 GlassTier 自动降级。
+        val cols = when {
+            LocalDensity.current.fontScale >= 1.3f -> 2
+            LocalDensity.current.fontScale >= 1.15f -> 3
+            else -> 4
+        }
         entries.chunked(cols).forEach { rowEntries ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 rowEntries.forEach { entry ->
-                    HomeEntryTile(
-                        entry = entry,
+                    WaffleTile(
+                        icon = entry.icon,
+                        label = entry.label,
                         modifier = Modifier.weight(1f)
                     ) {
                         if (entry.route != null) onNavigate(entry.route) else onAccounting()
@@ -836,6 +755,8 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
     val quickAll = listOf(
         Triple("tasks", "📋", "任务"),
         Triple("backpack", "🎒", "背包"),
+        Triple("notes", "📝", "笔记"),
+        Triple("album", "🖼️", "相册"),
         Triple("achievements", "🏆", "成就"),
         Triple("map", "🗺️", "地图"),
         Triple("accounting", "📊", "记账"),
@@ -867,33 +788,57 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * v1.0.7：华夫菜单单格。方形图标 + 标签，居中排布；
+ * 点击时从触点扩散一团琥珀色聚光灯（高光跟随触点），抬手即消散。
+ */
 @Composable
-private fun HomeEntryTile(entry: HomeEntry, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(UiDimens.ItemRadius),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier.heightIn(min = 76.dp)
+private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var spot by remember { mutableStateOf<Offset?>(null) }
+    val shape = RoundedCornerShape(UiDimens.ItemRadius)
+    Box(
+        modifier
+            .aspectRatio(1f)
+            .clip(shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = { offset ->
+                        spot = offset
+                        tryAwaitRelease()
+                        spot = null
+                    },
+                    onTap = { onClick() }
+                )
+            }
+            .drawWithContent {
+                drawContent()
+                val s = spot
+                if (s != null) {
+                    val r = size.maxDimension * 0.8f
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(AmberPrimary.copy(alpha = 0.32f), Color.Transparent),
+                            center = s,
+                            radius = r
+                        ),
+                        radius = r,
+                        center = s
+                    )
+                }
+            }
     ) {
         Column(
-            Modifier.fillMaxSize().padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            horizontalAlignment = Alignment.Start
+            Modifier.fillMaxSize().padding(8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(entry.icon, style = MaterialTheme.typography.titleMedium)
+            Text(icon, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(6.dp))
             Text(
-                entry.label,
-                style = MaterialTheme.typography.labelLarge,
+                label,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                entry.sub,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1420,8 +1365,7 @@ private fun LifeCard(
     doneRatio: Int,
     badges: List<BadgeItem>,
     badgePool: List<BadgeItem>,
-    onToggleBadge: (String) -> Unit,
-    onShare: () -> Unit
+    onToggleBadge: (String) -> Unit
 ) {
     var showBadgeManager by remember { mutableStateOf(false) }
     Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
@@ -1482,11 +1426,8 @@ private fun LifeCard(
                     }
                 }
             }
-            OutlinedButton(onClick = onShare, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("分享人生卡片")
-            }
+            // v1.0.7：分享人生卡片入口已去重 —— 统一收敛到「个人资料页」唯一入口
+            // （ShareCardRenderer），主页人生卡片只保留数据看板与徽章墙，不再重复提供分享入口。
         }
     }
 

@@ -10,13 +10,19 @@ import com.example.earthonline.data.network.WebDavConfig
 import com.example.earthonline.data.network.UpdateRepository
 import com.example.earthonline.data.network.WebDavService
 import com.example.earthonline.BuildConfig
+import com.example.earthonline.data.photos.MemoryPhoto
+import com.example.earthonline.data.photos.PhotoAlbum
 import com.example.earthonline.data.sync.CloudSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
@@ -74,6 +80,32 @@ class SettingsViewModel @Inject constructor(
     val quickNotif: Flow<Boolean> = settings.quickNotif
     fun setWallpaperRotate(v: Boolean) = viewModelScope.launch { settings.setWallpaperRotate(v) }
     fun setQuickNotif(v: Boolean) = viewModelScope.launch { settings.setQuickNotif(v) }
+
+    // v1.0.6：壁纸轮换指定相册（空串 = 全部照片，取消数量限制）
+    val wallpaperAlbum: Flow<String> = settings.wallpaperAlbum
+    fun setWallpaperAlbum(v: String) = viewModelScope.launch { settings.setWallpaperAlbum(v) }
+
+    /** 壁纸轮换来源相册列表（供外观页下拉选择，空串代表「全部照片」） */
+    val albums: Flow<List<PhotoAlbum>> = settings.albumsJson.map { txt ->
+        if (txt.isBlank()) emptyList()
+        else runCatching { json.decodeFromString(ListSerializer(PhotoAlbum.serializer()), txt) }.getOrDefault(emptyList())
+    }
+
+    /**
+     * 当日应显示的壁纸路径（综合 静态壁纸 / 轮换开关 / 相册筛选）：
+     * - 轮换关 → 静态壁纸；
+     * - 轮换开 → 从指定相册（空=全部照片，无数量限制）按日期确定性挑一张。
+     */
+    val effectiveWallpaper: Flow<String> = combine(wallpaper, wallpaperRotate, memoryPhotosJson, wallpaperAlbum) { wp, rotate, photosJson, albumId ->
+        if (rotate && photosJson.contains("\"path\"")) {
+            val all = runCatching { json.decodeFromString(ListSerializer(MemoryPhoto.serializer()), photosJson) }.getOrDefault(emptyList())
+            val pool = if (albumId.isBlank()) all else all.filter { it.albumId == albumId }
+            if (pool.isNotEmpty()) {
+                val day = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+                pool[day % pool.size].path
+            } else wp
+        } else wp
+    }
 
     fun setTheme(v: String) = viewModelScope.launch { settings.setTheme(v) }
     fun setAchSound(v: Boolean) = viewModelScope.launch { settings.setAchSound(v) }
@@ -158,39 +190,6 @@ class SettingsViewModel @Inject constructor(
     suspend fun importTextFile(content: String): String =
         runCatching { textImporter.import(content, taskDao, memoDao).message }
             .getOrElse { "导入失败：${it.message ?: "文件内容无法解析"}" }
-
-    /**
-     * v1.0.5：分享人生卡片数据（关于页入口）。
-     * 口径独立自洽：等级=周岁（lifeStatsOf）；连续天数=本月完成日键的当月连续段；
-     * 本月关键词=本月完成任务标题的前缀词去重。
-     */
-    suspend fun lifeCardData(): com.example.earthonline.util.LifeCardRenderer.CardData {
-        val profile = profileRepo.get()
-        val life = com.example.earthonline.util.lifeStatsOf(profile?.birthDate)
-        val now = java.time.LocalDate.now()
-        val monthStart = "$now".take(8) + "01" + "T00:00:00Z"
-        val done = taskDao.observeAll().first()
-            .filter { it.status == "done" && (it.doneAt ?: "") >= monthStart }
-        // 连续天数：从今天往回数，完成日键连续段（今天没完成从昨天起算，不惩罚）
-        val days = done.mapNotNull { it.doneAt?.take(10) }.toSet()
-        var streak = 0
-        var cursor = now
-        if (cursor.toString() !in days) cursor = cursor.minusDays(1)
-        while (cursor.toString() in days) { streak++; cursor = cursor.minusDays(1) }
-        val keywords = done.map { it.title.trim() }
-            .filter { it.length >= 2 }
-            .map { if (it.length > 4) it.take(4) else it }
-            .distinct()
-            .take(5)
-        return com.example.earthonline.util.LifeCardRenderer.CardData(
-            name = profile?.name.orEmpty(),
-            signature = profile?.signature.orEmpty(),
-            level = life.age,
-            streakDays = streak,
-            monthDone = done.size,
-            keywords = keywords
-        )
-    }
 
     /* ---------------- v1.2.1：应用内检查更新 ---------------- */
 

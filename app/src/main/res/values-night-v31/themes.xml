@@ -2,7 +2,16 @@
     <!-- Android 12+ 深色 SplashScreen -->
     <style name="Theme.EarthOnline.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/background_dark</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <!-- v1.0.6：深色冷启动白屏根因修复。
+             这份文件是 values-night-v31 的**独立完整定义**，不会与 values/themes.xml 合并。
+             之前这里漏了 android:windowBackground —— 而系统在画「启动窗口」那一帧时用的
+             正是本主题的 windowBackground（不是 postSplashScreenTheme 的），
+             于是冷启动最前面那几十毫秒继承 Theme.SplashScreen 的浅色默认底 → 深色模式下出现白闪。
+             补齐为 @color/background_dark 后，系统启动窗口 / Compose 开屏页 / 主主题三段同色。 -->
+        <item name="android:windowBackground">@color/background_dark</item>
+        <!-- 同样改成透明占位：系统层只给一屏纯色，图标交给 Compose 开屏页演，
+             避免「系统先画一个地球、Compose 再画一次」的重影错位。 -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
         <item name="windowSplashScreenAnimationDuration">500</item>
         <item name="postSplashScreenTheme">@style/Theme.EarthOnline</item>
     </style>

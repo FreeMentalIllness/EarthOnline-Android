@@ -86,7 +86,7 @@ class MemoryPhotoStore @Inject constructor(
      * 批量导入：完整复制原图（画质红线），并推断拍摄日期。
      * 返回本次成功导入的数量。
      */
-    suspend fun importAll(uris: List<android.net.Uri>): Int = withContext(Dispatchers.IO) {
+    suspend fun importAll(uris: List<android.net.Uri>, targetAlbumId: String? = null): Int = withContext(Dispatchers.IO) {
         var ok = 0
         val current = load().toMutableList()
         for (uri in uris) {
@@ -96,7 +96,9 @@ class MemoryPhotoStore @Inject constructor(
                 id = uid("photo"),
                 path = file.absolutePath,
                 day = guessDay(uri, file),
-                note = ""
+                note = "",
+                // v1.0.7：新建相册后直接在该相册下加图 —— 指定 targetAlbumId 时归入该相册
+                albumId = targetAlbumId
             )
             ok++
         }
@@ -161,6 +163,22 @@ class MemoryPhotoStore @Inject constructor(
     suspend fun setPhotoAlbum(photoId: String, albumId: String?) {
         val list = load().map { if (it.id == photoId) it.copy(albumId = albumId) else it }
         save(list)
+    }
+
+    /**
+     * 用系统相册选来的新图替换某张照片的图像（v1.0.6 相册大改：唤起系统相册替换）。
+     * 仅替换图像文件，保留原条目的 day / note / albumId 等元数据。
+     * @return 是否成功（uri 不可用或落库失败返回 false）
+     */
+    suspend fun replacePhoto(id: String, uri: android.net.Uri): Boolean {
+        val list = load()
+        val target = list.firstOrNull { it.id == id } ?: return false
+        val result = ImageStore.importOriginal(context, uri, photosDir(), "memory")
+        val file = result.getOrNull() ?: return false
+        // 删旧图（失败不阻断，最多留一个孤儿文件）
+        runCatching { ImageStore.deleteFile(target.path) }
+        save(list.map { if (it.id == id) it.copy(path = file.absolutePath) else it })
+        return true
     }
 
     /** 取某相册下的照片（按日期倒序）；albumId 空串 = 全部照片（取消 5 张限制） */

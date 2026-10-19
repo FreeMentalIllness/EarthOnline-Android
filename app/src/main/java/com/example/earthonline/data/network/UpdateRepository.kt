@@ -43,54 +43,62 @@ class UpdateRepository @Inject constructor(
     private val client: OkHttpClient
 ) {
 
+    /**
+     * v1.0.6：检查更新也走「官方直链 + 备用镜像」多线路。
+     * api.github.com 在国内网络同样不稳（超时 / TLS 被拦 / 直接不可达），
+     * 单线路失败就等于「检查更新没反应」。这里逐条尝试，任一成功即用其返回。
+     */
+    private val apiMirrors = listOf(
+        "https://ghproxy.net/",
+        "https://ghfast.top/",
+        "https://gh-proxy.com/",
+        "https://gh-proxy.net/"
+    )
+
     suspend fun checkLatest(owner: String, repo: String): Result<UpdateInfo> =
         withContext(Dispatchers.IO) {
-            try {
-                // 国内直连 GitHub 不稳：给整次调用设超时，避免无限挂起。
-                val timed = client.newBuilder()
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(15, TimeUnit.SECONDS)
-                    .callTimeout(20, TimeUnit.SECONDS)
-                    .build()
-                val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
-                val request = Request.Builder()
-                    .url(url)
-                    .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "EarthOnline-Android")
-                    .get()
-                    .build()
-                timed.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        return@withContext Result.failure(Exception("更新服务器返回 ${response.code}"))
-                    }
-                    val body = response.body?.string().orEmpty()
-                    if (body.isBlank()) {
-                        return@withContext Result.failure(Exception("更新服务器返回空内容"))
-                    }
-                    val json = JSONObject(body)
-                    val info = UpdateInfo(
-                        version = json.optString("tag_name").removePrefix("v").trim(),
-                        releaseUrl = json.optString("html_url"),
-                        notes = json.optString("body").trim().take(400),
-                        apkUrl = pickApk(json.optJSONArray("assets"))
-                    )
-                    if (info.version.isBlank()) {
-                        return@withContext Result.failure(Exception("更新服务器未返回版本号"))
-                    }
-                    Result.success(info)
-                }
-            } catch (e: Exception) {
-                // 超时 / 断网 / 被墙 / TLS 握手失败 → 统一人话提示，绝不抛到 UI 造成闪退。
-                val msg = when (e) {
-                    is SocketTimeoutException,
-                    is UnknownHostException,
-                    is SSLException,
-                    is java.io.IOException -> "网络异常，请检查网络或代理"
-                    else -> e.message ?: "无法连接更新服务器"
-                }
-                Result.failure(Exception(msg))
+            val official = "https://api.github.com/repos/$owner/$repo/releases/latest"
+            val candidates = listOf(official) + apiMirrors.map { it + official }
+            var lastError: String? = null
+            for (url in candidates) {
+                val r = runCatching { fetchLatest(url) }
+                if (r.isSuccess) return@withContext Result.success(r.getOrThrow())
+                lastError = r.exceptionOrNull()?.message ?: "无法连接更新服务器"
             }
+            Result.failure(Exception(lastError ?: "无法连接更新服务器"))
         }
+
+    /** 单条线路拉取 latest Release（失败直接抛，由调用方决定换线） */
+    private fun fetchLatest(url: String): UpdateInfo {
+        // 国内直连 GitHub 不稳：给整次调用设超时，避免无限挂起。
+        val timed = client.newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "EarthOnline-Android")
+            .get()
+            .build()
+        timed.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw java.io.IOException("更新服务器返回 ${response.code}")
+            }
+            val body = response.body?.string().orEmpty()
+            if (body.isBlank()) throw java.io.IOException("更新服务器返回空内容")
+            val json = JSONObject(body)
+            val info = UpdateInfo(
+                version = json.optString("tag_name").removePrefix("v").trim(),
+                releaseUrl = json.optString("html_url"),
+                notes = json.optString("body").trim().take(400),
+                apkUrl = pickApk(json.optJSONArray("assets"))
+            )
+            if (info.version.isBlank()) throw java.io.IOException("更新服务器未返回版本号")
+            return info
+        }
+    }
 
     /** assets 里挑第一个 .apk 直链（Release 里可能同时有 apk / json / 源码包） */
     private fun pickApk(assets: JSONArray?): String? {

@@ -88,6 +88,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val HIDE_DONE_TASKS = booleanPreferencesKey("hide_done_tasks")
         /** v1.0.5 清空数据防拉回：置位后下一次非手动自动拉取被跳过（消费一次即失效，对齐 Web skip_next_pull） */
         val SKIP_NEXT_PULL = booleanPreferencesKey("skip_next_pull")
+        /** v1.0.6：高德 Web 服务 Key（地图搜索 / 路径规划走 REST，与 Android 地图 Key 是两套） */
+        val AMAP_WEB_KEY = stringPreferencesKey("amap_web_key")
     }
 
     val onboardingDone: Flow<Boolean> = ds.data.map { it[ONBOARDING_DONE] ?: false }
@@ -194,6 +196,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** 防同步拉回标记（清空数据时置位；CloudSyncManager 冷启动拉取时消费一次） */
     val skipNextPull: Flow<Boolean> = ds.data.map { it[SKIP_NEXT_PULL] ?: false }
     suspend fun setSkipNextPull(v: Boolean) = ds.edit { it[SKIP_NEXT_PULL] = v }
+
+    /** v1.0.6：高德 Web 服务 Key（地图搜索 / 路径规划走 REST API，与 Android 地图 Key 是两套） */
+    val amapWebKey: Flow<String> = ds.data.map { it[AMAP_WEB_KEY] ?: "" }
+    suspend fun setAmapWebKey(v: String) = ds.edit { it[AMAP_WEB_KEY] = v.trim() }
 
     /**
      * 清空「用户数据键」，保留应用设置键。与 Web 端 resetAllData 的键语义对齐：

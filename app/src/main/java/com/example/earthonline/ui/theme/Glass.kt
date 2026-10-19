@@ -98,11 +98,17 @@ fun GlassSurface(
             ) else Modifier
         )
     ) {
+        /* ⚠️ 装饰层一律用 matchParentSize()，绝不能用 fillMaxSize()。
+           fillMaxSize() 会向父级索取「最大可用高度」——当 GlassSurface 被放进
+           Scaffold 的 bottomBar 这类只给 max 约束、不给 min 高度的槽位时，
+           它会把整个 Box 撑成满屏高，进而把 innerPadding.bottom 顶到屏高，
+           内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
+           matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
         if (useBackdrop) {
             // 1) 模糊壁纸背景（GPU 档）
             Box(
                 Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(shape)
                     .backdrop(tier)
                     .background(Color.Transparent)
@@ -111,13 +117,13 @@ fun GlassSurface(
                     model = File(wallPath!!),
                     contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.matchParentSize()
                 )
             }
             // 2) 半透明着色层（保证文字可读性）
             Box(
                 Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(shape)
                     .background(scheme.surface.copy(alpha = tintAlpha))
             )
@@ -125,7 +131,7 @@ fun GlassSurface(
             // 降级档：纯色面板
             Box(
                 Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(shape)
                     .background(scheme.surface.copy(alpha = tintAlpha))
             )
@@ -133,7 +139,7 @@ fun GlassSurface(
         // 3) 顶部高光（液态玻璃标志性边缘光）
         Box(
             Modifier
-                .fillMaxSize()
+                .matchParentSize()
                 .clip(shape)
                 .background(
                     Brush.verticalGradient(
@@ -148,13 +154,15 @@ fun GlassSurface(
         if (showBorder) {
             Box(
                 Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(shape)
                     .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), shape)
             )
         }
-        // 4) 内容（永远锐利，不参与模糊）
-        Box(Modifier.fillMaxSize(), contentAlignment = contentAlignment, content = content)
+        // 4) 内容（永远锐利，不参与模糊）。
+        // 这一层是唯一「决定」外层 Box 尺寸的层：不写尺寸修饰符 = 按内容自然测量，
+        // 有固定 size/height 的调用点则由外层 modifier 决定，contentAlignment 照常生效。
+        Box(Modifier, contentAlignment = contentAlignment, content = content)
     }
 }
 

@@ -5,11 +5,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
@@ -32,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassSurface
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -111,22 +117,9 @@ fun MainScaffold(
     val wallpaper by settingsVm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
     val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
     val achSound by settingsVm.achSound.collectAsStateWithLifecycle(initialValue = true)
-    // v1.0.3：壁纸轮换 —— 从记忆相册里按日期确定性挑一张（每天换一张，省电不刷新）
-    val wallpaperRotate by settingsVm.wallpaperRotate.collectAsStateWithLifecycle(initialValue = false)
-    val memoryPhotosJson by settingsVm.memoryPhotosJson.collectAsStateWithLifecycle(initialValue = "")
+    // v1.0.6：当日轮换壁纸（含相册筛选）由 ViewModel 统一计算，避免组合层做 JSON 解析
+    val effectiveWallpaper by settingsVm.effectiveWallpaper.collectAsStateWithLifecycle(initialValue = "")
     val quickNotif by settingsVm.quickNotif.collectAsStateWithLifecycle(initialValue = false)
-
-    val effectiveWallpaper = remember(wallpaper, wallpaperRotate, memoryPhotosJson) {
-        if (wallpaperRotate && memoryPhotosJson.contains("\"path\"")) {
-            // 轻量提取 path 字段（避免在组合里做完整 JSON 解码）
-            val paths = Regex("\"path\"\\s*:\\s*\"([^\"]+)\"")
-                .findAll(memoryPhotosJson).map { it.groupValues[1] }.toList()
-            if (paths.isNotEmpty()) {
-                val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
-                paths[dayOfYear % paths.size]
-            } else wallpaper
-        } else wallpaper
-    }
 
     // 音效开关变化时同步给播放器（关闭时顺带释放 SoundPool，省一份常驻内存）
     LaunchedEffect(achSound) { AchievementSound.setEnabled(achSound) }
@@ -191,27 +184,68 @@ fun MainScaffold(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar {
-                bottomNavItems.forEach { item ->
-                    val selected = currentRoute == item.route ||
-                            currentRoute in item.altRoutes ||
-                            navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { navigateToTab(navController, item.route) },
-                        icon = { Icon(painterResource(item.iconRes), contentDescription = item.label) },
-                        label = { Text(item.label) },
-                        // v1.2.3：底部导航配色统一为「暖琥珀选中」。
-                        // v1.0.2+：未选中色改为主题派生（浅色=深棕灰 / 深色=浅灰 #B6B6BF 系），
-                        // 修复深色模式下 #6B5B4F 对比度不足的问题。
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AmberPrimary,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            selectedTextColor = AmberPrimary,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            indicatorColor = AmberPrimary.copy(alpha = 0.14f)
-                        )
-                    )
+            /* v1.0.7：底部导航改为「悬浮液态玻璃胶囊」—— 左右 + 底部留白、大圆角，
+               采样当前壁纸做毛玻璃；低端机 / Android 12 及以下由 GlassTier 自动降级为
+               半透明纯色（零 GPU 模糊），流畅度不受影响。 */
+            ProvideWallpaper(effectiveWallpaper.ifBlank { null }) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 14.dp)
+                ) {
+                    GlassSurface(
+                        shape = RoundedCornerShape(28.dp),
+                        showBorder = true,
+                        /* v1.0.6：胶囊高度收到 60dp（原 NavigationBar 满铺 80dp），
+                           视觉上明显更轻盈，也让主页内容多出一屏空间。
+                           固定高度而非「内容撑高」：底栏是四个等分格子，高度必须确定，
+                           否则图标 / 文字比例会随字号档位漂移。 */
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            bottomNavItems.forEach { item ->
+                                val selected = currentRoute == item.route ||
+                                        currentRoute in item.altRoutes ||
+                                        navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { navigateToTab(navController, item.route) },
+                                    icon = {
+                                        Icon(
+                                            painterResource(item.iconRes),
+                                            contentDescription = item.label,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            item.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    // v1.2.3：底部导航配色统一为「暖琥珀选中」。
+                                    // v1.0.2+：未选中色改为主题派生（浅色=深棕灰 / 深色=浅灰 #B6B6BF 系），
+                                    // 修复深色模式下 #6B5B4F 对比度不足的问题。
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = AmberPrimary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        selectedTextColor = AmberPrimary,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        indicatorColor = AmberPrimary.copy(alpha = 0.14f)
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,61 +1,87 @@
 package com.example.earthonline.ui.notes
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
-import com.example.earthonline.ui.theme.GlassSurface
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
-import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
+import com.mohamedrejeb.richeditor.ui.material3.RichText
 import kotlinx.coroutines.launch
 
-/** 笔记编辑器路由（v1.0.6）。id 空 = 新建，否则编辑既有笔记。 */
+/**
+ * 笔记编辑页（v1.0.6 重写）。
+ *
+ * 形态：一整页就是「正文输入框 + 标签编辑区」。正文用系统原生输入框，
+ * 不再依赖任何富文本编辑控件 —— 写入链路越短越不容易坏。
+ * 需要看排版效果时点右上角「预览」，用只读渲染器把 Markdown 画出来（只读，不参与写入）。
+ * 保存即写库并返回列表；返回键在有内容时顺手保存，避免用户以为内容丢了。
+ */
 @Composable
-fun NoteEditorRoute(id: String, moreActions: MoreMenuActions, onBack: () -> Unit) {
+fun NoteEditorRoute(
+    id: String,
+    moreActions: MoreMenuActions,
+    onBack: () -> Unit
+) {
     val vm = hiltViewModel<NotesViewModel>()
-    NoteEditorScreen(id = id, vm = vm, moreActions = moreActions, onBack = onBack)
+    NoteEditorScreen(vm = vm, id = id, moreActions = moreActions, onBack = onBack)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NoteEditorScreen(
-    id: String,
     vm: NotesViewModel,
+    id: String,
     moreActions: MoreMenuActions,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val state = rememberRichTextState()
-    var type by remember { mutableStateOf("note") }
-    var typeMenu by remember { mutableStateOf(false) }
-    var linkDialog by remember { mutableStateOf(false) }
-    var imageDialog by remember { mutableStateOf(false) }
+    var body by remember { mutableStateOf("") }
+    var tags by remember { mutableStateOf(listOf<String>()) }
+    var tagInput by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var loaded by remember { mutableStateOf(false) }
 
-    // 编辑既有笔记：载入 Markdown（回退纯文本）
     LaunchedEffect(id) {
         if (id.isNotBlank()) {
-            val note = vm.getNote(id)
-            if (note != null) {
-                type = note.type
-                state.setMarkdown(note.markdown ?: note.text ?: "")
+            val m = vm.getNote(id)
+            if (m != null) {
+                body = m.text
+                tags = NotesViewModel.tagsOf(m)
             }
         }
+        loaded = true
+    }
+
+    fun commitTag() {
+        val t = tagInput.trim().trim('#')
+        if (t.isNotBlank()) tags = NotesViewModel.normalizeTags(tags + t)
+        tagInput = ""
+    }
+
+    fun save(): Boolean {
+        if (body.isBlank()) return false
+        commitTag()
+        scope.launch {
+            vm.saveNote(id.ifBlank { null }, body, tags)
+            onBack()
+        }
+        return true
     }
 
     Scaffold(
@@ -64,130 +90,146 @@ fun NoteEditorScreen(
             TopAppBar(
                 title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回") }
+                    IconButton(onClick = {
+                        // 有内容就顺手存一下，避免用户以为丢了
+                        if (body.isNotBlank()) save() else onBack()
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
                 },
                 actions = {
-                    TextButton(onClick = { typeMenu = true }) { Text(typeLabelOf(type)) }
-                    DropdownMenu(expanded = typeMenu, onDismissRequest = { typeMenu = false }) {
-                        listOf("note" to "笔记", "important" to "重要", "idea" to "灵感").forEach { (k, l) ->
-                            DropdownMenuItem(text = { Text(l) }, onClick = { type = k; typeMenu = false })
+                    TextButton(onClick = { preview = !preview }) {
+                        Text(if (preview) "编辑" else "预览")
+                    }
+                    if (id.isNotBlank()) {
+                        IconButton(onClick = { showDelete = true }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "删除",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                     SettingsIconButton(actions = moreActions)
                 }
             )
-        },
-        floatingActionButton = {
-            GlassSurface(
-                shape = CircleShape,
-                onClick = {
-                    scope.launch {
-                        val md = state.toMarkdown()
-                        val txt = state.toText()
-                        vm.saveNote(id.ifBlank { null }, type, txt, md)
-                        onBack()
-                    }
-                }
+        }
+    ) { padding ->
+        if (!loaded) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // 标签编辑区
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = "保存",
-                    modifier = Modifier.padding(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                tags.forEach { t ->
+                    InputChip(
+                        selected = false,
+                        onClick = { tags = tags - t },
+                        label = { Text("#$t") },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "移除标签",
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    )
+                }
+                OutlinedTextField(
+                    value = tagInput,
+                    onValueChange = {
+                        if (it.contains(',') || it.contains('，')) {
+                            val parts = it.split(',', '，')
+                            tags = NotesViewModel.normalizeTags(
+                                tags + parts.dropLast(1).map { s -> s.trim().trim('#') }
+                            )
+                            tagInput = parts.last()
+                        } else tagInput = it
+                    },
+                    placeholder = { Text("加标签") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { commitTag() }),
+                    modifier = Modifier.weight(1f).defaultMinSize(minWidth = 100.dp)
                 )
             }
-        }
-    ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
-            // 富文本工具栏
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                EditorAction(Icons.Default.FormatBold, "加粗") {
-                    state.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold))
-                }
-                EditorAction(Icons.Default.FormatItalic, "斜体") {
-                    state.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic))
-                }
-                EditorAction(Icons.Default.Title, "标题") { state.addTextAfterSelection("# ") }
-                EditorAction(Icons.Default.FormatListBulleted, "无序列表") { state.toggleUnorderedList() }
-                EditorAction(Icons.Default.FormatListNumbered, "有序列表") { state.toggleOrderedList() }
-                EditorAction(Icons.Default.Code, "代码") { state.toggleCodeSpan() }
-                EditorAction(Icons.Default.Link, "链接") { linkDialog = true }
-                EditorAction(Icons.Default.Image, "图片") { imageDialog = true }
+
+            if (preview) {
+                MarkdownPreview(
+                    markdown = body,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                )
+            } else {
+                OutlinedTextField(
+                    value = body,
+                    onValueChange = { body = it },
+                    placeholder = { Text("写点什么…") },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
-            HorizontalDivider()
-            RichTextEditor(
-                state = state,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            )
-        }
-    }
 
-    if (linkDialog) {
-        InsertDialog(
-            title = "插入链接",
-            label = "链接地址（https://...）",
-            onDismiss = { linkDialog = false }
-        ) { url ->
-            val u = url.ifBlank { "https://" }
-            state.addTextAfterSelection("[链接]($u)")
-            linkDialog = false
-        }
-    }
-    if (imageDialog) {
-        InsertDialog(
-            title = "插入图片",
-            label = "图片路径或 URL",
-            onDismiss = { imageDialog = false }
-        ) { path ->
-            state.addTextAfterSelection("![]($path)")
-            imageDialog = false
-        }
-    }
-}
-
-@Composable
-private fun EditorAction(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-        Icon(icon, contentDescription = contentDescription, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun InsertDialog(
-    title: String,
-    label: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text(label) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            Button(
+                onClick = { save() },
+                enabled = body.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("插入") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
+            ) { Text("保存") }
+        }
+    }
+
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("删除这条笔记？") },
+            text = { Text("删除后可在回收站保留 30 天。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDelete = false
+                    scope.launch {
+                        vm.deleteNote(id)
+                        onBack()
+                    }
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("取消") } }
+        )
+    }
 }
 
-private fun typeLabelOf(type: String): String = when (type) {
-    "important" -> "重要"
-    "idea" -> "灵感"
-    else -> "笔记"
+/**
+ * Markdown 只读预览。
+ * 用只读渲染器而非可编辑控件：只读路径不参与输入与状态回写，天然不会把编辑弄坏。
+ */
+@Composable
+private fun MarkdownPreview(markdown: String, modifier: Modifier = Modifier) {
+    val state = rememberRichTextState()
+    LaunchedEffect(markdown) {
+        runCatching { state.setMarkdown(markdown) }
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    ) {
+        Box(Modifier.padding(14.dp)) {
+            RichText(state = state)
+        }
+    }
 }

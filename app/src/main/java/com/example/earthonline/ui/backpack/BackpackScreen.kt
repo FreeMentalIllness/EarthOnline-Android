@@ -8,9 +8,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -27,6 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import java.io.File
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.data.local.entity.BagCategoryEntity
@@ -125,7 +130,7 @@ fun BackpackScreen(
             categories = itemCats,
             onCreateCategory = { vm.addCategory(SCOPE_ITEM, it) },
             onDismiss = { showItem = false },
-            onSubmit = { n, ty, d, c -> vm.addItem(n, ty, d, c); showItem = false }
+            onSubmit = { n, d, c -> vm.addItem(n, "", d, c); showItem = false }
         )
     }
     // v1.0.4：编辑物品（复用新增对话框，预填当前值）
@@ -135,7 +140,7 @@ fun BackpackScreen(
             categories = itemCats,
             onCreateCategory = { vm.addCategory(SCOPE_ITEM, it) },
             onDismiss = { editItem = null },
-            onSubmit = { n, ty, d, c -> vm.updateItem(target, n, ty, d, c); editItem = null }
+            onSubmit = { n, d, c -> vm.updateItem(target, n, "", d, c); editItem = null }
         )
     }
     if (showCollection) {
@@ -258,7 +263,6 @@ private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () ->
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.name, style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AssistChip(onClick = {}, label = { Text(if (item.type == "virtual") "虚拟" else "实物") })
                     item.category?.takeIf { it.isNotBlank() }?.let {
                         AssistChip(onClick = {}, label = { Text(it) })
                     }
@@ -355,12 +359,51 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
     val meta = remember(c.fileMetaJson) {
         c.fileMetaJson?.let { runCatching { Json.decodeFromString(CollectionFileMeta.serializer(), it) }.getOrNull() }
     }
+    // v1.0.6：收藏封面预览 —— 图片直接出缩略图，文本文件自动读取前几行排版，无预览能力的类型给图标兜底。
+    val file = remember(c.fileUri) { c.fileUri?.let { File(context.filesDir, it) } }
+    val previewText = remember(c.id) {
+        file?.takeIf { it.exists() && (meta?.mime?.startsWith("text/") == true || it.extension in setOf("txt", "md", "json", "csv", "log")) }
+            ?.runCatching { readLines().take(3).joinToString("\n") }?.getOrNull()
+    }
     // v1.0.4：整卡可点进入编辑（删除 / 打开按钮各自消费点击，不会误触）
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (file != null) {
+                Box(
+                    Modifier.fillMaxWidth().height(120.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    when {
+                        meta?.mime?.startsWith("image/") == true -> {
+                            AsyncImage(
+                                model = file,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        previewText != null -> {
+                            Text(
+                                previewText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(10.dp),
+                                maxLines = 5,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                        else -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = { vm.deleteCollection(c.id) }) {
@@ -409,12 +452,11 @@ private fun ItemDialog(
     categories: List<BagCategoryEntity>,
     onCreateCategory: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: (name: String, type: String, desc: String?, category: String?) -> Unit,
+    onSubmit: (name: String, desc: String?, category: String?) -> Unit,
     initial: ItemEntity? = null
 ) {
     // v1.0.4：initial 非空 = 编辑模式，预填当前值
     var name by remember { mutableStateOf(initial?.name ?: "") }
-    var type by remember { mutableStateOf(initial?.type ?: "physical") }
     var desc by remember { mutableStateOf(initial?.description ?: "") }
     var category by remember { mutableStateOf(initial?.category) }
     // v1.0.5 QA：提交防重（连点保存不再重复落库）
@@ -426,7 +468,7 @@ private fun ItemDialog(
                 onClick = {
                     if (submitted || name.isBlank()) return@TextButton
                     submitted = true
-                    onSubmit(name.trim(), type, desc.takeIf { it.isNotBlank() }, category)
+                    onSubmit(name.trim(), desc.takeIf { it.isNotBlank() }, category)
                 },
                 enabled = name.isNotBlank() && !submitted
             ) { Text("保存") }
@@ -437,10 +479,7 @@ private fun ItemDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = type == "physical", onClick = { type = "physical" }, label = { Text("实物") })
-                    FilterChip(selected = type == "virtual", onClick = { type = "virtual" }, label = { Text("虚拟") })
-                }
+                // v1.0.6：取消「实物 / 虚拟」分类，物品不再做类型二分
                 // v1.0.3：物品故事卡 —— 让背包更像人生纪念品而不是冷数据
                 OutlinedTextField(value = desc, onValueChange = { desc = it },
                     label = { Text("来源 / 故事") },

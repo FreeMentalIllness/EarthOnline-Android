@@ -39,19 +39,22 @@ private val LightColorScheme = lightColorScheme(
 
     background = BackgroundLight,
     onBackground = TextPrimaryLight,
-    surface = SurfaceLight,
+    /* v1.0.6 全局视觉统一：卡片 / 容器一律带 0.88 透明度，透出壁纸。
+       background 保持不透明（它是壁纸之上的「蒙层」，负责压住壁纸亮度），
+       只有 surface 家族透 —— 这样卡片浮在壁纸上、页面底色仍然稳。 */
+    surface = SurfaceLight.copy(alpha = 0.88f),
     onSurface = TextPrimaryLight,
-    surfaceVariant = BackgroundLight,
+    surfaceVariant = BackgroundLight.copy(alpha = 0.86f),
     onSurfaceVariant = TextSecondaryLight,
 
     // 卡片 / 容器层级（Card 默认取 surfaceContainerLow）
-    surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFFFFFFF),
-    surfaceContainer = Color(0xFFF8F6F2),
-    surfaceContainerHigh = Color(0xFFF1EDE7),
-    surfaceContainerHighest = Color(0xFFEAE4DC),
-    surfaceBright = Color(0xFFFFFFFF),
-    surfaceDim = Color(0xFFEFEBE5),
+    surfaceContainerLowest = Color(0xFFFFFFFF).copy(alpha = 0.86f),
+    surfaceContainerLow = Color(0xFFFFFFFF).copy(alpha = 0.88f),
+    surfaceContainer = Color(0xFFF8F6F2).copy(alpha = 0.88f),
+    surfaceContainerHigh = Color(0xFFF1EDE7).copy(alpha = 0.88f),
+    surfaceContainerHighest = Color(0xFFEAE4DC).copy(alpha = 0.88f),
+    surfaceBright = Color(0xFFFFFFFF).copy(alpha = 0.86f),
+    surfaceDim = Color(0xFFEFEBE5).copy(alpha = 0.88f),
     surfaceTint = AmberPrimary,
 
     outline = BorderLight,
@@ -86,18 +89,20 @@ private val DarkColorScheme = darkColorScheme(
 
     background = BackgroundDark,
     onBackground = TextPrimaryDark,
-    surface = SurfaceDark,
+    /* 深色下壁纸透出量刻意压到 0.80（比浅色更克制）：亮色壁纸在近黑卡片背后
+       透太多会破坏夜间一致性、也伤可读性；这个量透出「有壁纸」就够了。 */
+    surface = SurfaceDark.copy(alpha = 0.80f),
     onSurface = TextPrimaryDark,
-    surfaceVariant = BackgroundDark,
+    surfaceVariant = BackgroundDark.copy(alpha = 0.78f),
     onSurfaceVariant = TextSecondaryDark,
 
-    surfaceContainerLowest = Color(0xFF1A1A1A),
-    surfaceContainerLow = Color(0xFF232326),
-    surfaceContainer = Color(0xFF28282B),
-    surfaceContainerHigh = Color(0xFF2E2E32),
-    surfaceContainerHighest = Color(0xFF35353A),
-    surfaceBright = Color(0xFF35353A),
-    surfaceDim = Color(0xFF1A1A1A),
+    surfaceContainerLowest = Color(0xFF1A1A1A).copy(alpha = 0.78f),
+    surfaceContainerLow = Color(0xFF232326).copy(alpha = 0.80f),
+    surfaceContainer = Color(0xFF28282B).copy(alpha = 0.80f),
+    surfaceContainerHigh = Color(0xFF2E2E32).copy(alpha = 0.80f),
+    surfaceContainerHighest = Color(0xFF35353A).copy(alpha = 0.80f),
+    surfaceBright = Color(0xFF35353A).copy(alpha = 0.80f),
+    surfaceDim = Color(0xFF1A1A1A).copy(alpha = 0.78f),
     surfaceTint = AmberPrimaryDark,
 
     outline = BorderDark,

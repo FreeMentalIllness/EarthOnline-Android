@@ -115,6 +115,8 @@ data class HomeUiState(
     val unlockedAch: Int = 0,
     val totalAch: Int = 0,
     val totalMemos: Int = 0,
+    val noteCount: Int = 0,
+    val albumCount: Int = 0,
     val locationCount: Int = 0,
     val recentMemos: List<MemoEntity> = emptyList(),
     val recentActs: List<ActivityEntity> = emptyList(),
@@ -185,7 +187,7 @@ private data class ItemStat(val total: Int, val categories: Int)
 private data class LocStat(val total: Int, val recent: List<LocationEntity>)
 
 /** 主页速览全部入口 id（与 HomeScreen 的 HomeEntry 一一对应；DataStore 空值回落全集） */
-internal val DEFAULT_QUICK_ENTRIES = setOf("tasks", "backpack", "achievements", "map", "accounting", "ai")
+internal val DEFAULT_QUICK_ENTRIES = setOf("tasks", "backpack", "notes", "album", "achievements", "map", "accounting", "ai")
 
 private data class Parts(
     val profile: ProfileEntity?,
@@ -198,6 +200,7 @@ private data class Parts(
     val doneTaskRows: List<TaskEntity> = emptyList(),
     val collectionCount: Int = 0,
     val customTimeline: List<TimelineItem> = emptyList(),
+    val photoCount: Int = 0,
     val feedKinds: Set<String> = setOf("task", "ach", "item", "memo"),
     val feedLimit: Int = 3,
     /** 主页速览显示的入口 id 集合（DataStore 持久化，全部 6 个为默认） */
@@ -271,6 +274,10 @@ class HomeViewModel @Inject constructor(
     private val doneTaskFlow = taskRepo.observeDoneRecent(TIMELINE_LIMIT)
     // v1.2.0：概览「背包」卡第三行要显示收藏数
     private val collectionFlow = collectionRepo.count()
+    // v1.0.6：概览「相册」卡显示照片总数（DataStore JSON 内 path 数量）
+    private val photoFlow = settingsDs.memoryPhotosJson.map { txt ->
+        if (txt.isBlank()) 0 else Regex("\"path\"").findAll(txt).count()
+    }
 
     /** 用户在时间轴手动添加的里程碑（DataStore 持久化） */
     private val customFlow: Flow<List<TimelineItem>> = settingsDs.customTimelineJson.map { txt ->
@@ -330,6 +337,7 @@ class HomeViewModel @Inject constructor(
             .combine(actFlow) { parts, acts -> parts.copy(acts = acts) }
             .combine(doneTaskFlow) { parts, rows -> parts.copy(doneTaskRows = rows) }
             .combine(collectionFlow) { parts, c -> parts.copy(collectionCount = c) }
+            .combine(photoFlow) { parts, pc -> parts.copy(photoCount = pc) }
             .combine(customFlow) { parts, custom -> parts.copy(customTimeline = custom) }
             .combine(feedFilterFlow) { parts, kinds -> parts.copy(feedKinds = kinds) }
             .combine(feedLimitFlow) { parts, limit -> parts.copy(feedLimit = limit) }
@@ -569,6 +577,8 @@ class HomeViewModel @Inject constructor(
             unlockedAch = ach.unlocked,
             totalAch = ach.total,
             totalMemos = memo.total,
+            noteCount = memo.total,
+            albumCount = photoCount,
             locationCount = loc.total,
             recentMemos = memo.recent,
             // allActs = 全量原始动态（不按类型过滤）—— ActsCard 的分类标签页需要覆盖筛选
