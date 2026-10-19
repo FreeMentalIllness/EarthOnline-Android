@@ -16,8 +16,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.*
@@ -78,6 +80,18 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     val locations by vm.locations.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    // v1.0.7：顶部地点搜索栏 —— 本地足迹筛选（名称 / 备注 / 标签 / 日期），不依赖高德 Key
+    var query by remember { mutableStateOf("") }
+    var showList by remember { mutableStateOf(false) }
+    val filteredLocations = remember(locations, query) {
+        if (query.isBlank()) locations else locations.filter { loc ->
+            loc.name.contains(query, ignoreCase = true) ||
+                (loc.note ?: "").contains(query, ignoreCase = true) ||
+                loc.date.contains(query, ignoreCase = true) ||
+                (loc.tagsJson ?: "").contains(query, ignoreCase = true)
+        }
+    }
 
     // 普通对象持有 MapView，避免组合期写 State（地图闪退根因之一）
     val mapRef = remember { MapRef() }
@@ -194,7 +208,13 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         topBar = {
             TopAppBar(
                 title = { Text("足迹地图") },
-                actions = { SettingsIconButton(actions = moreActions) }
+                actions = {
+                    // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）
+                    IconButton(onClick = { showList = true }) {
+                        Icon(Icons.Filled.List, contentDescription = "足迹列表")
+                    }
+                    SettingsIconButton(actions = moreActions)
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -292,8 +312,77 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                             )
                         }
                     }
-                    LocationList(locations, vm::deleteLocation)
+                    LocationList(filteredLocations, vm::deleteLocation)
                 }
+            }
+
+            // v1.0.7：顶部地点搜索栏（悬浮于地图之上，本地筛选足迹，不依赖高德 Key）
+            Column(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Surface(
+                    tonalElevation = 6.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                ) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("搜索足迹名称 / 备注 / 标签 / 日期") },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "清空")
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                // 有词时就地展开筛选结果（本地足迹列表）；地图已降级为列表时主区已展示，避免重复
+                if (query.isNotBlank() && !mapFailed) {
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        tonalElevation = 6.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(8.dp)) {
+                            LocationList(filteredLocations, vm::deleteLocation)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // v1.0.7：路径点记录页 —— 独立的足迹列表（本地搜索筛选，不依赖高德 Key）
+    if (showList) {
+        ModalBottomSheet(onDismissRequest = { showList = false }) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "路径点记录（${filteredLocations.size}）",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (query.isNotBlank()) {
+                    Text(
+                        "搜索「$query」的筛选结果",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                LocationList(filteredLocations, vm::deleteLocation)
             }
         }
     }

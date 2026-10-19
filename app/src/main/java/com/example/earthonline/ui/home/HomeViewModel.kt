@@ -129,7 +129,7 @@ data class HomeUiState(
     val feedKinds: Set<String> = setOf("task", "ach", "item", "memo"),
     /** 最近动态首页显示条数（0 = 不限制） */
     val feedLimit: Int = 3,
-    /** 主页速览显示的入口 id 集合（DataStore 持久化，全部 6 个为默认） */
+    /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
     // ————— v1.0.3 情绪价值与成长 —————
     /** 动态问候语（时间段 + 最近心情 + 连续天数） */
@@ -186,8 +186,9 @@ private data class AchStat(val unlocked: Int, val total: Int, val recent: List<A
 private data class ItemStat(val total: Int, val categories: Int)
 private data class LocStat(val total: Int, val recent: List<LocationEntity>)
 
-/** 主页速览全部入口 id（与 HomeScreen 的 HomeEntry 一一对应；DataStore 空值回落全集） */
-internal val DEFAULT_QUICK_ENTRIES = setOf("tasks", "backpack", "notes", "album", "achievements", "map", "accounting", "ai")
+/** 主页速览全部入口 id（与 HomeScreen 的 HomeEntry 一一对应；DataStore 空值回落全集）。
+ *  v1.0.7：新增「数据」入口（data），默认收进「更多」收纳区，确保数据看板在首页有入口。 */
+internal val DEFAULT_QUICK_ENTRIES = setOf("tasks", "backpack", "notes", "album", "achievements", "map", "accounting", "ai", "data")
 
 private data class Parts(
     val profile: ProfileEntity?,
@@ -203,7 +204,7 @@ private data class Parts(
     val photoCount: Int = 0,
     val feedKinds: Set<String> = setOf("task", "ach", "item", "memo"),
     val feedLimit: Int = 3,
-    /** 主页速览显示的入口 id 集合（DataStore 持久化，全部 6 个为默认） */
+    /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
     val bundle: Bundle = Bundle(),

@@ -14,7 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
@@ -50,7 +53,7 @@ fun NoteEditorScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var body by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf(TextFieldValue("")) }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
     var preview by remember { mutableStateOf(false) }
@@ -61,7 +64,7 @@ fun NoteEditorScreen(
         if (id.isNotBlank()) {
             val m = vm.getNote(id)
             if (m != null) {
-                body = m.text
+                body = TextFieldValue(m.text)
                 tags = NotesViewModel.tagsOf(m)
             }
         }
@@ -74,11 +77,39 @@ fun NoteEditorScreen(
         tagInput = ""
     }
 
+    /** 在光标选区两侧包裹 [prefix]/[suffix]（无选区则插入占位文本并选中），用于加粗等行内语法 */
+    fun surround(prefix: String, suffix: String = prefix, placeholder: String = "文本") {
+        val tv = body
+        val start = tv.selection.start.coerceAtMost(tv.text.length)
+        val end = tv.selection.end.coerceAtMost(tv.text.length)
+        val sel = tv.text.substring(start, end)
+        val inner = if (sel.isEmpty()) placeholder else sel
+        val newText = tv.text.substring(0, start) + prefix + inner + suffix + tv.text.substring(end)
+        body = TextFieldValue(
+            text = newText,
+            selection = TextRange(start + prefix.length, start + prefix.length + inner.length)
+        )
+    }
+
+    /** 在当前行行首插入 [linePrefix]（如列表 / 待办项），光标同步右移 */
+    fun linePrefix(linePrefix: String) {
+        val tv = body
+        val caret = tv.selection.start.coerceAtMost(tv.text.length)
+        val lineStart = tv.text.lastIndexOf('\n', caret - 1) + 1
+        val newText = tv.text.substring(0, lineStart) + linePrefix + tv.text.substring(lineStart)
+        val shift = linePrefix.length
+        body = TextFieldValue(
+            text = newText,
+            selection = TextRange(tv.selection.start + shift, tv.selection.end + shift)
+        )
+    }
+
     fun save(): Boolean {
-        if (body.isBlank()) return false
+        val text = body.text
+        if (text.isBlank()) return false
         commitTag()
         scope.launch {
-            vm.saveNote(id.ifBlank { null }, body, tags)
+            vm.saveNote(id.ifBlank { null }, text, tags)
             onBack()
         }
         return true
@@ -92,7 +123,7 @@ fun NoteEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         // 有内容就顺手存一下，避免用户以为丢了
-                        if (body.isNotBlank()) save() else onBack()
+                        if (body.text.isNotBlank()) save() else onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
@@ -168,9 +199,19 @@ fun NoteEditorScreen(
                 )
             }
 
+            // v1.0.7：格式化工具栏（加粗 / 列表 / 待办项）—— 直接插入 Markdown 语法，
+            // 与预览渲染器（RichText）天然兼容，所见即所得。
+            if (!preview) {
+                FormatToolbar(
+                    onBold = { surround("**", "**", "加粗文本") },
+                    onList = { linePrefix("- ") },
+                    onTodo = { linePrefix("- [ ] ") }
+                )
+            }
+
             if (preview) {
                 MarkdownPreview(
-                    markdown = body,
+                    markdown = body.text,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -188,7 +229,7 @@ fun NoteEditorScreen(
 
             Button(
                 onClick = { save() },
-                enabled = body.isNotBlank(),
+                enabled = body.text.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("保存") }
         }
@@ -230,6 +271,45 @@ private fun MarkdownPreview(markdown: String, modifier: Modifier = Modifier) {
     ) {
         Box(Modifier.padding(14.dp)) {
             RichText(state = state)
+        }
+    }
+}
+
+/**
+ * v1.0.7：笔记格式化工具栏。三个按钮对应主流笔记最常用语法，
+ * 点击即在正文光标处插入 Markdown（加粗 / 无序列表 / 待办项）。
+ * 行内语法走 [FormatToolbar] 的回调由编辑器自行包裹选区。
+ */
+@Composable
+private fun FormatToolbar(
+    onBold: () -> Unit,
+    onList: () -> Unit,
+    onTodo: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        OutlinedButton(
+            onClick = onBold,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+            modifier = Modifier.height(34.dp)
+        ) {
+            Text("B", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        }
+        OutlinedButton(
+            onClick = onList,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+            modifier = Modifier.height(34.dp)
+        ) {
+            Text("• 列表", style = MaterialTheme.typography.labelMedium)
+        }
+        OutlinedButton(
+            onClick = onTodo,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+            modifier = Modifier.height(34.dp)
+        ) {
+            Text("☑ 待办", style = MaterialTheme.typography.labelMedium)
         }
     }
 }

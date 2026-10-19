@@ -87,7 +87,18 @@ fun GlassSurface(
     val wallPath = LocalWallpaperPath.current
     val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
 
-    val tintAlpha = if (tier == GlassTier.FLAT) 0.82f else 0.42f
+    /* v1.0.7：着色层改用「上深下浅」的竖向渐变。
+       - GPU 档（FULL/BLUR）：顶部略深保证可读性，底部更透 → 玻璃底缘自然溶解进
+         屏幕底部，消除「悬浮黑块」的生硬割裂感；
+       - FLAT 档（低端机）：保持纯色高不透明，优先可读性。 */
+    val tintTop = if (tier == GlassTier.FLAT) 0.82f else 0.46f
+    val tintBottom = if (tier == GlassTier.FLAT) 0.82f else 0.30f
+    val tintBrush = Brush.verticalGradient(
+        colorStops = arrayOf(
+            0.0f to scheme.surface.copy(alpha = tintTop),
+            1.0f to scheme.surface.copy(alpha = tintBottom)
+        )
+    )
 
     Box(
         modifier = modifier.then(
@@ -120,12 +131,12 @@ fun GlassSurface(
                     modifier = Modifier.matchParentSize()
                 )
             }
-            // 2) 半透明着色层（保证文字可读性）
+            // 2) 半透明着色层（上深下浅渐变，保证文字可读性 + 底缘溶解）
             Box(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .background(scheme.surface.copy(alpha = tintAlpha))
+                    .background(tintBrush)
             )
         } else {
             // 降级档：纯色面板
@@ -133,7 +144,7 @@ fun GlassSurface(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .background(scheme.surface.copy(alpha = tintAlpha))
+                    .background(tintBrush)
             )
         }
         // 3) 顶部高光（液态玻璃标志性边缘光）
@@ -177,7 +188,9 @@ private fun Modifier.backdrop(tier: GlassTier): Modifier {
     } else blurred
 }
 
-private val BLUR_DP: Dp = 14.dp
+/* v1.0.7：毛玻璃模糊半径由 14dp 提到 18dp —— 更明显的磨砂质感，
+   弱化「深色壁纸上透出黑块」的观感，同时仍远低于造成掉帧的阈值。 */
+private val BLUR_DP: Dp = 18.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */
 @Composable

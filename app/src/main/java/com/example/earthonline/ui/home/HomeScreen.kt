@@ -693,14 +693,23 @@ private fun OverviewGrid(
         HomeEntry("backpack", "🎒", "背包", "${state.itemCount} 件物品", "backpack"),
         HomeEntry("notes", "📝", "笔记", "${state.noteCount} 篇笔记", "notes"),
         HomeEntry("album", "🖼️", "相册", "${state.albumCount} 张照片", "album"),
-        HomeEntry("achievements", "🏆", "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
         HomeEntry("map", "🗺️", "地图", "${state.locationCount} 处足迹", "map"),
         HomeEntry("accounting", "📊", "记账", "账本与导出", null),
+        HomeEntry("data", "📈", "数据", "统计看板", "data"),
+        HomeEntry("achievements", "🏆", "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
         HomeEntry("ai", "🤖", "系统", "AI 助手", "ai")
     )
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
-    val entries = allEntries.filter { it.id in state.quickEntries }
-        .ifEmpty { allEntries }
+    val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
+
+    // v1.0.7：速览改为「默认 6 + 更多收纳」——
+    //   默认常驻：任务 / 背包 / 笔记 / 相册 / 地图 / 记账；
+    //   其余（数据 / 成就 / 系统）收进「更多」按钮，点击展开完整华夫菜单。
+    val DEFAULT_IDS = setOf("tasks", "backpack", "notes", "album", "map", "accounting")
+    val defaultEntries = visible.filter { it.id in DEFAULT_IDS }
+    val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
+
+    var expanded by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -720,25 +729,50 @@ private fun OverviewGrid(
             }
         }
 
-        // v1.0.7：速览改为「华夫菜单」网格 —— 4 列方形图标格（大字号自动降列），
+        // v1.0.7：华夫菜单网格 —— 4 列方形图标格（大字号自动降列），
         // 每格点击时有琥珀色聚光灯从触点扩散（高光跟随），低端机由 GlassTier 自动降级。
         val cols = when {
             LocalDensity.current.fontScale >= 1.3f -> 2
             LocalDensity.current.fontScale >= 1.15f -> 3
             else -> 4
         }
-        entries.chunked(cols).forEach { rowEntries ->
+        // 基础网格 = 默认入口 + 「更多」按钮（仅当存在更多入口时显示）
+        val baseTiles = buildList {
+            addAll(defaultEntries)
+            if (moreEntries.isNotEmpty()) {
+                add(
+                    HomeEntry(
+                        id = "more",
+                        icon = if (expanded) "🔼" else "⋯",
+                        label = if (expanded) "收起" else "更多",
+                        sub = "",
+                        route = null
+                    )
+                )
+            }
+        }
+        val tiles = if (expanded) baseTiles + moreEntries else baseTiles
+
+        tiles.chunked(cols).forEach { rowEntries ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 rowEntries.forEach { entry ->
-                    WaffleTile(
-                        icon = entry.icon,
-                        label = entry.label,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                    if (entry.id == "more") {
+                        WaffleTile(
+                            icon = entry.icon,
+                            label = entry.label,
+                            modifier = Modifier.weight(1f)
+                        ) { expanded = !expanded }
+                    } else {
+                        WaffleTile(
+                            icon = entry.icon,
+                            label = entry.label,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                        }
                     }
                 }
                 // 末行不足一整行时用空白占位，保持左右对齐
@@ -757,9 +791,10 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
         Triple("backpack", "🎒", "背包"),
         Triple("notes", "📝", "笔记"),
         Triple("album", "🖼️", "相册"),
-        Triple("achievements", "🏆", "成就"),
         Triple("map", "🗺️", "地图"),
         Triple("accounting", "📊", "记账"),
+        Triple("data", "📈", "数据"),
+        Triple("achievements", "🏆", "成就"),
         Triple("ai", "🤖", "系统")
     )
     Column(

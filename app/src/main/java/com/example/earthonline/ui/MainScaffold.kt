@@ -30,7 +30,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -184,65 +186,98 @@ fun MainScaffold(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            /* v1.0.7：底部导航改为「悬浮液态玻璃胶囊」—— 左右 + 底部留白、大圆角，
+            /* v1.0.7：底部导航为「悬浮液态玻璃胶囊」—— 左右 + 底部留白、大圆角，
                采样当前壁纸做毛玻璃；低端机 / Android 12 及以下由 GlassTier 自动降级为
-               半透明纯色（零 GPU 模糊），流畅度不受影响。 */
+               半透明纯色（零 GPU 模糊），流畅度不受影响。
+
+               针对真机反馈「悬浮黑块 / 边缘割裂」的两处关键优化：
+               ① 胶囊下方垫一层「底部渐隐蒙版」（竖向渐变 透明→背景色），让主页内容
+                  在底栏上方柔和淡出，而不是被一道硬边截断；
+               ② 胶囊加 20dp 柔和环境阴影，读起来是「悬浮玻璃」而非「贴死的黑板」。 */
             ProvideWallpaper(effectiveWallpaper.ifBlank { null }) {
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 14.dp)
                 ) {
-                    GlassSurface(
-                        shape = RoundedCornerShape(28.dp),
-                        showBorder = true,
-                        /* v1.0.6：胶囊高度收到 60dp（原 NavigationBar 满铺 80dp），
-                           视觉上明显更轻盈，也让主页内容多出一屏空间。
-                           固定高度而非「内容撑高」：底栏是四个等分格子，高度必须确定，
-                           否则图标 / 文字比例会随字号档位漂移。 */
-                        modifier = Modifier
+                    // ① 底部渐隐蒙版：内容在底栏上方柔和淡出，消除硬切割裂感
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
                             .fillMaxWidth()
-                            .height(60.dp)
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            bottomNavItems.forEach { item ->
-                                val selected = currentRoute == item.route ||
-                                        currentRoute in item.altRoutes ||
-                                        navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = { navigateToTab(navController, item.route) },
-                                    icon = {
-                                        Icon(
-                                            painterResource(item.iconRes),
-                                            contentDescription = item.label,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            item.label,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            maxLines = 1
-                                        )
-                                    },
-                                    // v1.2.3：底部导航配色统一为「暖琥珀选中」。
-                                    // v1.0.2+：未选中色改为主题派生（浅色=深棕灰 / 深色=浅灰 #B6B6BF 系），
-                                    // 修复深色模式下 #6B5B4F 对比度不足的问题。
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = AmberPrimary,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        selectedTextColor = AmberPrimary,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        indicatorColor = AmberPrimary.copy(alpha = 0.14f)
-                                    ),
-                                    modifier = Modifier.weight(1f)
+                            .height(120.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                        0.55f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                                        1.0f to MaterialTheme.colorScheme.background
+                                    )
                                 )
+                            )
+                    )
+                    // ② 悬浮毛玻璃胶囊（含柔影）
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 14.dp)
+                    ) {
+                        GlassSurface(
+                            shape = RoundedCornerShape(28.dp),
+                            showBorder = true,
+                            /* v1.0.6：胶囊高度收到 60dp（原 NavigationBar 满铺 80dp），
+                               视觉上明显更轻盈，也让主页内容多出一屏空间。
+                               固定高度而非「内容撑高」：底栏是四个等分格子，高度必须确定，
+                               否则图标 / 文字比例会随字号档位漂移。 */
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                                .shadow(
+                                    elevation = 20.dp,
+                                    shape = RoundedCornerShape(28.dp),
+                                    ambientColor = Color.Black,
+                                    spotColor = Color.Black
+                                )
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                bottomNavItems.forEach { item ->
+                                    val selected = currentRoute == item.route ||
+                                            currentRoute in item.altRoutes ||
+                                            navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = { navigateToTab(navController, item.route) },
+                                        icon = {
+                                            Icon(
+                                                painterResource(item.iconRes),
+                                                contentDescription = item.label,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                item.label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1
+                                            )
+                                        },
+                                        // v1.2.3：底部导航配色统一为「暖琥珀选中」。
+                                        // v1.0.2+：未选中色改为主题派生（浅色=深棕灰 / 深色=浅灰 #B6B6BF 系），
+                                        // 修复深色模式下 #6B5B4F 对比度不足的问题。
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = AmberPrimary,
+                                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            selectedTextColor = AmberPrimary,
+                                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            indicatorColor = AmberPrimary.copy(alpha = 0.14f)
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                         }
                     }
