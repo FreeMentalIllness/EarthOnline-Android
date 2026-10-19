@@ -74,6 +74,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val WALLPAPER_ROTATE = booleanPreferencesKey("wallpaper_rotate")
         /** 主页佩戴徽章（JSON 字符串数组：成就 id，最多 3 枚） */
         val HOME_BADGES = stringPreferencesKey("home_badges")
+        /** v1.0.6：记忆相册自定义分类（JSON 列表；零 Room 迁移，规避数据损坏风险） */
+        val ALBUMS = stringPreferencesKey("photo_albums")
+        /** v1.0.6：壁纸轮换指定相册 id（空串 = 全部照片，取消 5 张数量限制） */
+        val WALLPAPER_ALBUM = stringPreferencesKey("wallpaper_album")
         /** 通知栏常驻「快捷记录」开关 */
         val QUICK_NOTIF = booleanPreferencesKey("quick_add_notif")
         /** 彩蛋计数器：查看「历年今日」卡片的次数 */
@@ -153,6 +157,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     val memoryPhotosJson: Flow<String> = ds.data.map { it[MEMORY_PHOTOS] ?: "" }
     suspend fun setMemoryPhotosJson(v: String) = ds.edit { it[MEMORY_PHOTOS] = v }
 
+    /** v1.0.6：记忆相册自定义分类（JSON 列表，空串 = 未建分类） */
+    val albumsJson: Flow<String> = ds.data.map { it[ALBUMS] ?: "" }
+    suspend fun setAlbumsJson(v: String) = ds.edit { it[ALBUMS] = v }
+
+    /** v1.0.6：壁纸轮换指定相册（空串 = 全部照片） */
+    val wallpaperAlbum: Flow<String> = ds.data.map { it[WALLPAPER_ALBUM] ?: "" }
+    suspend fun setWallpaperAlbum(v: String) = ds.edit { it[WALLPAPER_ALBUM] = v }
+
     val wallpaperRotate: Flow<Boolean> = ds.data.map { it[WALLPAPER_ROTATE] ?: false }
     suspend fun setWallpaperRotate(v: Boolean) = ds.edit { it[WALLPAPER_ROTATE] = v }
 
@@ -197,6 +209,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         it.remove(HOME_QUICK_ENTRIES)
         it.remove(CUSTOM_TITLE)
         it.remove(MEMORY_PHOTOS)
+        it.remove(ALBUMS)
         it.remove(HOME_BADGES)
         it.remove(EGG_BLANK_TITLE)
         it.remove(EGG_THROWBACK)

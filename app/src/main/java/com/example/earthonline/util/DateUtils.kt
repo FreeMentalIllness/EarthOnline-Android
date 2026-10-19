@@ -23,6 +23,16 @@ fun nowIso(): String = ISO_FMT.format(Date())
 /** 当前本地日键 YYYY-MM-DD（对应 HTML 的 todayStr / 日字符串字段） */
 fun todayStr(): String = DAY_FMT.format(Date())
 
+/** ISO(UTC) → 本地短日期 MM-DD（非法 / 空返回空串）。列表卡片「类型 · 日期」用。 */
+fun formatDateShort(iso: String?): String {
+    if (iso.isNullOrBlank()) return ""
+    val ms = isoToMillis(iso) ?: return ""
+    val c = Calendar.getInstance().apply { timeInMillis = ms }
+    val m = (c.get(Calendar.MONTH) + 1).toString().padStart(2, '0')
+    val d = c.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')
+    return "$m-$d"
+}
+
 /** 毫秒 -> YYYY-MM-DD（日期选择器回填用） */
 fun millisToDayStr(millis: Long): String = DAY_FMT.format(Date(millis))
 

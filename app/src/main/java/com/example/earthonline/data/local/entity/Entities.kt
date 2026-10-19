@@ -119,6 +119,12 @@ data class TaskEntity(
 data class MemoEntity(
     @PrimaryKey val id: String,
     val text: String = "",
+    /**
+     * v1.0.6 笔记系统：Markdown 富文本源（加粗/列表/标题/代码块/图片）。
+     * 旧行 markdown=NULL → 读取时回退 [text]；新笔记双写：
+     * [text] 保留纯文本兜底（备份兼容 / WebDAV 旧客户端可读），[markdown] 为富文本源。
+     */
+    val markdown: String? = null,
     val type: String = "note",           // note / important / idea
     val createdAt: String = "",           // ISO
     val deletedAt: String? = null         // v1.0.5 回收站：软删时间 ISO；null=未删除

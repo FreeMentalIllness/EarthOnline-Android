@@ -8,6 +8,10 @@ sealed class Screen(val route: String, val label: String) {
     object Backpack : Screen("backpack", "背包")
     object Achievements : Screen("achievements", "成就")
     object Data : Screen("data", "数据")
+    /** v1.0.6：笔记系统（替换原「数据」底部 Tab；数据看板改由主页卡片/入口进入） */
+    object Notes : Screen("notes", "笔记")
+    /** v1.0.6：笔记编辑器（新建/编辑，独立路由带 id 参数） */
+    object NoteEditor : Screen("note_editor", "编辑笔记")
     object Map : Screen("map", "足迹")
     object Ai : Screen("ai", "系统")
     object Settings : Screen("settings", "设置")

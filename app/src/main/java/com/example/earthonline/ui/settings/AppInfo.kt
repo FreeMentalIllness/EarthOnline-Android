@@ -20,8 +20,8 @@ object AppInfo {
      * （对应下面的 0.9.x 条目）。改版本号时**两端 + build.gradle 三处一起改**，
      * 否则用户导出备份再导入时会对不上「这到底是哪一版」。
      */
-    const val version = "1.0.5"
-    const val buildDate = "2026-09-30"
+    const val version = "1.0.6"
+    const val buildDate = "2026-10-19"
     const val license = "MIT"
 
     /** 职责分工：二十七 负责数据，Cyou2 负责设计（勿写反，也不要加「主程」等自造头衔） */
@@ -68,6 +68,13 @@ object AppInfo {
      * 这样「正式版从 1.0.0 开始」这条线是连续的，历史又不丢。
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
+        Triple(
+            "1.0.6", "2026-10-19", listOf(
+                "笔记系统：底部导航原「数据」改为「笔记」，新增富文本笔记编辑器（Markdown，支持加粗 / 标题 / 有序·无序列表 / 代码块 / 图片 / 链接）",
+                "记忆升级：memos 表新增 markdown 列（旧笔记自动兼容纯文本兜底）；相册分类改为 DataStore 扩展存储，零数据库迁移风险",
+                "视觉打磨：原生自研液态玻璃（FULL / BLUR / FLAT 三级自动降级，零第三方库依赖），毛玻璃卡片在低端机也不卡顿"
+            )
+        ),
         Triple(
             "1.0.4", "2026-09-30", listOf(
                 "头像与壁纸清晰度提升：预览与成图按原图像素输出，不再偏糊",

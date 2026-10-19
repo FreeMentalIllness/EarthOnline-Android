@@ -51,6 +51,7 @@ import com.example.earthonline.ui.navigation.AppNavHost
 import com.example.earthonline.ui.navigation.Screen
 import com.example.earthonline.ui.navigation.bottomNavItems
 import com.example.earthonline.ui.navigation.settingsSubRoutes
+import com.example.earthonline.ui.theme.ProvideWallpaper
 import com.example.earthonline.ui.settings.SettingsViewModel
 import com.example.earthonline.util.AchievementSound
 import com.example.earthonline.util.rememberIsOnline
@@ -242,7 +243,9 @@ fun MainScaffold(
                 )
             }
             // 大屏/折叠屏适配：内容区限宽居中，避免展开态单列拉满全宽
-            AppNavHost(
+            // 注入全局壁纸路径，供各处 GlassSurface 就地采样毛玻璃背景
+            ProvideWallpaper(if (effectiveWallpaper.isBlank()) null else effectiveWallpaper) {
+                AppNavHost(
                 navController = navController,
                 startDestination = startRoute,
                 modifier = Modifier
@@ -255,7 +258,8 @@ fun MainScaffold(
                     onNavigate = { route -> navController.navigate(route) { launchSingleTop = true } },
                     onAccounting = { showAccounting = true }
                 )
-            )
+                )
+            }
             // 全局离线横幅：覆盖所有 Tab 与二级页（含地图 / WebDAV / AI 页）
             if (!isOnline) {
                 Surface(

@@ -5,6 +5,7 @@ import android.provider.MediaStore
 import androidx.exifinterface.media.ExifInterface
 import com.example.earthonline.data.local.datastore.SettingsDataStore
 import com.example.earthonline.util.ImageStore
+import com.example.earthonline.util.todayStr
 import com.example.earthonline.util.uid
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -21,9 +22,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * 「记忆相册」照片条目（v1.0.3）。
+ * 「记忆相册」照片条目（v1.0.3，v1.0.6 扩展 albumId）。
  * 元数据存 DataStore JSON，图片文件完整复制在 filesDir/photos（不重编码）。
  * [day] = 拍摄/归属日期 YYYY-MM-DD，用于按月份归档成相册墙与「历年今日」。
+ * [albumId] = 所属自定义相册 id（v1.0.6，可空 = 未分类）。
  */
 @Serializable
 data class MemoryPhoto(
@@ -33,7 +35,23 @@ data class MemoryPhoto(
     /** YYYY-MM-DD */
     val day: String,
     /** 用户补录的「当年的话」（可空） */
-    val note: String = ""
+    val note: String = "",
+    /** v1.0.6：所属相册 id（可空 = 未分类） */
+    val albumId: String? = null
+)
+
+/**
+ * 记忆相册自定义分类（v1.0.6）。
+ * 零 Room 迁移：存 DataStore JSON，规避数据损坏风险。
+ * [coverPhotoId] 可选封面（为空时由 UI 取该相册首张）。
+ */
+@Serializable
+data class PhotoAlbum(
+    val id: String,
+    val name: String,
+    val sortOrder: Int = 0,
+    val createdAt: String = "",
+    val coverPhotoId: String? = null
 )
 
 /**
@@ -90,6 +108,65 @@ class MemoryPhotoStore @Inject constructor(
     suspend fun setNote(id: String, note: String) {
         val list = load().map { if (it.id == id) it.copy(note = note.trim().take(120)) else it }
         save(list)
+    }
+
+    /* ---------------- v1.0.6：自定义相册分类（零 Room 迁移） ---------------- */
+
+    suspend fun loadAlbums(): List<PhotoAlbum> {
+        val txt = settings.albumsJson.first()
+        return if (txt.isBlank()) emptyList() else runCatching {
+            json.decodeFromString(ListSerializer(PhotoAlbum.serializer()), txt)
+        }.getOrDefault(emptyList())
+    }
+
+    private suspend fun saveAlbums(list: List<PhotoAlbum>) {
+        settings.setAlbumsJson(json.encodeToString(ListSerializer(PhotoAlbum.serializer()), list))
+    }
+
+    /** 新建相册（同名去重：已存在则直接返回旧的） */
+    suspend fun createAlbum(name: String): PhotoAlbum {
+        val clean = name.trim().take(24)
+        val albums = loadAlbums()
+        albums.firstOrNull { it.name == clean }?.let { return it }
+        val album = PhotoAlbum(
+            id = uid("album"),
+            name = clean,
+            sortOrder = albums.size,
+            createdAt = todayStr()
+        )
+        saveAlbums(albums + album)
+        return album
+    }
+
+    suspend fun renameAlbum(id: String, name: String) {
+        val clean = name.trim().take(24)
+        saveAlbums(loadAlbums().map { if (it.id == id) it.copy(name = clean) else it })
+    }
+
+    /** 删除相册：同步把引用它的照片 albumId 置空（照片不丢） */
+    suspend fun deleteAlbum(id: String) {
+        saveAlbums(loadAlbums().filter { it.id != id })
+        val list = load()
+        if (list.any { it.albumId == id }) {
+            save(list.map { if (it.albumId == id) it.copy(albumId = null) else it })
+        }
+    }
+
+    /** 设置相册封面（点错可传 null 清除） */
+    suspend fun setAlbumCover(albumId: String, photoId: String?) {
+        saveAlbums(loadAlbums().map { if (it.id == albumId) it.copy(coverPhotoId = photoId) else it })
+    }
+
+    /** 把某张照片归入/移出相册（albumId=null 即移出） */
+    suspend fun setPhotoAlbum(photoId: String, albumId: String?) {
+        val list = load().map { if (it.id == photoId) it.copy(albumId = albumId) else it }
+        save(list)
+    }
+
+    /** 取某相册下的照片（按日期倒序）；albumId 空串 = 全部照片（取消 5 张限制） */
+    suspend fun photosOfAlbum(albumId: String?): List<MemoryPhoto> {
+        val all = load()
+        return if (albumId.isNullOrBlank()) all else all.filter { it.albumId == albumId }
     }
 
     /** 把某张照片设为主页壁纸（静态；轮换模式关闭） */

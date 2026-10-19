@@ -31,6 +31,9 @@ import com.example.earthonline.ui.settings.GeneralRoute
 import com.example.earthonline.ui.settings.BackupSyncRoute
 import com.example.earthonline.ui.settings.AboutRoute
 import com.example.earthonline.ui.tasks.TasksRoute
+import com.example.earthonline.ui.notes.NotesRoute
+import com.example.earthonline.ui.notes.NoteEditorRoute
+import androidx.navigation.NavType
 
 /**
  * @param moreActions 右上角设置按钮的行为（导航 / 记账下载框），由 MainScaffold 统一注入
@@ -97,6 +100,28 @@ fun AppNavHost(
             else AchievementsRoute(moreActions = moreActions)
         }
         composable(Screen.Data.route) { DataRoute(moreActions = moreActions) }
+        // v1.0.6：笔记系统（替换原「数据」底部 Tab；数据看板改由主页卡片 / 入口进入）
+        composable(Screen.Notes.route) {
+            NotesRoute(
+                moreActions = moreActions,
+                onEdit = { id ->
+                    navController.navigate(Screen.NoteEditor.route + "?id=${id ?: ""}") {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+        composable(
+            route = Screen.NoteEditor.route + "?id={id}",
+            arguments = listOf(navArgument("id") { defaultValue = ""; type = NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id").orEmpty()
+            NoteEditorRoute(
+                id = id,
+                moreActions = moreActions,
+                onBack = { navController.popBackStack() }
+            )
+        }
         // v1.0.0：周期报告（日报 / 周报 / 年报），从数据看板进入（带 kind 参数决定首屏周期）
         composable(
             route = Screen.Report.route + "?kind={kind}",

@@ -29,8 +29,10 @@ android {
         // + 深色强调色提亮与按钮前景对比度修复（三端设计规范 v1.0 收口）。
         // versionCode 22 = v1.0.5：切换为正式签名（keystore 由 local.properties 注入 EO_STORE_FILE 等四字段），
         // 与 v1.0.5 发布前准备对齐；内部版本号同步升至 1.0.5。
-        versionCode = 22
-        versionName = "1.0.5"
+        // versionCode 23 = v1.0.6：笔记系统替换「数据」底部 Tab（memos 加 markdown 列 DB 7→8）、
+        // 相册分类走 DataStore 扩展（零 Room 迁移）、液态玻璃自研（淘汰 liquid-glass/cloudy 库）、richeditor-compose rc10 引入。
+        versionCode = 23
+        versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
@@ -158,4 +160,6 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     // 高德地图（阶段3 接入；AndroidManifest.xml 预留 key 占位，拿到 Key 后替换）
     implementation(libs.amap)
+    // v1.0.6：笔记系统 Markdown 富文本编辑器（锁定 rc10 兼容 Compose 1.7.x）
+    implementation(libs.richeditor)
 }

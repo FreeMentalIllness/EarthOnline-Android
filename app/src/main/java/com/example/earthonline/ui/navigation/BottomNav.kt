@@ -28,5 +28,5 @@ val bottomNavItems = listOf(
         Screen.Backpack.route, Screen.Backpack.label, R.drawable.ic_nav_backpack,
         altRoutes = listOf(Screen.Collections.route)
     ),
-    BottomNavItem(Screen.Data.route, Screen.Data.label, R.drawable.ic_nav_data),
+    BottomNavItem(Screen.Notes.route, Screen.Notes.label, R.drawable.ic_nav_data),
 )

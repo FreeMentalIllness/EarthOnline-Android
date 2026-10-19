@@ -22,6 +22,9 @@ serialization = "1.7.3"
 amap = "10.0.600"
 material = "1.11.0"
 workmanager = "2.9.1"
+# v1.0.6：笔记系统富文本编辑器。1.0.0-rc10 锁定 Kotlin 2.0.21 / Compose 1.7.0，
+# 与本项目 BOM 2024.10.01 完全对齐（严禁升 BOM，故不取 rc11+ 的 Kotlin 2.1.x 线）。
+richEditor = "1.0.0-rc10"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -60,6 +63,8 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # 注意：库键名不能用 amap-3dmap —— Gradle 会把 '-' 转成访问器里的 '.'，
 # 生成 libs.amap.3dmap，而 '3dmap' 以数字开头不是合法标识符。改用 amap。
 amap = { group = "com.amap.api", name = "3dmap", version.ref = "amap" }
+# v1.0.6：笔记系统 Markdown 富文本编辑器（加粗/列表/标题/代码块/图片插入，支持 MD 导入导出）
+richeditor = { group = "com.mohamedrejeb.richeditor", name = "richeditor-compose", version.ref = "richEditor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

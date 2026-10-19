@@ -108,8 +108,20 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
 }
 
 /**
+ * v7 -> v8：笔记系统（v1.0.6）。
+ * 仅 memos 表加 markdown TEXT 列（可空，null=旧行回退纯文本 [text]）。
+ * 全加列、零破坏：旧客户端导出的备份不含该字段，新客户端按主键合并语义不变；
+ * 四端契约（Android canonical）零改动。
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `memos` ADD COLUMN `markdown` TEXT")
+    }
+}
+
+/**
  * 主数据库（对应 HTML 的单一主存档键 `earth_data`，本端归一化为多表）。
- * version=7；迁移链 MIGRATION_1_2 … MIGRATION_6_7
+ * version=8；迁移链 MIGRATION_1_2 … MIGRATION_7_8
  *（fallbackToDestructiveMigration 仅作无匹配迁移时的兜底）。
  */
 @Database(
@@ -125,7 +137,7 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         BagCategoryEntity::class,
         XpEventEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -153,7 +165,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     DB_NAME
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                ).addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                )
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { INSTANCE = it }
