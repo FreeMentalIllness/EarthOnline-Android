@@ -33,9 +33,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
@@ -44,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.util.rememberImagePicker
 import com.mohamedrejeb.richeditor.model.RichTextState
@@ -99,6 +103,9 @@ fun NoteEditorScreen(
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var bodyScale by remember { mutableFloatStateOf(1f) }
+    // v1.0.14：编辑器焦点句柄 —— 点工具栏按钮会把焦点从编辑器挪走，
+    // 必须立刻要回来，否则「无选中时按 B」的待应用样式不会落到后续输入上
+    val editorFocus = remember { FocusRequester() }
 
     /* ---------- 撤销 / 重做：自建快照栈（richeditor 本版无内置 undo） ---------- */
     val history = remember { mutableStateListOf<String>() }
@@ -125,7 +132,7 @@ fun NoteEditorScreen(
     LaunchedEffect(Unit) {
         snapshotFlow { rich.toHtml() }.collectLatest { html ->
             if (applyingHistory) return@collectLatest
-            delay(400)
+            delay(200)
             if (history.getOrNull(histIndex) != html) {
                 while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
                 history.add(html)
@@ -141,6 +148,37 @@ fun NoteEditorScreen(
         histIndex = target
         runCatching { rich.setHtml(history[target]) }
         applyingHistory = false
+    }
+
+    /* v1.0.14：撤销/重做修复（死命令）。
+       旧实现只靠 snapshotFlow 防抖记录 —— 若快照尚未落栈（连续输入后立即点按），
+       histIndex 恒为 0，撤销按钮永远「点了没反应」。
+       现在点击瞬间先把当前状态压栈、再回退/前进一步，
+       无论防抖是否落栈，撤销/重做都必然生效。 */
+    fun snapshotCurrent() {
+        val cur = runCatching { rich.toHtml() }.getOrDefault("")
+        if (history.getOrNull(histIndex) != cur) {
+            while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
+            history.add(cur)
+            if (history.size > 80) history.removeAt(0)
+            histIndex = history.lastIndex
+        }
+    }
+
+    fun undo() {
+        snapshotCurrent()
+        if (histIndex > 0) applyHistory(histIndex - 1)
+    }
+
+    fun redo() {
+        snapshotCurrent()
+        if (histIndex < history.lastIndex) applyHistory(histIndex + 1)
+    }
+
+    /** v1.0.14：加粗/斜体/下划线/标题统一切换 —— 切换后立刻把焦点还给编辑器 */
+    fun applySpanStyle(style: SpanStyle) {
+        rich.toggleSpanStyle(style)
+        runCatching { editorFocus.requestFocus() }
     }
 
     fun commitTag() {
@@ -220,6 +258,9 @@ fun NoteEditorScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
+        // v1.0.14：本页 inset 清零 —— 键盘/导航栏避让全部交给 bottomBar 的 safeDrawing 处理，
+        // 消除「内容 ime padding + 工具栏 ime/navigation padding」双重叠加造成的空白与间隙
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -245,20 +286,21 @@ fun NoteEditorScreen(
         },
         /* 工具栏挂在 bottomBar：imePadding 让它在键盘弹出时贴在键盘上沿，永不被遮挡 */
         bottomBar = {
+            /* v1.0.14：currentSpanStyle 是快照态 —— 点 B 后立即重组，按钮高亮 + 正文即时变粗 */
+            val curSpanStyle = rich.currentSpanStyle
             EditorFormatBar(
-                modifier = Modifier.imePadding(),
+                modifier = Modifier,
                 canUndo = histIndex > 0,
                 canRedo = histIndex >= 0 && histIndex < history.lastIndex,
-                onUndo = { applyHistory(histIndex - 1) },
-                onRedo = { applyHistory(histIndex + 1) },
-                onBold = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-                onItalic = {
-                    rich.toggleSpanStyle(
-                        SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
-                    )
-                },
-                onUnderline = { rich.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                onHeading = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
+                boldActive = curSpanStyle.fontWeight == FontWeight.Bold,
+                italicActive = curSpanStyle.fontStyle == FontStyle.Italic,
+                underlineActive = curSpanStyle.textDecoration == TextDecoration.Underline,
+                onUndo = { undo() },
+                onRedo = { redo() },
+                onBold = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                onItalic = { applySpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                onUnderline = { applySpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                onHeading = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
                 onTodo = { toggleTodo() },
                 onBullet = { rich.toggleUnorderedList() },
                 onOrdered = { rich.toggleOrderedList() },
@@ -364,6 +406,7 @@ fun NoteEditorScreen(
                     shape = RoundedCornerShape(UiDimens.CardRadius),
                     modifier = Modifier
                         .fillMaxSize()
+                        .focusRequester(editorFocus)
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             RoundedCornerShape(UiDimens.CardRadius)
@@ -465,6 +508,9 @@ private fun EditorFormatBar(
     modifier: Modifier = Modifier,
     canUndo: Boolean,
     canRedo: Boolean,
+    boldActive: Boolean,
+    italicActive: Boolean,
+    underlineActive: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onBold: () -> Unit,
@@ -486,26 +532,28 @@ private fun EditorFormatBar(
         Row(
             Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
+                // v1.0.14：键盘间隙根治 —— safeDrawing 底部 = max(键盘, 导航栏)：
+                // 键盘弹出时工具栏贴键盘上沿，收起时避让手势条，不再双重叠加留出空白
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ToolIcon(Icons.Default.Undo, "撤销", canUndo, onUndo)
-            ToolIcon(Icons.Default.Redo, "重做", canRedo, onRedo)
+            ToolIcon(Icons.Default.Undo, "撤销", canUndo, onClick = onUndo)
+            ToolIcon(Icons.Default.Redo, "重做", canRedo, onClick = onRedo)
             ToolDivider()
-            ToolIcon(Icons.Default.FormatBold, "加粗", true, onBold)
-            ToolIcon(Icons.Default.FormatItalic, "斜体", true, onItalic)
-            ToolIcon(Icons.Default.FormatUnderlined, "下划线", true, onUnderline)
-            ToolIcon(Icons.Default.Title, "标题", true, onHeading)
+            ToolIcon(Icons.Default.FormatBold, "加粗", true, boldActive, onBold)
+            ToolIcon(Icons.Default.FormatItalic, "斜体", true, italicActive, onItalic)
+            ToolIcon(Icons.Default.FormatUnderlined, "下划线", true, underlineActive, onUnderline)
+            ToolIcon(Icons.Default.Title, "标题", true, onClick = onHeading)
             ToolDivider()
-            ToolIcon(Icons.Default.CheckBox, "待办", true, onTodo)
-            ToolIcon(Icons.Default.FormatListBulleted, "无序列表", true, onBullet)
-            ToolIcon(Icons.Default.FormatListNumbered, "有序列表", true, onOrdered)
+            ToolIcon(Icons.Default.CheckBox, "待办", true, onClick = onTodo)
+            ToolIcon(Icons.Default.FormatListBulleted, "无序列表", true, onClick = onBullet)
+            ToolIcon(Icons.Default.FormatListNumbered, "有序列表", true, onClick = onOrdered)
             ToolDivider()
-            ToolIcon(Icons.Default.Image, "插入图片", true, onImage)
-            ToolIcon(Icons.Default.AttachFile, "插入附件", true, onFile)
+            ToolIcon(Icons.Default.Image, "插入图片", true, onClick = onImage)
+            ToolIcon(Icons.Default.AttachFile, "插入附件", true, onClick = onFile)
             ToolDivider()
             ToolText("A±", onFontSize)
         }
@@ -513,14 +561,23 @@ private fun EditorFormatBar(
 }
 
 @Composable
-private fun ToolIcon(icon: ImageVector, desc: String, enabled: Boolean, onClick: () -> Unit) {
+private fun ToolIcon(
+    icon: ImageVector,
+    desc: String,
+    enabled: Boolean,
+    active: Boolean = false,
+    onClick: () -> Unit
+) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(38.dp)) {
         Icon(
             icon,
             contentDescription = desc,
             modifier = Modifier.size(20.dp),
-            tint = if (enabled) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            tint = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                active -> AmberPrimary
+                else -> MaterialTheme.colorScheme.onSurface
+            }
         )
     }
 }

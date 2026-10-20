@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -297,6 +299,17 @@ fun MainScaffold(
                         )
                 )
             }
+            /* v1.0.14：顶部硬遮挡（应用户要求撤销状态栏沉浸透出壁纸的设计）。
+               状态栏区域（时间/电量处）用主题基础背景色实心填充 —— 绝不透出壁纸，
+               页面标题/列表从色块下方开始，不再被通知栏遮挡。
+               windowInsetsTopHeight 精确取状态栏高度，深浅色主题自动匹配。 */
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(MaterialTheme.colorScheme.background)
+            )
             // 大屏/折叠屏适配：内容区限宽居中，避免展开态单列拉满全宽
             // 注入全局壁纸路径，供各处 GlassSurface 就地采样毛玻璃背景
             ProvideWallpaper(if (effectiveWallpaper.isBlank()) null else effectiveWallpaper) {

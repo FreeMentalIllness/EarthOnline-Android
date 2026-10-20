@@ -159,7 +159,7 @@ fun HomeScreen(
     LazyColumn(
         // v1.2.1：世界日志输入框在页面中部，键盘弹起时若不收缩可视高度，
         // 输入框会被键盘整个盖住（用户看不到自己在打什么）。imePadding 让列表底部腾出键盘高度。
-        modifier = Modifier.fillMaxSize().imePadding(),
+        modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding(),
         contentPadding = PaddingValues(
             start = UiDimens.ScreenPad,
             end = UiDimens.ScreenPad,
