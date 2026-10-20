@@ -84,6 +84,8 @@ fun AppearanceRoute(
     val theme by vm.theme.collectAsStateWithLifecycle(initialValue = "system")
     val wallpaper by vm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
     val wallpaperAlpha by vm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
+    // v1.0.11：壁纸模糊度滑块数据源
+    val wallpaperBlur by vm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
     // v1.0.4：字号档位设置已移除 —— 应用内不再额外缩放文字，直接跟随系统字体大小，
     // 由系统无障碍设置统一控制（对应需求「删除字号大小设置，自动适配」）。
     // v1.0.3：壁纸从记忆相册随机轮换
@@ -165,6 +167,24 @@ fun AppearanceRoute(
                                 vm.setWallpaperAlpha(it)
                             },
                             valueRange = 0.05f..0.9f
+                        )
+                        // v1.0.11：壁纸模糊度滑块（实时预览，拖动即时生效；0 = 清晰）
+                        var blurDraft by remember(wallpaper) { mutableFloatStateOf(wallpaperBlur) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("壁纸模糊度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                            Text(
+                                if (blurDraft < 0.5f) "清晰" else "${blurDraft.roundToInt()}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Slider(
+                            value = blurDraft,
+                            onValueChange = {
+                                blurDraft = it
+                                vm.setWallpaperBlur(it)
+                            },
+                            valueRange = 0f..24f
                         )
                     }
                     // v1.0.3：动态主页背景 —— 从记忆相册随机轮换（每天一张，确定性挑选）

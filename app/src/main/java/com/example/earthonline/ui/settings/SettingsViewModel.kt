@@ -62,6 +62,8 @@ class SettingsViewModel @Inject constructor(
     val theme: Flow<String> = settings.theme
     val wallpaper: Flow<String> = settings.wallpaper
     val wallpaperAlpha: Flow<Float> = settings.wallpaperAlpha
+    /** v1.0.11：壁纸模糊度（0~24dp，用户自平衡美观与性能） */
+    val wallpaperBlur: Flow<Float> = settings.wallpaperBlur
     val notify: Flow<Boolean> = settings.notify
     val aiConfigJson: Flow<String> = settings.aiConfig
     val webdavConfigJson: Flow<String> = settings.webdavConfig
@@ -128,6 +130,20 @@ class SettingsViewModel @Inject constructor(
         alphaJob = viewModelScope.launch {
             delay(120)
             settings.setWallpaperAlpha(c)
+        }
+    }
+
+    private var blurJob: Job? = null
+
+    /**
+     * v1.0.11：壁纸模糊度滑块 —— 与不透明度同样 120ms 防抖落盘，实时预览走 Flow 重组。
+     */
+    fun setWallpaperBlur(v: Float) {
+        val c = v.coerceIn(0f, 24f)
+        blurJob?.cancel()
+        blurJob = viewModelScope.launch {
+            delay(120)
+            settings.setWallpaperBlur(c)
         }
     }
 

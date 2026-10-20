@@ -68,6 +68,8 @@ fun NotesScreen(
         topBar = {
             TopAppBar(
                 title = { Text("笔记") },
+                // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
                     IconButton(onClick = {
                         searchOpen = !searchOpen
@@ -94,6 +96,8 @@ fun NotesScreen(
                     onValueChange = vm::setQuery,
                     placeholder = { Text("搜正文或标签") },
                     singleLine = true,
+                    // v1.0.11：全局搜索栏统一胶囊形
+                    shape = RoundedCornerShape(50),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -198,9 +202,7 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
     var body by remember { mutableStateOf("") }
     var tagInput by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
-    // v1.0.10：新建笔记补充分类（单选项，写入为带「分类」前缀的标签，便于筛选）
-    var category by remember { mutableStateOf("") }
-    val categories = listOf("灵感", "待办", "日记", "想法")
+    // v1.0.11：取消「无/灵感/待办/日记/想法」默认分类，完全改为用户自定义标签
     val expanded = remember { mutableStateOf(false) }
 
     fun commitTag() {
@@ -263,26 +265,6 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
                     )
                 }
             }
-            // v1.0.10：分类单选（灵感 / 待办 / 日记 / 想法）
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FilterChip(
-                    selected = category == "",
-                    onClick = { category = "" },
-                    label = { Text("无") }
-                )
-                categories.forEach { c ->
-                    FilterChip(
-                        selected = category == c,
-                        onClick = { category = if (category == c) "" else c },
-                        label = { Text(c) }
-                    )
-                }
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -297,12 +279,10 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
                         commitTag()
                         val finalBody = body.trim()
                         if (finalBody.isBlank()) return@Button
-                        val finalTags = if (category.isNotBlank()) tags + category else tags
-                        onSave(finalBody, finalTags)
+                        onSave(finalBody, tags)
                         body = ""
                         tagInput = ""
                         tags = emptyList()
-                        category = ""
                         expanded.value = false
                     },
                     enabled = body.isNotBlank()

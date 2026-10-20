@@ -42,6 +42,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val THEME = stringPreferencesKey("earth_theme")
         val WALLPAPER = stringPreferencesKey("earth_wallpaper")
         val WALLPAPER_ALPHA = floatPreferencesKey("earth_wallpaper_alpha")
+        /** v1.0.11：壁纸模糊度（dp，0~24） */
+        val WALLPAPER_BLUR = floatPreferencesKey("earth_wallpaper_blur")
         val NOTIFY = booleanPreferencesKey("earth_notify")
         val AI_CONFIG = stringPreferencesKey("ai_config")
         val WEBDAV_CONFIG = stringPreferencesKey("webdav_config")
@@ -105,6 +107,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     /** 壁纸不透明度 0.05 ~ 0.90（0 = 完全看不见，1 = 完全遮挡内容，故上限收紧） */
     val wallpaperAlpha: Flow<Float> = ds.data.map { (it[WALLPAPER_ALPHA] ?: 0.35f).coerceIn(0.05f, 0.9f) }
+
+    /** v1.0.11：壁纸模糊度 0~24dp（0 = 清晰，越大越毛玻璃；用户自平衡美观与性能） */
+    val wallpaperBlur: Flow<Float> = ds.data.map { (it[WALLPAPER_BLUR] ?: 0f).coerceIn(0f, 24f) }
     val notify: Flow<Boolean> = ds.data.map { it[NOTIFY] ?: false }
     val aiConfig: Flow<String> = ds.data.map { it[AI_CONFIG] ?: "" }
     val webdavConfig: Flow<String> = ds.data.map { it[WEBDAV_CONFIG] ?: "" }
@@ -123,6 +128,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     suspend fun setWallpaper(v: String) = ds.edit { it[WALLPAPER] = v }
     suspend fun setWallpaperAlpha(v: Float) =
         ds.edit { it[WALLPAPER_ALPHA] = v.coerceIn(0.05f, 0.9f) }
+    suspend fun setWallpaperBlur(v: Float) =
+        ds.edit { it[WALLPAPER_BLUR] = v.coerceIn(0f, 24f) }
     suspend fun setNotify(v: Boolean) = ds.edit { it[NOTIFY] = v }
     suspend fun setAiConfig(v: String) = ds.edit { it[AI_CONFIG] = v }
     suspend fun setWebdavConfig(v: String) = ds.edit { it[WEBDAV_CONFIG] = v }

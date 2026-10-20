@@ -57,6 +57,7 @@ import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.ui.theme.pressScaleClickable
 import com.example.earthonline.ui.theme.pressScaleCombinedClickable
 import kotlinx.serialization.json.Json
@@ -111,6 +112,8 @@ fun BackpackScreen(
         topBar = {
             TopAppBar(
                 title = { Text("背包") },
+                // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 actions = {
                     // v1.2.3：分类管理入口移到右上角，与筛选条解耦，避免「筛选」与「管理」入口重叠
                     IconButton(onClick = { showCategoryManager = true }) {
@@ -950,8 +953,8 @@ private fun formatSize(bytes: Long): String {
  */
 @Composable
 private fun TabToggle(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
+    // v1.0.11：切换 Tab 改用液态玻璃材质（与主页卡片统一），选中态仍用主色胶囊
+    GlassSurface(
         shape = RoundedCornerShape(20.dp),
         modifier = modifier
             .fillMaxWidth()

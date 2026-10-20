@@ -1,28 +1,41 @@
 package com.example.earthonline.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.navigation.Screen
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsRoute(moreActions: MoreMenuActions, vm: SettingsViewModel = hiltViewModel()) =
@@ -33,10 +46,18 @@ private val ChipPurple = Color(0xFF7C6BF2)
 private val ChipTeal = Color(0xFF00A884)
 private val ChipBlue = Color(0xFF2F7CF6)
 private val ChipPink = Color(0xFFF4536E)
+private val ChipAmber = Color(0xFFF59E0B)
+private val ChipRed = Color(0xFFEF4444)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // v1.0.11：隐私政策 / 清除所有数据 两个弹窗状态（入口统一提到设置首页）
+    var showPrivacy by remember { mutableStateOf(false) }
+    var showDanger by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -59,10 +80,9 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                 )
             }
 
-            /* ==================== v1.0.10：分组设置（对标参考图二） ====================
-               按「外观 / 数据与隐私 / 关于」合理分组，组间留白舒适；
-               每组标题 + 半透明圆角卡片，卡内彩色图标芯片 + 副标题 + 右箭头。
-               （当前无独立「账号」功能页，故未单列「账号」组。） */
+            /* ==================== v1.0.11：分组设置 ====================
+               外观 / 数据与隐私 / AI / 关于；隐私政策 / AI 配置 / 回收站三个
+               高频入口统一提到设置首页；末尾新增「危险区」收纳清除所有数据。 */
             item {
                 SettingsSectionLabel("外观")
                 Surface(
@@ -75,7 +95,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             icon = Icons.Filled.Palette,
                             chip = ChipPurple,
                             label = "外观",
-                            hint = "主题 · 壁纸 · 液态玻璃"
+                            hint = "主题 · 壁纸 · 模糊度"
                         ) { moreActions.onNavigate(Screen.SettingsAppearance.route) }
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 66.dp),
@@ -85,7 +105,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             icon = Icons.Filled.Build,
                             chip = ChipTeal,
                             label = "通用",
-                            hint = "提醒 · 音效 · AI 对话"
+                            hint = "提醒 · 音效 · 其他偏好"
                         ) { moreActions.onNavigate(Screen.SettingsGeneral.route) }
                     }
                 }
@@ -102,8 +122,45 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             icon = Icons.Filled.Backup,
                             chip = ChipBlue,
                             label = "数据与备份",
-                            hint = "WebDAV 同步 · 本地自动备份 · 隐私政策"
+                            hint = "WebDAV 同步 · 本地自动备份"
                         ) { moreActions.onNavigate(Screen.SettingsBackupSync.route) }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 66.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SettingsGroupRow(
+                            icon = Icons.Filled.DeleteOutline,
+                            chip = ChipTeal,
+                            label = "回收站",
+                            hint = "已删除内容保留 30 天，可恢复"
+                        ) { moreActions.onNavigate(Screen.RecycleBin.route) }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 66.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SettingsGroupRow(
+                            icon = Icons.Filled.Lock,
+                            chip = ChipAmber,
+                            label = "隐私政策",
+                            hint = "数据收集 · 权限用途 · 第三方组件"
+                        ) { showPrivacy = true }
+                    }
+                }
+            }
+            item {
+                SettingsSectionLabel("AI")
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp
+                ) {
+                    Column {
+                        SettingsGroupRow(
+                            icon = Icons.Filled.SmartToy,
+                            chip = ChipPurple,
+                            label = "AI 配置",
+                            hint = "接口地址 · 密钥 · 模型"
+                        ) { moreActions.onNavigate(Screen.Ai.route) }
                     }
                 }
             }
@@ -124,12 +181,88 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                     }
                 }
             }
+            // v1.0.11：危险区 —— 清除所有数据（红色警示 + 二次确认）
+            item {
+                SettingsSectionLabel("危险区")
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp
+                ) {
+                    SettingsGroupRow(
+                        icon = Icons.Filled.DeleteOutline,
+                        chip = ChipRed,
+                        label = "清除所有数据",
+                        hint = "清空本机全部用户数据，不可撤销"
+                    ) { showDanger = true }
+                }
+            }
         }
+    }
+
+    if (showPrivacy) {
+        PrivacyPolicyDialog(onDismiss = { showPrivacy = false })
+    }
+    if (showDanger) {
+        AlertDialog(
+            onDismissRequest = { showDanger = false },
+            title = { Text("清除所有数据？") },
+            text = {
+                Text(
+                    "将清空本机全部任务 / 背包 / 笔记 / 收藏 / 相册 / 成就等用户数据，" +
+                        "操作不可撤销（主题、壁纸等应用设置会保留）。\n\n" +
+                        "建议先在「数据与备份」导出一份 JSON 备份。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDanger = false
+                    scope.launch {
+                        val msg = vm.clearAllData(deleteCloud = false)
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("清除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDanger = false }) { Text("取消") }
+            }
+        )
     }
 }
 
 /**
- * v1.0.10：分组标题（对标参考图二的组名样式），左侧带一截强调色短竖条。
+ * v1.0.11：隐私政策弹窗（从「数据与备份」二级页提升到设置首页直达）。
+ */
+@Composable
+private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("隐私政策") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                AppInfo.privacyPolicy.forEach { (title, body) ->
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+                    )
+                    Text(
+                        body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("我知道了") }
+        }
+    )
+}
+
+/**
+ * v1.0.10：分组标题（对标参考图二的组名样式）。
  */
 @Composable
 private fun SettingsSectionLabel(text: String) {

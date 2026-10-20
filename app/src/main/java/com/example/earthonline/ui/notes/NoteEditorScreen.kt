@@ -11,7 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -22,10 +21,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,20 +32,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.util.rememberImagePicker
+import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
-import com.mohamedrejeb.richeditor.ui.material3.RichText
+import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 笔记编辑页（v1.0.6 重写）。
+ * 笔记编辑页（v1.0.11 彻底重写为 WYSIWYG 富文本）。
  *
- * 形态：一整页就是「正文输入框 + 标签编辑区」。正文用系统原生输入框，
- * 不再依赖任何富文本编辑控件 —— 写入链路越短越不容易坏。
- * 需要看排版效果时点右上角「预览」，用只读渲染器把 Markdown 画出来（只读，不参与写入）。
- * 保存即写库并返回列表；返回键在有内容时顺手保存，避免用户以为内容丢了。
+ * 核心变化：正文改用 richeditor-compose 的 [RichTextEditor]（所见即所得）——
+ * 加粗 / 斜体 / 下划线 / 列表等操作直接在渲染后的文本上生效（toggleSpanStyle），
+ * 不再向输入框插入 `**` `<u>` 等 Markdown 源码；存储层仍是 Markdown
+ * （保存时 toMarkdown()，载入时 setMarkdown()），跨端与旧数据完全兼容。
+ * 取消「无/灵感/待办/日记/想法」默认分类，标签完全由用户自定义。
  */
 @Composable
 fun NoteEditorRoute(
@@ -67,13 +68,10 @@ fun NoteEditorScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var body by remember { mutableStateOf(TextFieldValue("")) }
+    // v1.0.11：WYSIWYG 富文本状态（编辑即渲染，不再暴露 Markdown 源码）
+    val rich = rememberRichTextState()
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
-    // v1.0.10：编辑页同样可指定分类（单选项，写入为标签，便于筛选）
-    var category by remember { mutableStateOf("") }
-    val categories = listOf("灵感", "待办", "日记", "想法")
-    var preview by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
 
@@ -81,7 +79,7 @@ fun NoteEditorScreen(
         if (id.isNotBlank()) {
             val m = vm.getNote(id)
             if (m != null) {
-                body = TextFieldValue(m.text)
+                runCatching { rich.setMarkdown(m.text) }
                 tags = NotesViewModel.tagsOf(m)
             }
         }
@@ -94,50 +92,15 @@ fun NoteEditorScreen(
         tagInput = ""
     }
 
-    /** 在光标选区两侧包裹 [prefix]/[suffix]（无选区则插入占位文本并选中），用于加粗等行内语法 */
-    fun surround(prefix: String, suffix: String = prefix, placeholder: String = "文本") {
-        val tv = body
-        val start = tv.selection.start.coerceAtMost(tv.text.length)
-        val end = tv.selection.end.coerceAtMost(tv.text.length)
-        val sel = tv.text.substring(start, end)
-        val inner = if (sel.isEmpty()) placeholder else sel
-        val newText = tv.text.substring(0, start) + prefix + inner + suffix + tv.text.substring(end)
-        body = TextFieldValue(
-            text = newText,
-            selection = TextRange(start + prefix.length, start + prefix.length + inner.length)
-        )
-    }
-
-    /** 在当前行行首插入 [linePrefix]（如列表 / 待办项），光标同步右移 */
-    fun linePrefix(linePrefix: String) {
-        val tv = body
-        val caret = tv.selection.start.coerceAtMost(tv.text.length)
-        val lineStart = tv.text.lastIndexOf('\n', caret - 1) + 1
-        val newText = tv.text.substring(0, lineStart) + linePrefix + tv.text.substring(lineStart)
-        val shift = linePrefix.length
-        body = TextFieldValue(
-            text = newText,
-            selection = TextRange(tv.selection.start + shift, tv.selection.end + shift)
-        )
-    }
-
-    /* ==================== v1.0.9：完整外显工具栏所需的状态与助手 ==================== */
+    /* ==================== 工具栏状态与助手 ==================== */
     val context = LocalContext.current
     /** 字号档位（1f / 1.15f / 1.3f 循环），作用于编辑器正文 */
     var bodyScale by remember { mutableFloatStateOf(1f) }
 
-    /** 在光标处直接插入 [text]，光标移到插入内容末尾 */
-    fun insertAt(text: String) {
-        val tv = body
-        val pos = tv.selection.start.coerceAtMost(tv.text.length)
-        val newText = tv.text.substring(0, pos) + text + tv.text.substring(pos)
-        body = TextFieldValue(text = newText, selection = TextRange(pos + text.length))
-    }
-
-    /** 把 content uri 复制进应用私有 note_media 目录，成功回调文件名；失败 Toast */
+    /** 把 content uri 复制进应用私有 note_media 目录，成功回调文件路径；失败 Toast */
     fun importIntoNoteMedia(uri: Uri, fallbackName: String, onDone: (String) -> Unit) {
         scope.launch {
-            val name = withContext(Dispatchers.IO) {
+            val path = withContext(Dispatchers.IO) {
                 runCatching {
                     val resolver = context.contentResolver
                     var fileName = fallbackName
@@ -152,18 +115,19 @@ fun NoteEditorScreen(
                     out.absolutePath
                 }.getOrNull()
             }
-            if (name == null) {
+            if (path == null) {
                 Toast.makeText(context, "导入失败，请重试", Toast.LENGTH_SHORT).show()
             } else {
-                onDone(name)
+                onDone(path)
             }
         }
     }
 
-    // 插入图片（相册）/ 插入本地文件（任意类型）两个选择器
+    // 插入图片 / 插入本地文件：以富文本链接形态插入（WYSIWYG 可见可点），
+    // 导出 Markdown 时为 [名称](file://路径)，与列表页附件打开逻辑完全兼容。
     val pickNoteImage = rememberImagePicker(onPicked = { uri ->
         importIntoNoteMedia(uri, "image.jpg") { path ->
-            insertAt("![图片](file://$path)\n")
+            rich.addLink("🖼 图片", "file://$path")
         }
     })
     val pickNoteFile = rememberLauncherForActivityResult(
@@ -172,18 +136,17 @@ fun NoteEditorScreen(
         if (uri != null) {
             importIntoNoteMedia(uri, "file") { path ->
                 val display = path.substringAfterLast('_')
-                insertAt("[$display](file://$path)")
+                rich.addLink("📎 $display", "file://$path")
             }
         }
     }
 
     fun save(): Boolean {
-        val text = body.text
+        val text = rich.toMarkdown()
         if (text.isBlank()) return false
         commitTag()
-        val finalTags = if (category.isNotBlank()) tags + category else tags
         scope.launch {
-            vm.saveNote(id.ifBlank { null }, text, finalTags)
+            vm.saveNote(id.ifBlank { null }, text, tags)
             onBack()
         }
         return true
@@ -197,15 +160,12 @@ fun NoteEditorScreen(
                 navigationIcon = {
                     IconButton(onClick = {
                         // 有内容就顺手存一下，避免用户以为丢了
-                        if (body.text.isNotBlank()) save() else onBack()
+                        if (rich.toMarkdown().isNotBlank()) save() else onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
-                    TextButton(onClick = { preview = !preview }) {
-                        Text(if (preview) "编辑" else "预览")
-                    }
                     if (id.isNotBlank()) {
                         IconButton(onClick = { showDelete = true }) {
                             Icon(
@@ -235,7 +195,7 @@ fun NoteEditorScreen(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 标签编辑区
+            // 标签编辑区（完全用户自定义，无默认分类）
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -273,70 +233,42 @@ fun NoteEditorScreen(
                     modifier = Modifier.weight(1f).defaultMinSize(minWidth = 100.dp)
                 )
             }
-            // v1.0.10：分类单选（灵感 / 待办 / 日记 / 想法）
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                FilterChip(selected = category == "", onClick = { category = "" }, label = { Text("无") })
-                categories.forEach { c ->
-                    FilterChip(selected = category == c, onClick = { category = if (category == c) "" else c }, label = { Text(c) })
-                }
-            }
 
-            // v1.0.9：完整外显格式工具栏（死命令）—— 恒定可见、单行横向滚动。
-            // 包含：标题 / 加粗 / 斜体 / 下划线 / 字号档位 / 待办 / 引用 / 无序 / 有序 / 插入图片 / 插入文件。
-            if (!preview) {
-                FormatToolbar(
-                    onTitle = { linePrefix("# ") },
-                    onBold = { surround("**", "**", "加粗文本") },
-                    onItalic = { surround("*", "*", "斜体文本") },
-                    onUnderline = { surround("<u>", "</u>", "下划线文本") },
-                    onFontSize = {
-                        bodyScale = when (bodyScale) {
-                            1f -> 1.15f
-                            1.15f -> 1.3f
-                            else -> 1f
-                        }
-                    },
-                    onTodo = { linePrefix("- [ ] ") },
-                    onQuote = { linePrefix("> ") },
-                    onList = { linePrefix("- ") },
-                    onOrdered = { linePrefix("1. ") },
-                    onImage = { pickNoteImage() },
-                    onFile = { pickNoteFile.launch("*/*") }
-                )
-            }
+            // v1.0.11：WYSIWYG 工具栏 —— 点击直接在富文本上生效，绝不插入 Markdown 符号
+            FormatToolbar(
+                onTitle = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
+                onBold = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                onItalic = { rich.toggleSpanStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) },
+                onUnderline = { rich.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                onFontSize = {
+                    bodyScale = when (bodyScale) {
+                        1f -> 1.15f
+                        1.15f -> 1.3f
+                        else -> 1f
+                    }
+                },
+                onTodo = { rich.toggleUnorderedList() },
+                onQuote = { rich.toggleCodeSpan() },
+                onOrdered = { rich.toggleOrderedList() },
+                onImage = { pickNoteImage() },
+                onFile = { pickNoteFile.launch("*/*") }
+            )
 
-            if (preview) {
-                MarkdownPreview(
-                    markdown = body.text,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                )
-            } else {
-                OutlinedTextField(
-                    value = body,
-                    onValueChange = { body = it },
-                    placeholder = { Text("写点什么…") },
-                    // v1.0.7：加大行距（默认 1.4 倍偏挤），光标所在行不再与邻行糊在一起
-                    // v1.0.9：字号随工具栏档位缩放（1f / 1.15f / 1.3f）
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = (16 * bodyScale).sp,
-                        lineHeight = (28 * bodyScale).sp
-                    ),
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
+            // WYSIWYG 编辑器：编辑即渲染，所见即所得
+            RichTextEditor(
+                state = rich,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontSize = (16 * bodyScale).sp,
+                    lineHeight = (28 * bodyScale).sp
+                ),
+                placeholder = { Text("写点什么…") },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
 
             Button(
                 onClick = { save() },
-                enabled = body.text.isNotBlank(),
+                enabled = rich.toMarkdown().isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("保存") }
         }
@@ -362,31 +294,9 @@ fun NoteEditorScreen(
 }
 
 /**
- * Markdown 只读预览。
- * 用只读渲染器而非可编辑控件：只读路径不参与输入与状态回写，天然不会把编辑弄坏。
- */
-@Composable
-private fun MarkdownPreview(markdown: String, modifier: Modifier = Modifier) {
-    val state = rememberRichTextState()
-    LaunchedEffect(markdown) {
-        runCatching { state.setMarkdown(markdown) }
-    }
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    ) {
-        Box(Modifier.padding(14.dp)) {
-            RichText(state = state)
-        }
-    }
-}
-
-/**
- * v1.0.9：完整外显笔记格式工具栏（死命令）—— 恒定可见、单行横向滚动，绝不折叠。
- * 行内语法（加粗 *..* / 斜体 *..* / 下划线 <u>..</u>）由编辑器包裹选区；
- * 行首语法（标题 / 引用 / 列表 / 有序 / 待办）插到光标行行首；
- * 字号档位切换编辑器正文缩放；插入图片 / 文件走系统选择器并把文件复制进应用私有目录。
+ * v1.0.11：WYSIWYG 笔记格式工具栏（对标专业笔记软件）——
+ * B / I / U / A± / 待办 / H / 1. 有序 / ❝ / 🖼 / 📎，单行横向滚动恒定可见。
+ * 全部操作直接作用于富文本（toggleSpanStyle / toggle 列表），不再插入 Markdown 符号。
  */
 @Composable
 private fun FormatToolbar(
@@ -397,7 +307,6 @@ private fun FormatToolbar(
     onFontSize: () -> Unit,
     onTodo: () -> Unit,
     onQuote: () -> Unit,
-    onList: () -> Unit,
     onOrdered: () -> Unit,
     onImage: () -> Unit,
     onFile: () -> Unit
@@ -414,15 +323,14 @@ private fun FormatToolbar(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FormatButton("H", onTitle)
             FormatButton("B", onBold, bold = true)
             FormatButton("I", onItalic, italic = true)
             FormatButton("U", onUnderline, underline = true)
             FormatButton("A±", onFontSize)
             FormatButton("☑ 待办", onTodo)
-            FormatButton("❝", onQuote)
-            FormatButton("• 列表", onList)
+            FormatButton("H", onTitle)
             FormatButton("1. 有序", onOrdered)
+            FormatButton("❝", onQuote)
             FormatButton("🖼 图片", onImage)
             FormatButton("📎 文件", onFile)
         }

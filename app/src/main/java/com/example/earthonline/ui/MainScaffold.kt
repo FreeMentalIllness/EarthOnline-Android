@@ -38,12 +38,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
@@ -135,6 +132,8 @@ fun MainScaffold(
 
     val wallpaper by settingsVm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
     val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
+    // v1.0.11：壁纸模糊度（设置→外观 滑块，0=清晰，24=重度毛玻璃）
+    val wallpaperBlur by settingsVm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
     val achSound by settingsVm.achSound.collectAsStateWithLifecycle(initialValue = true)
     // v1.0.6：当日轮换壁纸（含相册筛选）由 ViewModel 统一计算，避免组合层做 JSON 解析
     val effectiveWallpaper by settingsVm.effectiveWallpaper.collectAsStateWithLifecycle(initialValue = "")
@@ -212,27 +211,15 @@ fun MainScaffold(
                   现改为 drawBehind 把蒙版画在边界之外 —— 视觉不变，测量高度只含胶囊本身。
                ② 胶囊尺寸对标参考图：高 58dp、圆角 28dp、左右 12dp / 底部 6dp 留白，
                   图标 20dp + 10sp 小字，贴合屏幕最底部靠渐变 + 模糊自然融合。 */
+            /* v1.0.11：底部导航 —— 移除 110dp 渐隐蒙版（默认壁纸下它是「突兀横杠」的根因：
+               蒙版用纯 background 色从透明渐变到不透明，在壁纸上会形成一条清晰的色带边界）。
+               胶囊本身自带高光描边 + 16dp 环境投影，内容在底栏上方的过渡交给玻璃材质即可；
+               navigationBarsPadding 继续负责手势条沉浸式避让。 */
             ProvideWallpaper(effectiveWallpaper.ifBlank { null }) {
-                val fadeColor = MaterialTheme.colorScheme.background
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                        .drawBehind {
-                            // 底部渐隐蒙版：向上画 110dp，内容在底栏上方柔和淡出
-                            val h = 110.dp.toPx()
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    colorStops = arrayOf(
-                                        0.0f to fadeColor.copy(alpha = 0f),
-                                        0.55f to fadeColor.copy(alpha = 0f),
-                                        1.0f to fadeColor
-                                    )
-                                ),
-                                topLeft = Offset(0f, -h),
-                                size = Size(size.width, h)
-                            )
-                        }
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 6.dp)
                 ) {
@@ -278,7 +265,10 @@ fun MainScaffold(
                 AsyncImage(
                     model = wallpaperRequest,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // v1.0.11：壁纸模糊度滑块（0 时不挂 blur，避免无谓的离屏合成开销）
+                        .then(if (wallpaperBlur > 0.5f) Modifier.blur(wallpaperBlur.dp) else Modifier),
                     contentScale = ContentScale.Crop
                 )
                 /* 性能：用「背景色蒙层」表达不透明度，而不是给图片设 alpha。

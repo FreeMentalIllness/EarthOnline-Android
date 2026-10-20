@@ -433,7 +433,7 @@ private fun HomeSearchBox(
                     }
                 }
             },
-            shape = RoundedCornerShape(UiDimens.ItemRadius),
+            shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
         )
         if (query.isNotBlank()) {

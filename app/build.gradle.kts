@@ -35,8 +35,9 @@ android {
         // versionCode 25 = v1.0.8：全局可读性修复（GlassAccessibilityMode 独立遮罩 + GPU 档着色不透明度抬升）+ 底栏贴合屏幕底部（修复悬浮过高）+ 收藏交互重构（单击打开/预览、长按编辑、编辑态可替换文件）。
         // versionCode 26 = v1.0.9：底栏终版复刻（58dp 胶囊 + 新矢量图标 + 弹跳动效）+ 渐隐蒙版 drawBehind 化根治占位 + 设置页单卡分组/彩色图标芯片 + 笔记工具栏完整外显（斜体/下划线/字号/插入图片/插入文件）。
         // versionCode 27 = v1.0.10：液态玻璃强制常开（移除开关）+ 底栏高光描边/投影/四图标点击动效 + 设置页分组排版 + 全局卡片玻璃化/胶囊按钮 + 任务主线支线合并 + 笔记新建分类/编辑工具栏不被键盘遮挡。
-        versionCode = 27
-        versionName = "1.0.10"
+        // versionCode 28 = v1.0.11：笔记 WYSIWYG 重写（richeditor 富文本，去 Markdown 源码暴露）+ 取消默认分类 + 底栏图标重绘（完整背包/倾斜钢笔）+ 底部横杠修复 + 壁纸模糊度滑块 + 设置首页重组/危险区 + 全局 Header 透明与搜索栏胶囊化。
+        versionCode = 28
+        versionName = "1.0.11"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
