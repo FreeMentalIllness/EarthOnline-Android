@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -28,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -35,6 +35,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -55,7 +56,6 @@ import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassSpring
 import com.example.earthonline.ui.theme.GlassSurface
 import androidx.activity.compose.BackHandler
-import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -70,6 +70,8 @@ import com.example.earthonline.ui.achievements.AchievementViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.home.AccountingDownloadDialog
 import com.example.earthonline.ui.navigation.AppNavHost
+import com.example.earthonline.ui.navigation.AnimatedNavIcon
+import com.example.earthonline.ui.navigation.NavIconKind
 import com.example.earthonline.ui.navigation.Screen
 import com.example.earthonline.ui.navigation.bottomNavItems
 import com.example.earthonline.ui.navigation.settingsSubRoutes
@@ -240,12 +242,12 @@ fun MainScaffold(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp)
-                            .shadow(
-                                elevation = 12.dp,
-                                shape = RoundedCornerShape(28.dp),
-                                ambientColor = Color.Black,
-                                spotColor = Color.Black
-                            )
+                        .shadow(
+                            elevation = 16.dp,
+                            shape = RoundedCornerShape(28.dp),
+                            ambientColor = Color.Black,
+                            spotColor = Color.Black
+                        )
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),
@@ -258,7 +260,7 @@ fun MainScaffold(
                                 NavTab(
                                     selected = selected,
                                     label = item.label,
-                                    iconRes = item.iconRes,
+                                    kind = item.kind,
                                     onClick = { navigateToTab(navController, item.route) },
                                     modifier = Modifier.weight(1f)
                                 )
@@ -342,16 +344,16 @@ fun MainScaffold(
 }
 
 /**
- * v1.0.9：底部导航自绘项终版。
- * 动效对标参考视频：点击选中时图标「压下→弹起」回弹（MediumBouncy spring），
- * 选中背景胶囊 spring 淡入淡出，切换 Tab 时是一段连续过渡而非硬切。
- * 图标换用 v1.0.9 矢量图标（ic_tab_*），20dp + 10sp 小字，对标参考图的紧凑层级。
+ * v1.0.10：底部导航自绘项终版。
+ * 动效：点击时触发专属微动画（门开 / 画勾 / 拉链 / 书写，由 AnimatedNavIcon 的 progress 驱动），
+ * 同时图标「压下→弹起」回弹（MediumBouncy spring），选中背景胶囊 spring 淡入淡出。
+ * 图标为自绘 Canvas 动效（不再依赖 PNG），紧凑胶囊 + 10sp 小字对标参考图。
  */
 @Composable
 private fun NavTab(
     selected: Boolean,
     label: String,
-    iconRes: Int,
+    kind: NavIconKind,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -361,19 +363,22 @@ private fun NavTab(
         animationSpec = GlassSpring,
         label = "navTabBg"
     )
-    /* 选中即触发一次「压下 → 弹起」：snapTo 0.86 后用 MediumBouncy 弹回 1f，
-       视觉上就是参考视频里图标被按下后 Q 弹复位的点击反馈。 */
+    /* 图标点击微动画：每次点击 playKey 自增触发一段 0→1 的动画，
+       平时（progress=1）显示静态常驻图标。 */
+    var playKey by remember { mutableIntStateOf(0) }
+    val anim = remember { Animatable(1f) }
+    LaunchedEffect(playKey) {
+        if (playKey > 0) {
+            anim.snapTo(0f)
+            anim.animateTo(1f, tween(380))
+        }
+    }
+    /* 选中即触发「压下 → 弹起」回弹 */
     val bounce = remember { Animatable(1f) }
     LaunchedEffect(selected) {
         if (selected) {
             bounce.snapTo(0.86f)
-            bounce.animateTo(
-                1f,
-                spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                )
-            )
+            bounce.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
         } else {
             bounce.snapTo(1f)
         }
@@ -383,19 +388,22 @@ private fun NavTab(
             .fillMaxHeight()
             .clip(RoundedCornerShape(20.dp))
             .background(AmberPrimary.copy(alpha = bgAlpha))
-            .clickable(onClick = onClick),
+            .clickable(onClick = {
+                playKey++
+                onClick()
+            }),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = label,
+            AnimatedNavIcon(
+                kind = kind,
+                progress = anim.value,
                 tint = tint,
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(22.dp)
                     .graphicsLayer {
                         scaleX = bounce.value
                         scaleY = bounce.value

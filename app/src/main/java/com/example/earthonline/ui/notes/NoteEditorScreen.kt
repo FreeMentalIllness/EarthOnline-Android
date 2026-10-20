@@ -70,6 +70,9 @@ fun NoteEditorScreen(
     var body by remember { mutableStateOf(TextFieldValue("")) }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
+    // v1.0.10：编辑页同样可指定分类（单选项，写入为标签，便于筛选）
+    var category by remember { mutableStateOf("") }
+    val categories = listOf("灵感", "待办", "日记", "想法")
     var preview by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
@@ -178,8 +181,9 @@ fun NoteEditorScreen(
         val text = body.text
         if (text.isBlank()) return false
         commitTag()
+        val finalTags = if (category.isNotBlank()) tags + category else tags
         scope.launch {
-            vm.saveNote(id.ifBlank { null }, text, tags)
+            vm.saveNote(id.ifBlank { null }, text, finalTags)
             onBack()
         }
         return true
@@ -227,7 +231,8 @@ fun NoteEditorScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 标签编辑区
@@ -267,6 +272,18 @@ fun NoteEditorScreen(
                     keyboardActions = KeyboardActions(onDone = { commitTag() }),
                     modifier = Modifier.weight(1f).defaultMinSize(minWidth = 100.dp)
                 )
+            }
+            // v1.0.10：分类单选（灵感 / 待办 / 日记 / 想法）
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterChip(selected = category == "", onClick = { category = "" }, label = { Text("无") })
+                categories.forEach { c ->
+                    FilterChip(selected = category == c, onClick = { category = if (category == c) "" else c }, label = { Text(c) })
+                }
             }
 
             // v1.0.9：完整外显格式工具栏（死命令）—— 恒定可见、单行横向滚动。

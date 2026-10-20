@@ -24,6 +24,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSurface
 import kotlinx.coroutines.launch
 
 /**
@@ -196,6 +198,9 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
     var body by remember { mutableStateOf("") }
     var tagInput by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
+    // v1.0.10：新建笔记补充分类（单选项，写入为带「分类」前缀的标签，便于筛选）
+    var category by remember { mutableStateOf("") }
+    val categories = listOf("灵感", "待办", "日记", "想法")
     val expanded = remember { mutableStateOf(false) }
 
     fun commitTag() {
@@ -206,7 +211,7 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
         tagInput = ""
     }
 
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -258,6 +263,26 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
                     )
                 }
             }
+            // v1.0.10：分类单选（灵感 / 待办 / 日记 / 想法）
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilterChip(
+                    selected = category == "",
+                    onClick = { category = "" },
+                    label = { Text("无") }
+                )
+                categories.forEach { c ->
+                    FilterChip(
+                        selected = category == c,
+                        onClick = { category = if (category == c) "" else c },
+                        label = { Text(c) }
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -272,10 +297,12 @@ private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
                         commitTag()
                         val finalBody = body.trim()
                         if (finalBody.isBlank()) return@Button
-                        onSave(finalBody, tags)
+                        val finalTags = if (category.isNotBlank()) tags + category else tags
+                        onSave(finalBody, finalTags)
                         body = ""
                         tagInput = ""
                         tags = emptyList()
+                        category = ""
                         expanded.value = false
                     },
                     enabled = body.isNotBlank()
@@ -295,7 +322,7 @@ private fun NoteCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    GlassSurface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp)

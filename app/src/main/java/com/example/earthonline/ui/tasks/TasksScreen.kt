@@ -63,6 +63,7 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.util.AchievementSound
 import com.example.earthonline.util.millisToDayStr
 import kotlinx.coroutines.delay
@@ -70,9 +71,6 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 private val CATEGORIES = listOf("main" to "主线", "side" to "支线", "todo" to "To Do")
-
-/** v1.0.7：「日常」下的二级分类（主线 / 支线）；To Do 走顶层独立 Tab + 表格视图。 */
-private val CATEGORIES_DAILY = listOf("main" to "主线", "side" to "支线")
 
 /** 任务状态（对应 TaskEntity.status；done 由 doneAt 口径统一维护） */
 private val STATUSES = listOf(
@@ -106,11 +104,11 @@ fun TasksScreen(
     val allTasks by vm.tasks.collectAsStateWithLifecycle()
     // v1.0.4：「隐藏已完成任务」开关（DataStore 持久化，跨会话记住）
     val hideDone by vm.hideDone.collectAsStateWithLifecycle(initialValue = false)
-    // v1.0.7：任务页两级 Tab。顶层「日常 / Todo」；「日常」下再分「主线 / 支线」。
-    // 已移除收集箱（QuickCaptureBar）—— 想法统一在「Todo」表格里记录整理。
+    // v1.0.10：顶层「日常 / Todo」；「日常」下不再强行拆分主线/支线，
+    // 合并为统一的日常列表（减轻认知负担）。Todo 走独立 Tab + 表格视图。
     var topTab by remember { mutableStateOf("daily") }   // daily | todo
-    var dailySub by remember { mutableStateOf("main") }  // main | side
-    val category = if (topTab == "daily") dailySub else "todo"
+    // v1.0.10：daily 用 null 表示「主线 + 支线」合并视图；todo 走独立分类。
+    val category = if (topTab == "daily") null else "todo"
     val collapsed = remember { mutableStateOf(setOf<String>()) }
     var showAdd by remember { mutableStateOf(openAddOnEntry) }
     var addParentId by remember { mutableStateOf<String?>(null) }
@@ -121,7 +119,11 @@ fun TasksScreen(
     var selectMode by remember { mutableStateOf(false) }
     val selected = remember { mutableStateOf(setOf<String>()) }
 
-    val filtered = remember(allTasks, category) { allTasks.filter { it.category == category } }
+    // v1.0.10：日常 = 主线 + 支线 合并；Todo = 独立分类
+    val filtered = remember(allTasks, category) {
+        if (category == null) allTasks.filter { it.category == "main" || it.category == "side" }
+        else allTasks.filter { it.category == category }
+    }
     // v1.0.4：「只看已完成 / 隐藏已完成」在建树前过滤源列表 ——
     //  - 只看已完成：仅保留 done 节点，已完成分支可完整回看；
     //  - 隐藏已完成：移除 done 节点，其下未完成的子任务由 buildTaskTree 的孤儿兜底提升为根，不会整支消失。
@@ -203,15 +205,6 @@ fun TasksScreen(
                 Tab(selected = topTab == "daily", onClick = { topTab = "daily" }, text = { Text("日常") })
                 Tab(selected = topTab == "todo", onClick = { topTab = "todo" }, text = { Text("Todo") })
             }
-            // 「日常」下的二级分类：主线 / 支线
-            if (topTab == "daily") {
-                TabRow(selectedTabIndex = CATEGORIES.indexOfFirst { it.first == dailySub }.coerceAtLeast(0)) {
-                    CATEGORIES_DAILY.forEach { (key, label) ->
-                        Tab(selected = key == dailySub, onClick = { dailySub = key }, text = { Text(label) })
-                    }
-                }
-            }
-
             // 工具行：概览 + 视图开关 + 全部展开 / 折叠
             // v1.0.5 QA 修复：两个区块拆开判定。
             // 原来整体挂在 flat.isNotEmpty() 上 —— 当某分类唯一任务是「已完成」时，
@@ -363,13 +356,12 @@ fun TasksScreen(
                 } else {
                     // v1.2.1：空状态引导 —— 光秃秃一行「暂无任务」不告诉用户下一步该干嘛
                     val (label, hint) = when (category) {
-                        "main" -> "主线还是空白的" to
-                            "主线是你真正想推进的事：学会一样东西、跑完一次半马、把房间收拾干净。" +
-                                "先立一条，之后可以拆成子任务慢慢啃。"
-                        "side" -> "还没有支线" to
-                            "支线是那些「想做但没那么急」的事。想到就记下来，免得转头忘了。"
-                        else -> "To Do 是空的" to
+                        null -> "日常还是空白的" to
+                            "把今天想推进的事记下来——大的拆成子任务，小的直接做完划掉。先立一条，动起来最重要。"
+                        "todo" -> "To Do 是空的" to
                             "临时冒出来的小事往这儿丢：交水电费、回个消息、买瓶酱油。做完划掉就行。"
+                        else -> "这个分类下还没有任务" to
+                            "点右下角的 + 新建一条任务开始吧。"
                     }
                     // v1.2.3：去掉重复的「创建」按钮 —— 新建任务统一由右下角 FAB 负责，避免两个入口打架
                     EmptyState(
@@ -509,12 +501,12 @@ fun TasksScreen(
 
     if (showAdd) {
         TaskEditDialog(
-            category = category,
+            category = category ?: "main",
             parentOptions = parentOptions,
             initialParentId = addParentId,
             onDismiss = { showAdd = false },
             onSubmit = { title, due, note, status, parentId ->
-                vm.addTask(title, category, parentId, due, note, status)
+                vm.addTask(title, category ?: "main", parentId, due, note, status)
                 showAdd = false
             }
         )
@@ -705,7 +697,7 @@ private fun TaskRow(
 
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         TreeGuide(depth = node.depth, ancestorLast = node.ancestorLast, isLast = node.isLast)
-        Card(
+        GlassSurface(
             modifier = Modifier
                 .weight(1f)
                 .clickable { if (selectMode) onToggleSelect() else onEdit() }
@@ -730,12 +722,7 @@ private fun TaskRow(
                         )
                     }
                 },
-            shape = RoundedCornerShape(UiDimens.ItemRadius),
-            colors = CardDefaults.cardColors(
-                // 父任务用更高的容器色，与子任务拉开层次
-                containerColor = if (hasChildren) MaterialTheme.colorScheme.surfaceContainerHigh
-                else MaterialTheme.colorScheme.surfaceContainerLowest
-            )
+            shape = RoundedCornerShape(UiDimens.ItemRadius)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),

@@ -56,6 +56,7 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.pressScaleClickable
 import com.example.earthonline.ui.theme.pressScaleCombinedClickable
 import kotlinx.serialization.json.Json
@@ -310,7 +311,7 @@ private fun ItemsPane(
 /** v1.0.7：背包网格模式下的物品磁贴（大图标 + 名称 + 分类，一眼扫更多） */
 @Composable
 private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
@@ -373,7 +374,7 @@ private fun ViewModeToggle(grid: Boolean, onToggle: () -> Unit) {
 private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () -> Unit) {
     // v1.0.4：整卡可点进入编辑（删除按钮自身消费点击，不会误触）
     // v1.0.7：按压缩放反馈（94% -> 100% spring 弹回）
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
@@ -517,7 +518,7 @@ private fun CollectionGridTile(
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
     // v1.0.8：单击打开/预览，长按进入编辑
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
@@ -645,7 +646,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
     // v1.0.8：单击整卡 = 打开/预览，长按 = 进入编辑；删除按钮各自消费点击不会误触
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {

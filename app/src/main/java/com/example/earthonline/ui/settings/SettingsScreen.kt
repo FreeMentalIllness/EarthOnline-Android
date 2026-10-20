@@ -59,10 +59,12 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                 )
             }
 
-            /* ==================== v1.0.9：对标参考图的单卡分组 ====================
-               四个入口合并进一张半透明圆角卡片，行间细分隔线；
-               每行 = 彩色圆角图标芯片 + 标题/副标题 + 右箭头，间距与参考图一致。 */
+            /* ==================== v1.0.10：分组设置（对标参考图二） ====================
+               按「外观 / 数据与隐私 / 关于」合理分组，组间留白舒适；
+               每组标题 + 半透明圆角卡片，卡内彩色图标芯片 + 副标题 + 右箭头。
+               （当前无独立「账号」功能页，故未单列「账号」组。） */
             item {
+                SettingsSectionLabel("外观")
                 Surface(
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                     shape = RoundedCornerShape(18.dp),
@@ -85,20 +87,34 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             label = "通用",
                             hint = "提醒 · 音效 · AI 对话"
                         ) { moreActions.onNavigate(Screen.SettingsGeneral.route) }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 66.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                    }
+                }
+            }
+            item {
+                SettingsSectionLabel("数据与隐私")
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp
+                ) {
+                    Column {
                         SettingsGroupRow(
                             icon = Icons.Filled.Backup,
                             chip = ChipBlue,
                             label = "数据与备份",
                             hint = "WebDAV 同步 · 本地自动备份 · 隐私政策"
                         ) { moreActions.onNavigate(Screen.SettingsBackupSync.route) }
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 66.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
+                    }
+                }
+            }
+            item {
+                SettingsSectionLabel("关于")
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp
+                ) {
+                    Column {
                         SettingsGroupRow(
                             icon = Icons.Filled.Info,
                             chip = ChipPink,
@@ -110,6 +126,20 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
             }
         }
     }
+}
+
+/**
+ * v1.0.10：分组标题（对标参考图二的组名样式），左侧带一截强调色短竖条。
+ */
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp)
+    )
 }
 
 /**

@@ -92,22 +92,19 @@ fun GlassSurface(
     content: @Composable BoxScope.() -> Unit
 ) {
     val deviceTier = rememberGlassTier()
-    // 液态玻璃开关：关闭（性能模式）时无视设备能力，强制降级为纯色底板，
-    // 彻底规避高斯模糊 / RenderEffect / 折射缩放的全部 GPU 开销。
-    val liquidGlass = LocalLiquidGlass.current
-    val tier = if (liquidGlass) deviceTier else GlassTier.FLAT
+    // v1.0.10：设置中的「液态玻璃开关」已彻底移除 —— 全局强制开启液态玻璃，
+    // 不再提供关闭选项。低端机仍由 GlassTier 自动降级为纯色底板（零 GPU 开销），流畅度不受影响。
+    val liquidGlass = true
+    val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
     val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
 
     /* 着色层改用「上深下浅」的竖向渐变。
-       - GPU 档（FULL/BLUR）：即使开启毛玻璃，也应保证文字可读 —— 顶部略深、底部略透，
-         顶部托住标题/正文，底部与背景柔和溶解；
-       - 性能模式（液态玻璃关）或 FLAT 档（低端机）：高对比度半透明纯色底板，
-         不透明度拉满，优先可读性、零 GPU 消费。
+       - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
+       - FLAT 档（低端机）：高对比度半透明纯色底板，不透明度拉满，优先可读性、零 GPU 消费。
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
-        !liquidGlass -> 0.94f to 0.94f
         tier == GlassTier.FLAT -> 0.86f to 0.86f
         else -> 0.62f to 0.50f
     }
@@ -176,8 +173,8 @@ fun GlassSurface(
         //    与模糊层解耦的纯色 surface 蒙层，无论壁纸多花、模糊多弱，都给文字一层稳定底色。
         //    - 液态玻璃开启（GPU 档）：补 0.18 的 surface 蒙层，把有效不透明度抬到 ~0.7，
         //      文字对比度稳；仍保留模糊透出的层次感。
-        //    - 性能模式 / FLAT 档：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
-        val scrimAlpha = if (tier == GlassTier.FLAT || !liquidGlass) 0f else 0.18f
+        //    - FLAT 档（低端机 / 性能降级）：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
+        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.18f
         if (scrimAlpha > 0f) {
             Box(
                 Modifier
