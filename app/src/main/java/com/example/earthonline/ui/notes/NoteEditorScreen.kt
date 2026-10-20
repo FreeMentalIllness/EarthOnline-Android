@@ -1,5 +1,11 @@
 package com.example.earthonline.ui.notes
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,18 +21,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.util.rememberImagePicker
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 笔记编辑页（v1.0.6 重写）。
@@ -104,6 +116,62 @@ fun NoteEditorScreen(
             text = newText,
             selection = TextRange(tv.selection.start + shift, tv.selection.end + shift)
         )
+    }
+
+    /* ==================== v1.0.9：完整外显工具栏所需的状态与助手 ==================== */
+    val context = LocalContext.current
+    /** 字号档位（1f / 1.15f / 1.3f 循环），作用于编辑器正文 */
+    var bodyScale by remember { mutableFloatStateOf(1f) }
+
+    /** 在光标处直接插入 [text]，光标移到插入内容末尾 */
+    fun insertAt(text: String) {
+        val tv = body
+        val pos = tv.selection.start.coerceAtMost(tv.text.length)
+        val newText = tv.text.substring(0, pos) + text + tv.text.substring(pos)
+        body = TextFieldValue(text = newText, selection = TextRange(pos + text.length))
+    }
+
+    /** 把 content uri 复制进应用私有 note_media 目录，成功回调文件名；失败 Toast */
+    fun importIntoNoteMedia(uri: Uri, fallbackName: String, onDone: (String) -> Unit) {
+        scope.launch {
+            val name = withContext(Dispatchers.IO) {
+                runCatching {
+                    val resolver = context.contentResolver
+                    var fileName = fallbackName
+                    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { c -> if (c.moveToFirst()) c.getString(0)?.let { fileName = it } }
+                    val safe = fileName.replace(Regex("[\\\\/:*?\"<>|\\s]"), "_").ifBlank { fallbackName }
+                    val dir = File(context.filesDir, "note_media").apply { mkdirs() }
+                    val out = File(dir, "${System.currentTimeMillis()}_$safe")
+                    resolver.openInputStream(uri)?.use { input ->
+                        out.outputStream().use { input.copyTo(it) }
+                    } ?: return@runCatching null
+                    out.absolutePath
+                }.getOrNull()
+            }
+            if (name == null) {
+                Toast.makeText(context, "导入失败，请重试", Toast.LENGTH_SHORT).show()
+            } else {
+                onDone(name)
+            }
+        }
+    }
+
+    // 插入图片（相册）/ 插入本地文件（任意类型）两个选择器
+    val pickNoteImage = rememberImagePicker(onPicked = { uri ->
+        importIntoNoteMedia(uri, "image.jpg") { path ->
+            insertAt("![图片](file://$path)\n")
+        }
+    })
+    val pickNoteFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            importIntoNoteMedia(uri, "file") { path ->
+                val display = path.substringAfterLast('_')
+                insertAt("[$display](file://$path)")
+            }
+        }
     }
 
     fun save(): Boolean {
@@ -201,16 +269,27 @@ fun NoteEditorScreen(
                 )
             }
 
-            // v1.0.7：Notion 式格式工具栏 —— 标题 / 加粗 / 引用 / 无序 / 有序 / 待办，
-            // 全部直接插入 Markdown 语法，与预览渲染器（RichText）天然兼容，所见即所得。
+            // v1.0.9：完整外显格式工具栏（死命令）—— 恒定可见、单行横向滚动。
+            // 包含：标题 / 加粗 / 斜体 / 下划线 / 字号档位 / 待办 / 引用 / 无序 / 有序 / 插入图片 / 插入文件。
             if (!preview) {
                 FormatToolbar(
                     onTitle = { linePrefix("# ") },
                     onBold = { surround("**", "**", "加粗文本") },
+                    onItalic = { surround("*", "*", "斜体文本") },
+                    onUnderline = { surround("<u>", "</u>", "下划线文本") },
+                    onFontSize = {
+                        bodyScale = when (bodyScale) {
+                            1f -> 1.15f
+                            1.15f -> 1.3f
+                            else -> 1f
+                        }
+                    },
+                    onTodo = { linePrefix("- [ ] ") },
                     onQuote = { linePrefix("> ") },
                     onList = { linePrefix("- ") },
                     onOrdered = { linePrefix("1. ") },
-                    onTodo = { linePrefix("- [ ] ") }
+                    onImage = { pickNoteImage() },
+                    onFile = { pickNoteFile.launch("*/*") }
                 )
             }
 
@@ -228,7 +307,11 @@ fun NoteEditorScreen(
                     onValueChange = { body = it },
                     placeholder = { Text("写点什么…") },
                     // v1.0.7：加大行距（默认 1.4 倍偏挤），光标所在行不再与邻行糊在一起
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = 28.sp),
+                    // v1.0.9：字号随工具栏档位缩放（1f / 1.15f / 1.3f）
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = (16 * bodyScale).sp,
+                        lineHeight = (28 * bodyScale).sp
+                    ),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -283,48 +366,70 @@ private fun MarkdownPreview(markdown: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * v1.0.7：Notion 式笔记格式工具栏，两行共六个常用块语法。
- * 行内语法（加粗）由编辑器包裹选区；行首语法（标题/引用/列表/有序/待办）插到光标行行首。
+ * v1.0.9：完整外显笔记格式工具栏（死命令）—— 恒定可见、单行横向滚动，绝不折叠。
+ * 行内语法（加粗 *..* / 斜体 *..* / 下划线 <u>..</u>）由编辑器包裹选区；
+ * 行首语法（标题 / 引用 / 列表 / 有序 / 待办）插到光标行行首；
+ * 字号档位切换编辑器正文缩放；插入图片 / 文件走系统选择器并把文件复制进应用私有目录。
  */
 @Composable
 private fun FormatToolbar(
     onTitle: () -> Unit,
     onBold: () -> Unit,
+    onItalic: () -> Unit,
+    onUnderline: () -> Unit,
+    onFontSize: () -> Unit,
+    onTodo: () -> Unit,
     onQuote: () -> Unit,
     onList: () -> Unit,
     onOrdered: () -> Unit,
-    onTodo: () -> Unit
+    onImage: () -> Unit,
+    onFile: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
         Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            FormatButton("H 标题", onTitle)
+            FormatButton("H", onTitle)
             FormatButton("B", onBold, bold = true)
-            FormatButton("❝ 引用", onQuote)
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
+            FormatButton("I", onItalic, italic = true)
+            FormatButton("U", onUnderline, underline = true)
+            FormatButton("A±", onFontSize)
+            FormatButton("☑ 待办", onTodo)
+            FormatButton("❝", onQuote)
             FormatButton("• 列表", onList)
             FormatButton("1. 有序", onOrdered)
-            FormatButton("☑ 待办", onTodo)
+            FormatButton("🖼 图片", onImage)
+            FormatButton("📎 文件", onFile)
         }
     }
 }
 
 @Composable
-private fun FormatButton(text: String, onClick: () -> Unit, bold: Boolean = false) {
+private fun FormatButton(
+    text: String,
+    onClick: () -> Unit,
+    bold: Boolean = false,
+    italic: Boolean = false,
+    underline: Boolean = false
+) {
     OutlinedButton(
         onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-        modifier = Modifier.height(34.dp)
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+        modifier = Modifier.height(32.dp)
     ) {
         Text(
             text,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+            fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
+            textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None,
             style = MaterialTheme.typography.labelMedium
         )
     }

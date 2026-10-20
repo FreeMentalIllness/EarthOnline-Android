@@ -1123,19 +1123,34 @@ private fun SettingsTopBar(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-fun SettingsNavItem(icon: ImageVector, label: String, hint: String, onClick: () -> Unit) {
+fun SettingsNavItem(
+    icon: ImageVector,
+    label: String,
+    hint: String,
+    chip: Color = Color(0xFFF59E0B),
+    onClick: () -> Unit
+) {
     Surface(
         onClick = onClick,
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+        shape = RoundedCornerShape(16.dp),
         tonalElevation = 1.dp
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            /* v1.0.9：彩色圆角图标芯片（对标参考设置页），38dp / 圆角 12dp */
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(chip.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = chip, modifier = Modifier.size(20.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 if (hint.isNotBlank()) {
@@ -1146,7 +1161,12 @@ fun SettingsNavItem(icon: ImageVector, label: String, hint: String, onClick: () 
                     )
                 }
             }
-            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

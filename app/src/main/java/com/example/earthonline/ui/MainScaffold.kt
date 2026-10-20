@@ -31,9 +31,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -43,6 +50,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassSpring
 import com.example.earthonline.ui.theme.GlassSurface
@@ -196,78 +204,64 @@ fun MainScaffold(
         Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            /* v1.0.7：底部导航为「悬浮液态玻璃胶囊」—— 左右 + 底部留白、大圆角，
-               采样当前壁纸做毛玻璃；低端机 / Android 12 及以下由 GlassTier 自动降级为
-               半透明纯色（零 GPU 模糊），流畅度不受影响。
-
-               针对真机反馈「悬浮黑块 / 边缘割裂」的两处关键优化：
-               ① 胶囊下方垫一层「底部渐隐蒙版」（竖向渐变 透明→背景色），让主页内容
-                  在底栏上方柔和淡出，而不是被一道硬边截断；
-               ② 胶囊加 20dp 柔和环境阴影，读起来是「悬浮玻璃」而非「贴死的黑板」。 */
+            /* v1.0.9：底部导航终版 —— 严格对标参考截图的紧凑悬浮胶囊。
+               ① 【占位根因修复】此前 120dp 渐隐蒙版 Box 参与 bottomBar 测量，
+                  把 innerPadding 底部撑高一截，内容区出现大块死留白且最后一行被顶走。
+                  现改为 drawBehind 把蒙版画在边界之外 —— 视觉不变，测量高度只含胶囊本身。
+               ② 胶囊尺寸对标参考图：高 58dp、圆角 28dp、左右 12dp / 底部 6dp 留白，
+                  图标 20dp + 10sp 小字，贴合屏幕最底部靠渐变 + 模糊自然融合。 */
             ProvideWallpaper(effectiveWallpaper.ifBlank { null }) {
+                val fadeColor = MaterialTheme.colorScheme.background
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
-                ) {
-                    // ① 底部渐隐蒙版：内容在底栏上方柔和淡出，消除硬切割裂感
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .background(
-                                Brush.verticalGradient(
+                        .drawBehind {
+                            // 底部渐隐蒙版：向上画 110dp，内容在底栏上方柔和淡出
+                            val h = 110.dp.toPx()
+                            drawRect(
+                                brush = Brush.verticalGradient(
                                     colorStops = arrayOf(
-                                        0.0f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                                        0.55f to MaterialTheme.colorScheme.background.copy(alpha = 0f),
-                                        1.0f to MaterialTheme.colorScheme.background
+                                        0.0f to fadeColor.copy(alpha = 0f),
+                                        0.55f to fadeColor.copy(alpha = 0f),
+                                        1.0f to fadeColor
                                     )
-                                )
+                                ),
+                                topLeft = Offset(0f, -h),
+                                size = Size(size.width, h)
                             )
-                    )
-                    // ② 悬浮毛玻璃胶囊（含柔影）
-                    // 贴合屏幕最底部：用 align(BottomCenter) 钉死在容器底部，避免被上方
-                    // 120dp 渐隐蒙版把胶囊顶高（之前「悬浮在屏幕中间」的根因）。
-                    // 同时底部留白仅 6dp，紧贴系统导航安全区，靠渐变 + 模糊自然融合。
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
+                        }
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 6.dp)
+                ) {
+                    GlassSurface(
+                        shape = RoundedCornerShape(28.dp),
+                        showBorder = true,
+                        modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp)
-                            .padding(bottom = 6.dp)
+                            .height(58.dp)
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = RoundedCornerShape(28.dp),
+                                ambientColor = Color.Black,
+                                spotColor = Color.Black
+                            )
                     ) {
-                        GlassSurface(
-                            shape = RoundedCornerShape(22.dp),
-                            showBorder = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .shadow(
-                                    elevation = 10.dp,
-                                    shape = RoundedCornerShape(22.dp),
-                                    ambientColor = Color.Black,
-                                    spotColor = Color.Black
-                                )
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                bottomNavItems.forEach { item ->
-                                    val selected = currentRoute == item.route ||
-                                            currentRoute in item.altRoutes ||
-                                            navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
-                                    // v1.0.7：自绘导航项 —— 官方 NavigationBarItem 有最小高度约束，
-                                    // 塞进 48dp 胶囊会被撑高；自绘 Icon+Text 完全可控尺寸。
-                                    NavTab(
-                                        selected = selected,
-                                        label = item.label,
-                                        iconRes = item.iconRes,
-                                        onClick = { navigateToTab(navController, item.route) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
+                            bottomNavItems.forEach { item ->
+                                val selected = currentRoute == item.route ||
+                                        currentRoute in item.altRoutes ||
+                                        navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
+                                NavTab(
+                                    selected = selected,
+                                    label = item.label,
+                                    iconRes = item.iconRes,
+                                    onClick = { navigateToTab(navController, item.route) },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
@@ -348,10 +342,10 @@ fun MainScaffold(
 }
 
 /**
- * v1.0.7：底部导航自绘项 —— 图标 + 一行小字，选中态琥珀色 + 背景胶囊微着色。
- * 不用官方 NavigationBarItem：它的最小高度约束会把 48dp 胶囊撑变形；
- * 自绘后高度、内边距、水波纹边界全部可控（clip 让 ripple 不越出胶囊圆角）。
- * 选中态背景用 spring 淡入淡出，切换 Tab 时是一段连续的过渡而不是硬切。
+ * v1.0.9：底部导航自绘项终版。
+ * 动效对标参考视频：点击选中时图标「压下→弹起」回弹（MediumBouncy spring），
+ * 选中背景胶囊 spring 淡入淡出，切换 Tab 时是一段连续过渡而非硬切。
+ * 图标换用 v1.0.9 矢量图标（ic_tab_*），20dp + 10sp 小字，对标参考图的紧凑层级。
  */
 @Composable
 private fun NavTab(
@@ -363,14 +357,31 @@ private fun NavTab(
 ) {
     val tint = if (selected) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val bgAlpha by animateFloatAsState(
-        targetValue = if (selected) 0.10f else 0f,
+        targetValue = if (selected) 0.12f else 0f,
         animationSpec = GlassSpring,
         label = "navTabBg"
     )
+    /* 选中即触发一次「压下 → 弹起」：snapTo 0.86 后用 MediumBouncy 弹回 1f，
+       视觉上就是参考视频里图标被按下后 Q 弹复位的点击反馈。 */
+    val bounce = remember { Animatable(1f) }
+    LaunchedEffect(selected) {
+        if (selected) {
+            bounce.snapTo(0.86f)
+            bounce.animateTo(
+                1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
+        } else {
+            bounce.snapTo(1f)
+        }
+    }
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(AmberPrimary.copy(alpha = bgAlpha))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
@@ -383,11 +394,16 @@ private fun NavTab(
                 painter = painterResource(iconRes),
                 contentDescription = label,
                 tint = tint,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        scaleX = bounce.value
+                        scaleY = bounce.value
+                    }
             )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                 color = tint,
                 maxLines = 1
             )

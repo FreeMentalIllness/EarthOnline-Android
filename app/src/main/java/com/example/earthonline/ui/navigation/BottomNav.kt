@@ -19,14 +19,14 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Home.route, Screen.Home.label, R.drawable.ic_nav_home),
+    BottomNavItem(Screen.Home.route, Screen.Home.label, R.drawable.ic_tab_home),
     BottomNavItem(
-        Screen.Tasks.route, Screen.Tasks.label, R.drawable.ic_nav_tasks,
+        Screen.Tasks.route, Screen.Tasks.label, R.drawable.ic_tab_tasks,
         altRoutes = listOf(Screen.NewTask.route)
     ),
     BottomNavItem(
-        Screen.Backpack.route, Screen.Backpack.label, R.drawable.ic_nav_backpack,
+        Screen.Backpack.route, Screen.Backpack.label, R.drawable.ic_tab_backpack,
         altRoutes = listOf(Screen.Collections.route)
     ),
-    BottomNavItem(Screen.Notes.route, Screen.Notes.label, R.drawable.ic_nav_data),
+    BottomNavItem(Screen.Notes.route, Screen.Notes.label, R.drawable.ic_tab_notes),
 )

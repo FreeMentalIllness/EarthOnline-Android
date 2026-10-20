@@ -33,8 +33,9 @@ android {
         // 相册分类走 DataStore 扩展（零 Room 迁移）、液态玻璃自研（淘汰 liquid-glass/cloudy 库）、richeditor-compose rc10 引入。
         // versionCode 24 = v1.0.7：液态玻璃特效全局开关（设置→外观，DataStore 持久化）+ 全局动效 spring 化 + 主页/底栏玻璃质感复刻 + 背包智能封面/双视图 + 笔记 Notion 化工具栏。
         // versionCode 25 = v1.0.8：全局可读性修复（GlassAccessibilityMode 独立遮罩 + GPU 档着色不透明度抬升）+ 底栏贴合屏幕底部（修复悬浮过高）+ 收藏交互重构（单击打开/预览、长按编辑、编辑态可替换文件）。
-        versionCode = 25
-        versionName = "1.0.8"
+        // versionCode 26 = v1.0.9：底栏终版复刻（58dp 胶囊 + 新矢量图标 + 弹跳动效）+ 渐隐蒙版 drawBehind 化根治占位 + 设置页单卡分组/彩色图标芯片 + 笔记工具栏完整外显（斜体/下划线/字号/插入图片/插入文件）。
+        versionCode = 26
+        versionName = "1.0.9"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
