@@ -20,7 +20,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.BarChart
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.DonutChart
@@ -60,8 +59,9 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("数据看板") },
-                actions = { SettingsIconButton(actions = moreActions) }
+                actions = { }
             )
         }
     ) { padding ->

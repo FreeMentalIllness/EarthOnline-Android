@@ -1047,6 +1047,7 @@ fun AboutRoute(
 @Composable
 private fun SettingsTopBar(title: String, onBack: () -> Unit) {
     TopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         title = { Text(title) },
         navigationIcon = {
             IconButton(onClick = onBack) {

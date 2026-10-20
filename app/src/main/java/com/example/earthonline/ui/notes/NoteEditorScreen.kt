@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.util.rememberImagePicker
@@ -223,6 +222,7 @@ fun NoteEditorScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
                 navigationIcon = {
                     IconButton(onClick = { save() }) {
@@ -240,7 +240,6 @@ fun NoteEditorScreen(
                             )
                         }
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },
@@ -355,11 +354,6 @@ fun NoteEditorScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(UiDimens.CardRadius)
             ) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
-                )
                 RichTextEditor(
                     state = rich,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -368,7 +362,13 @@ fun NoteEditorScreen(
                     ),
                     placeholder = { Text("写点什么…支持加粗、列表、待办、插图") },
                     shape = RoundedCornerShape(UiDimens.CardRadius),
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            RoundedCornerShape(UiDimens.CardRadius)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
                 )
             }
         }

@@ -50,7 +50,6 @@ import com.example.earthonline.data.photos.PhotoAlbum
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.launch
 import java.io.File
@@ -107,6 +106,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("📷 记忆相册") },
                 actions = {
                     // v1.0.7：全览网格 / 3D 翻页 视图切换
@@ -133,7 +133,6 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
                     IconButton(onClick = { showAlbumManage = true }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = "管理相册")
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },

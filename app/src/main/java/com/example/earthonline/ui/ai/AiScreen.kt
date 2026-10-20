@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.settings.AiConfigDialog
 import kotlinx.coroutines.launch
 
@@ -54,12 +53,12 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("系统") },
                 actions = {
                     IconButton(onClick = { showConfig = true }) {
                         Icon(Icons.Filled.Settings, contentDescription = "AI 配置")
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },

@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.GlassSurface
@@ -85,7 +84,6 @@ fun NotesScreen(
                             contentDescription = "搜索"
                         )
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         }

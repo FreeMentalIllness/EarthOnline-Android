@@ -30,8 +30,9 @@ import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.CropShape
 import com.example.earthonline.ui.components.ImageCropperDialog
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.util.AVATAR_PRESET_OPTIONS
 import com.example.earthonline.ui.components.UserAvatar
 import com.example.earthonline.util.IMAGE_TYPES_HINT
@@ -122,6 +123,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("个人资料") },
                 actions = {
                     if (editing) {
@@ -131,16 +133,21 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                             Icon(Icons.Filled.Edit, contentDescription = "编辑")
                         }
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
-        Column(
+        GlassCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .padding(12.dp),
+            shape = RoundedCornerShape(UiDimens.CardRadius)
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -244,6 +251,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
         }
     }
 

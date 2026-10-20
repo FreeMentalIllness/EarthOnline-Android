@@ -60,7 +60,6 @@ import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.ConfettiBurst
 import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassSurface
@@ -191,7 +190,7 @@ fun TasksScreen(
                 title = { Text("任务") },
                 // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                actions = { SettingsIconButton(actions = moreActions) }
+                actions = { }
             )
         },
         floatingActionButton = {

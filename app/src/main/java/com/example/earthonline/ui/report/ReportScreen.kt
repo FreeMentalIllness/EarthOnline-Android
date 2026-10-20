@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +39,6 @@ import com.example.earthonline.ui.components.AnimatedLineChart
 import com.example.earthonline.ui.components.MetricTile
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SectionHeader
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.XpRules
@@ -63,8 +63,9 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("周期报告") },
-                actions = { SettingsIconButton(actions = moreActions) }
+                actions = { }
             )
         }
     ) { padding ->

@@ -41,7 +41,6 @@ import com.amap.api.maps.model.MarkerOptions
 import com.example.earthonline.data.local.entity.LocationEntity
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.LocationHelper
 import com.example.earthonline.util.LocateError
@@ -208,13 +207,13 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("足迹地图") },
                 actions = {
                     // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）
                     IconButton(onClick = { showList = true }) {
                         Icon(Icons.Filled.List, contentDescription = "足迹列表")
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },

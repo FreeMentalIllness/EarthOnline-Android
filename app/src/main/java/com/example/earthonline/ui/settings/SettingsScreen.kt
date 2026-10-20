@@ -26,7 +26,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +65,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("设置") },
                 actions = { SettingsIconButton(actions = moreActions, visible = false) }
             )
@@ -258,9 +261,15 @@ private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
 private fun SettingsSectionLabel(text: String) {
     Text(
         text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.titleSmall.copy(
+            fontWeight = FontWeight.Bold,
+            shadow = Shadow(
+                color = Color.Black.copy(alpha = 0.35f),
+                offset = Offset(0f, 1f),
+                blurRadius = 3f
+            )
+        ),
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp)
     )
 }

@@ -23,7 +23,6 @@ import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
 import com.example.earthonline.ui.components.MeterBar
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -60,8 +59,9 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("成就") },
-                actions = { SettingsIconButton(actions = moreActions) }
+                actions = { }
             )
         },
         floatingActionButton = {

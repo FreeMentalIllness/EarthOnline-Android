@@ -25,7 +25,6 @@ import com.example.earthonline.data.repository.ActivityRepository
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.nowIso
 import com.example.earthonline.util.uid
@@ -107,6 +106,7 @@ fun AllActivitiesRoute(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = { Text("全部动态（${filtered.size}）") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -117,7 +117,6 @@ fun AllActivitiesRoute(
                     IconButton(onClick = { showAdd = true }) {
                         Icon(Icons.Filled.Add, contentDescription = "添加自定义动态", tint = AmberPrimary)
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },

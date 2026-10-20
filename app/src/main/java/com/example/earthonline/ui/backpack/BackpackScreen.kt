@@ -53,7 +53,6 @@ import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
 import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
@@ -119,7 +118,6 @@ fun BackpackScreen(
                     IconButton(onClick = { showCategoryManager = true }) {
                         Icon(Icons.Filled.Tune, contentDescription = "分类管理")
                     }
-                    SettingsIconButton(actions = moreActions)
                 }
             )
         },
@@ -256,6 +254,7 @@ private fun ItemsPane(
             placeholder = { Text("搜索名称 / 描述 / 分类") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             singleLine = true,
+            shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
                 .padding(UiDimens.ListPad, UiDimens.ListPad, UiDimens.ListPad, 0.dp)
         )
