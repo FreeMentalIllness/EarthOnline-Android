@@ -4,7 +4,9 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -82,4 +84,32 @@ fun Modifier.pressScale(
         label = "pressScaleOnly"
     )
     return this.scale(scale)
+}
+
+/**
+ * 按压缩放 + 单击/长按二合一：单击 = [onClick]，长按 = [onLongClick]，按下同样缩到 94% 弹回。
+ * 用于背包收藏卡片：单击直接打开/预览，长按进入编辑（编辑态内可替换文件）。
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Modifier.pressScaleCombinedClickable(
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    pressedScale: Float = 0.94f,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
+): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = PressSpring,
+        label = "pressScaleCombined"
+    )
+    return this
+        .scale(scale)
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
 }

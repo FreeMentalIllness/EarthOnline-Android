@@ -100,15 +100,16 @@ fun GlassSurface(
     val wallPath = LocalWallpaperPath.current
     val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
 
-    /* v1.0.7：着色层改用「上深下浅」的竖向渐变。
-       - GPU 档（FULL/BLUR）：顶部略深保证可读性，底部更透 → 玻璃底缘自然溶解进
-         屏幕底部，消除「悬浮黑块」的生硬割裂感；
+    /* 着色层改用「上深下浅」的竖向渐变。
+       - GPU 档（FULL/BLUR）：即使开启毛玻璃，也应保证文字可读 —— 顶部略深、底部略透，
+         顶部托住标题/正文，底部与背景柔和溶解；
        - 性能模式（液态玻璃关）或 FLAT 档（低端机）：高对比度半透明纯色底板，
-         不透明度拉满，优先可读性、零 GPU 消费。 */
+         不透明度拉满，优先可读性、零 GPU 消费。
+       注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
-        !liquidGlass -> 0.92f to 0.92f
-        tier == GlassTier.FLAT -> 0.82f to 0.82f
-        else -> 0.46f to 0.30f
+        !liquidGlass -> 0.94f to 0.94f
+        tier == GlassTier.FLAT -> 0.86f to 0.86f
+        else -> 0.62f to 0.50f
     }
     val tintBrush = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -171,7 +172,21 @@ fun GlassSurface(
                     .background(tintBrush)
             )
         }
-        // 3) 顶部高光（液态玻璃标志性边缘光）
+        // 3) 独立可读性遮罩（GlassAccessibilityMode 的核心）：
+        //    与模糊层解耦的纯色 surface 蒙层，无论壁纸多花、模糊多弱，都给文字一层稳定底色。
+        //    - 液态玻璃开启（GPU 档）：补 0.18 的 surface 蒙层，把有效不透明度抬到 ~0.7，
+        //      文字对比度稳；仍保留模糊透出的层次感。
+        //    - 性能模式 / FLAT 档：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
+        val scrimAlpha = if (tier == GlassTier.FLAT || !liquidGlass) 0f else 0.18f
+        if (scrimAlpha > 0f) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(shape)
+                    .background(scheme.surface.copy(alpha = scrimAlpha))
+            )
+        }
+        // 4) 顶部高光（液态玻璃标志性边缘光，叠在遮罩之上保证边缘光清晰）
         Box(
             Modifier
                 .matchParentSize()

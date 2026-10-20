@@ -129,6 +129,39 @@ class BackpackViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 编辑收藏时「替换文件附件」：复制新文件到私有目录、删除旧文件、重写 fileUri/fileMetaJson；
+     * sourceUri 为 null 表示不换文件，沿用原附件。标题/备注/分类照常更新。
+     */
+    fun replaceCollectionFile(
+        target: CollectionEntity,
+        title: String,
+        note: String?,
+        category: String?,
+        sourceUri: Uri?
+    ) {
+        val t = title.trim()
+        if (t.isBlank()) return
+        viewModelScope.launch {
+            val (rel, metaJson) = if (sourceUri != null) copyUriToPrivate(sourceUri, target.id)
+            else (target.fileUri to target.fileMetaJson)
+            // 替换了文件才删旧的，避免误删仍在用的附件
+            if (sourceUri != null && target.fileUri != null && target.fileUri != rel) {
+                File(appContext.filesDir, target.fileUri).delete()
+            }
+            collectionRepo.update(
+                target.copy(
+                    title = t,
+                    note = note?.takeIf { it.isNotBlank() },
+                    category = category?.takeIf { it.isNotBlank() },
+                    fileUri = rel,
+                    fileMetaJson = metaJson
+                )
+            )
+            activityRepo.add(ActivityEntity(id = uid("act"), time = nowIso(), kind = "item", title = "替换了收藏文件：$t"))
+        }
+    }
+
     fun addCollection(title: String, note: String?, category: String?, sourceUri: Uri?) {
         val t = title.trim()
         if (t.isBlank()) return

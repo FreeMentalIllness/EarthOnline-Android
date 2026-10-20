@@ -227,11 +227,12 @@ fun MainScaffold(
                             )
                     )
                     // ② 悬浮毛玻璃胶囊（含柔影）
-                    // v1.0.7：真机反馈「太高」—— 高度 52 -> 48dp，左右留白 12 -> 10dp，
-                    // 底部留白 8 -> 6dp，圆角收为 22dp。48dp 仍满足最小触摸目标，
-                    // 视觉上是一条更精致的悬浮玻璃条。
+                    // 贴合屏幕最底部：用 align(BottomCenter) 钉死在容器底部，避免被上方
+                    // 120dp 渐隐蒙版把胶囊顶高（之前「悬浮在屏幕中间」的根因）。
+                    // 同时底部留白仅 6dp，紧贴系统导航安全区，靠渐变 + 模糊自然融合。
                     Box(
                         Modifier
+                            .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp)
                             .padding(bottom = 6.dp)

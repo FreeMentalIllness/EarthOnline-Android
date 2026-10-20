@@ -57,6 +57,7 @@ import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.pressScaleClickable
+import com.example.earthonline.ui.theme.pressScaleCombinedClickable
 import kotlinx.serialization.json.Json
 
 @Composable
@@ -87,7 +88,22 @@ fun BackpackScreen(
     // v1.0.4：编辑已有条目（null = 未在编辑）。点卡片进入编辑，保存即生效。
     var editItem by remember { mutableStateOf<ItemEntity?>(null) }
     var editCollection by remember { mutableStateOf<CollectionEntity?>(null) }
+    // v1.0.8：单击收藏 = 直接打开/预览；无附件的收藏则弹预览卡。长按 = 进入编辑。
+    var previewCollection by remember { mutableStateOf<CollectionEntity?>(null) }
     val context = LocalContext.current
+
+    /** 单击收藏：有附件直接调起系统打开；无附件（纯文字/笔记）则弹预览卡 */
+    fun openCollection(c: CollectionEntity) {
+        val intent = vm.getOpenIntent(c)
+        if (intent != null) {
+            try { context.startActivity(intent) }
+            catch (e: Exception) {
+                Toast.makeText(context, "没有可打开此文件的应用", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            previewCollection = c
+        }
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -129,6 +145,7 @@ fun BackpackScreen(
                     vm = vm,
                     context = context,
                     onAddCollection = { showCollection = true },
+                    onOpenCollection = { openCollection(it) },
                     onEditCollection = { editCollection = it }
                 )
             }
@@ -168,7 +185,19 @@ fun BackpackScreen(
             categories = collectionCats,
             onCreateCategory = { vm.addCategory(SCOPE_COLLECTION, it) },
             onDismiss = { editCollection = null },
-            onSubmit = { t, n, c, _ -> vm.updateCollection(target, t, n, c); editCollection = null }
+            // v1.0.8：编辑态内允许「替换文件」—— 选了新文件就替换，不选则沿用原附件
+            onSubmit = { t, n, c, uri -> vm.replaceCollectionFile(target, t, n, c, uri); editCollection = null }
+        )
+    }
+    // v1.0.8：单击无附件的收藏 → 预览卡（含打开文件 / 编辑入口）
+    previewCollection?.let { target ->
+        CollectionPreviewDialog(
+            c = target,
+            vm = vm,
+            context = context,
+            onDismiss = { previewCollection = null },
+            onOpen = { previewCollection = null; openCollection(target) },
+            onEdit = { previewCollection = null; editCollection = target }
         )
     }
     if (showCategoryManager) {
@@ -388,6 +417,7 @@ private fun CollectionsPane(
     vm: BackpackViewModel,
     context: Context,
     onAddCollection: () -> Unit,
+    onOpenCollection: (CollectionEntity) -> Unit,
     onEditCollection: (CollectionEntity) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -447,7 +477,7 @@ private fun CollectionsPane(
                     filtered,
                     key = { it.id },
                     contentType = { "collectionTile" }
-                ) { CollectionGridTile(it, vm, context, onEdit = { onEditCollection(it) }) }
+                ) { CollectionGridTile(it, vm, context, onOpen = { onOpenCollection(it) }, onEdit = { onEditCollection(it) }) }
             }
         } else {
             LazyColumn(
@@ -460,7 +490,7 @@ private fun CollectionsPane(
                     filtered,
                     key = { it.id },
                     contentType = { "collectionCard" }
-                ) { Box(Modifier.animateItem()) { CollectionCard(it, vm, context, onEdit = { onEditCollection(it) }) } }
+                ) { Box(Modifier.animateItem()) { CollectionCard(it, vm, context, onOpen = { onOpenCollection(it) }, onEdit = { onEditCollection(it) }) } }
             }
         }
     }
@@ -475,6 +505,7 @@ private fun CollectionGridTile(
     c: CollectionEntity,
     vm: BackpackViewModel,
     context: Context,
+    onOpen: () -> Unit,
     onEdit: () -> Unit
 ) {
     val meta = remember(c.fileMetaJson) {
@@ -485,8 +516,9 @@ private fun CollectionGridTile(
         value = withContext(Dispatchers.IO) { extractCover(context, file, meta?.mime) }
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
+    // v1.0.8：单击打开/预览，长按进入编辑
     Card(
-        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
+        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -597,7 +629,7 @@ private fun extractCover(context: Context, file: File?, mime: String?): android.
 }
 
 @Composable
-private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: Context, onEdit: () -> Unit) {
+private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: Context, onOpen: () -> Unit, onEdit: () -> Unit) {
     val meta = remember(c.fileMetaJson) {
         c.fileMetaJson?.let { runCatching { Json.decodeFromString(CollectionFileMeta.serializer(), it) }.getOrNull() }
     }
@@ -612,10 +644,9 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
         value = withContext(Dispatchers.IO) { extractCover(context, file, meta?.mime) }
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
-    // v1.0.4：整卡可点进入编辑（删除 / 打开按钮各自消费点击，不会误触）
-    // v1.0.7：按压缩放反馈
+    // v1.0.8：单击整卡 = 打开/预览，长按 = 进入编辑；删除按钮各自消费点击不会误触
     Card(
-        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
+        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -674,6 +705,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (meta != null) {
+                // 附件信息（文件名 + 大小）；整卡单击即打开，无需单独的打开按钮
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -683,17 +715,6 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
                     Text(meta.name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     Text(formatSize(meta.size), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    IconButton(onClick = {
-                        val intent = vm.getOpenIntent(c)
-                        if (intent != null) {
-                            try { context.startActivity(intent) }
-                            catch (e: Exception) {
-                                Toast.makeText(context, "没有可打开此文件的应用", Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            Toast.makeText(context, "文件不存在", Toast.LENGTH_SHORT).show()
-                        }
-                    }) { Icon(Icons.Filled.OpenInNew, contentDescription = "打开") }
                 }
             }
         }
@@ -807,19 +828,96 @@ private fun CollectionDialog(
                     onSelect = { category = it },
                     onCreate = onCreateCategory
                 )
-                if (initial == null) {
-                    OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.AttachFile, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(fileName ?: "选择文件附件（可选）")
-                    }
-                } else {
-                    // 编辑模式：附件不可替换（替换涉及旧文件清理，误操作风险高），只读展示
+                // 新增与编辑都允许选择 / 替换文件附件：选了新文件即替换，不选则保留原附件。
+                // v1.0.8：编辑态必须提供「上传/替换文件」入口。
+                OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.AttachFile, null)
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        if (initialMeta != null) "附件：${initialMeta.name}（保持不变）" else "未附带文件",
+                        when {
+                            fileName != null -> "替换附件：$fileName"
+                            initialMeta != null -> "替换文件附件（当前：${initialMeta.name}）"
+                            else -> "选择文件附件（可选）"
+                        }
+                    )
+                }
+                if (initialMeta != null && fileName == null) {
+                    Text(
+                        "留空则保留当前附件",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    )
+}
+
+/**
+ * v1.0.8：单击「无附件」的收藏时弹出的预览卡 —— 展示封面/备注/附件信息，
+ * 并提供「打开文件」（有附件时）与「编辑」入口。单击有附件的收藏则直接调起系统打开，不弹此卡。
+ */
+@Composable
+private fun CollectionPreviewDialog(
+    c: CollectionEntity,
+    vm: BackpackViewModel,
+    context: Context,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val meta = remember(c.fileMetaJson) {
+        c.fileMetaJson?.let { runCatching { Json.decodeFromString(CollectionFileMeta.serializer(), it) }.getOrNull() }
+    }
+    val file = remember(c.fileUri) { c.fileUri?.let { File(context.filesDir, it) } }
+    val coverBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, c.id, file?.absolutePath, meta?.mime) {
+        value = withContext(Dispatchers.IO) { extractCover(context, file, meta?.mime) }
+    }
+    val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onEdit) { Text("编辑") } },
+        dismissButton = { TextButton(onDismiss) { Text("关闭") } },
+        title = { Text(c.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (file != null) {
+                    Box(
+                        Modifier.fillMaxWidth().height(160.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        when {
+                            meta?.mime?.startsWith("image/") == true -> AsyncImage(
+                                model = file, contentDescription = null,
+                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                            )
+                            coverImage != null -> Image(
+                                bitmap = coverImage, contentDescription = null,
+                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                            )
+                            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+                if (!c.note.isNullOrBlank()) {
+                    Text(c.note!!, style = MaterialTheme.typography.bodyMedium)
+                }
+                meta?.let {
+                    Text(
+                        "附件：${it.name} · ${formatSize(it.size)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (file != null) {
+                    OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.OpenInNew, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("打开文件")
+                    }
                 }
             }
         }
