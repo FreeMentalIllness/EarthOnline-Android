@@ -69,6 +69,10 @@ import com.example.earthonline.ui.components.TagChip
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.UserAvatar
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSpring
+import com.example.earthonline.ui.theme.GlassSpringIntSize
+import com.example.earthonline.ui.theme.pressScale
 import com.example.earthonline.ui.theme.OnAmber
 
 /** 主页 LazyColumn 中「人生时间轴」卡片的位置（0 基），供卡片内的「添加里程碑」定位 */
@@ -107,7 +111,6 @@ fun HomeRoute(
         onQuickEntriesChange = vm::setQuickEntries,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
-        onToggleBadge = vm::toggleBadge,
         query = query,
         results = results,
         onQueryChange = vm::setQuery,
@@ -135,9 +138,8 @@ fun HomeScreen(
     /** 主页速览自定义入口（DataStore 持久化，至少保留一个） */
     onQuickEntriesChange: (Set<String>) -> Unit = {},
     onAddCustomActivity: (String) -> Unit = {},
-    /** v1.0.3：翻开「历年今日」卡（彩蛋计数） / 佩戴徽章切换 */
+    /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
-    onToggleBadge: (String) -> Unit = {},
     /** v1.2.1 全局搜索：当前词 / 命中项 / 改词 / 点中结果 */
     query: String = "",
     results: List<SearchHit> = emptyList(),
@@ -245,10 +247,7 @@ fun HomeScreen(
                 title = state.customTitle,
                 unlockedAch = state.unlockedAch,
                 locationCount = state.locationCount,
-                doneRatio = state.doneRatio,
-                badges = state.badges,
-                badgePool = state.badgePool,
-                onToggleBadge = onToggleBadge
+                doneRatio = state.doneRatio
             )
         }
     }
@@ -438,7 +437,8 @@ private fun HomeSearchBox(
             modifier = Modifier.fillMaxWidth()
         )
         if (query.isNotBlank()) {
-            Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+            // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(UiDimens.CardPad)) {
                     if (results.isEmpty()) {
                         EmptyHint("没有匹配「$query」的内容", emoji = "🔍")
@@ -536,7 +536,8 @@ private fun HomeTitleBar(actions: MoreMenuActions, greeting: String) {
 
 @Composable
 private fun HeroBanner(state: HomeUiState, onAvatarClick: () -> Unit) {
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -721,9 +722,8 @@ private fun OverviewGrid(
     var expanded by remember { mutableStateOf(false) }
 
     Column(
-        Modifier.animateContentSize(
-            animationSpec = tween(300, easing = FastOutSlowInEasing)
-        ),
+        // v1.0.7：展开/收起用 spring（带阻尼回弹），不再生硬跳变
+        Modifier.animateContentSize(animationSpec = GlassSpringIntSize),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
@@ -769,12 +769,12 @@ private fun OverviewGrid(
             }
         }
 
-        // 展开区：更多入口 + 自定义入口，垂直展开 + 淡入淡出（与容器 animateContentSize 协同）
+        // 展开区：更多入口 + 自定义入口，垂直展开 + 淡入淡出（spring 弹性，与容器 animateContentSize 协同）
         AnimatedVisibility(
             visible = expanded && moreEntries.isNotEmpty(),
-            enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) +
+            enter = expandVertically(animationSpec = GlassSpringIntSize) +
                 fadeIn(tween(220)),
-            exit = shrinkVertically(tween(260, easing = FastOutSlowInEasing)) +
+            exit = shrinkVertically(animationSpec = GlassSpringIntSize) +
                 fadeOut(tween(180))
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -865,6 +865,8 @@ private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifie
         modifier
             .aspectRatio(1f)
             .clip(shape)
+            // v1.0.7：按压缩放（94% -> 100% spring 弹回），连续按压反馈
+            .pressScale(pressed = spot != null, pressedScale = 0.94f)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .pointerInput(Unit) {
                 detectTapGestures(
@@ -960,7 +962,8 @@ private fun ActsCard(
     }
     val shown = if (feedLimit > 0) filtered.take(feedLimit) else filtered
 
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier
                 .padding(UiDimens.CardPad)
@@ -1204,7 +1207,8 @@ private fun ThrowbackCard(
     onSeen: () -> Unit
 ) {
     LaunchedEffect(Unit) { onSeen() }
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Surface(
@@ -1257,7 +1261,8 @@ private fun ThrowbackCard(
  */
 @Composable
 private fun DailyDrawCard(item: ThrowbackItem) {
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Surface(
@@ -1304,7 +1309,8 @@ private fun TimelineCard(
     // 与主页其他卡片（LifeCard / ActsCard / 世界日志等）完全同构：
     // 默认 Card + UiDimens.CardRadius 圆角 + 默认容器色（surfaceContainerLow），
     // 不再单独覆盖 containerColor，保证浅深主题下颜色、圆角与邻卡零偏差。
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -1427,13 +1433,10 @@ private fun LifeCard(
     title: String,
     unlockedAch: Int,
     locationCount: Int,
-    doneRatio: Int,
-    badges: List<BadgeItem>,
-    badgePool: List<BadgeItem>,
-    onToggleBadge: (String) -> Unit
+    doneRatio: Int
 ) {
-    var showBadgeManager by remember { mutableStateOf(false) }
-    Card(shape = RoundedCornerShape(UiDimens.CardRadius), modifier = Modifier.fillMaxWidth()) {
+    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionHeader("🌍 地球Online · 人生卡片")
             // 昵称加前缀，避免纯数字昵称（如「1」）看起来像渲染残留
@@ -1451,84 +1454,8 @@ private fun LifeCard(
                 LifeStat("$locationCount", "足迹")
                 LifeStat("$doneRatio%", "完成率")
             }
-            // v1.0.3：徽章墙 —— 佩戴的隐藏/普通成就徽章（最多 3 枚）
-            if (badgePool.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("🎖 徽章墙", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        TextButton(
-                            onClick = { showBadgeManager = true },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            modifier = Modifier.height(28.dp)
-                        ) { Text(if (badges.isEmpty()) "佩戴" else "更换", style = MaterialTheme.typography.labelSmall) }
-                    }
-                    if (badges.isEmpty()) {
-                        Text(
-                            "从已解锁的成就里挑 3 枚戴出来吧",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            badges.forEach { badge ->
-                                Surface(
-                                    color = AmberPrimary.copy(alpha = 0.12f),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text(
-                                        "🎖 ${badge.title}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = AmberPrimary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // v1.0.7：分享人生卡片入口已去重 —— 统一收敛到「个人资料页」唯一入口
-            // （ShareCardRenderer），主页人生卡片只保留数据看板与徽章墙，不再重复提供分享入口。
+            // v1.0.7：徽章墙已按需求删除（佩戴/更换入口、成就徽章区、管理对话框全量下线）
         }
-    }
-
-    // 佩戴徽章管理对话框（最多 3 枚）
-    if (showBadgeManager) {
-        AnimatedAlertDialog(
-            onDismissRequest = { showBadgeManager = false },
-            title = { Text("🎖 佩戴徽章（最多 3 枚）") },
-            text = {
-                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    items(badgePool, key = { it.id }) { badge ->
-                        val worn = badges.any { it.id == badge.id }
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Checkbox(checked = worn, onCheckedChange = { onToggleBadge(badge.id) })
-                            Column(Modifier.weight(1f)) {
-                                Text(badge.title, style = MaterialTheme.typography.bodyMedium)
-                                if (badge.desc.isNotBlank()) {
-                                    Text(
-                                        badge.desc,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showBadgeManager = false }) { Text("完成") } }
-        )
     }
 }
 

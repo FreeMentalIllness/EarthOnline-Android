@@ -31,8 +31,9 @@ android {
         // 与 v1.0.5 发布前准备对齐；内部版本号同步升至 1.0.5。
         // versionCode 23 = v1.0.6：笔记系统替换「数据」底部 Tab（memos 加 markdown 列 DB 7→8）、
         // 相册分类走 DataStore 扩展（零 Room 迁移）、液态玻璃自研（淘汰 liquid-glass/cloudy 库）、richeditor-compose rc10 引入。
-        versionCode = 23
-        versionName = "1.0.6"
+        // versionCode 24 = v1.0.7：液态玻璃特效全局开关（设置→外观，DataStore 持久化）+ 全局动效 spring 化 + 主页/底栏玻璃质感复刻 + 背包智能封面/双视图 + 笔记 Notion 化工具栏。
+        versionCode = 24
+        versionName = "1.0.7"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }

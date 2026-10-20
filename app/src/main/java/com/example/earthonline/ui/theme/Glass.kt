@@ -49,6 +49,15 @@ import java.io.File
  */
 val LocalWallpaperPath = compositionLocalOf<String?> { null }
 
+/**
+ * 液态玻璃特效全局开关（对应「设置 → 外观 → 液态玻璃特效」）。
+ * - true（默认）：启用毛玻璃背景模糊 + 高光描边 + 半透明折射观感；
+ * - false（性能模式）：[GlassSurface] 强制走 [GlassTier.FLAT] 分支 ——
+ *   去掉所有高斯模糊 / RenderEffect / 折射缩放，降级为高对比度半透明纯色底板，
+ *   保障低端机与旧机型绝对流畅。业务层无需感知，由框架在 [MainScaffold] 统一注入。
+ */
+val LocalLiquidGlass = compositionLocalOf { true }
+
 enum class GlassTier { FULL, BLUR, FLAT }
 
 @Composable
@@ -82,7 +91,11 @@ fun GlassSurface(
     showBorder: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val tier = rememberGlassTier()
+    val deviceTier = rememberGlassTier()
+    // 液态玻璃开关：关闭（性能模式）时无视设备能力，强制降级为纯色底板，
+    // 彻底规避高斯模糊 / RenderEffect / 折射缩放的全部 GPU 开销。
+    val liquidGlass = LocalLiquidGlass.current
+    val tier = if (liquidGlass) deviceTier else GlassTier.FLAT
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
     val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
@@ -90,9 +103,13 @@ fun GlassSurface(
     /* v1.0.7：着色层改用「上深下浅」的竖向渐变。
        - GPU 档（FULL/BLUR）：顶部略深保证可读性，底部更透 → 玻璃底缘自然溶解进
          屏幕底部，消除「悬浮黑块」的生硬割裂感；
-       - FLAT 档（低端机）：保持纯色高不透明，优先可读性。 */
-    val tintTop = if (tier == GlassTier.FLAT) 0.82f else 0.46f
-    val tintBottom = if (tier == GlassTier.FLAT) 0.82f else 0.30f
+       - 性能模式（液态玻璃关）或 FLAT 档（低端机）：高对比度半透明纯色底板，
+         不透明度拉满，优先可读性、零 GPU 消费。 */
+    val (tintTop, tintBottom) = when {
+        !liquidGlass -> 0.92f to 0.92f
+        tier == GlassTier.FLAT -> 0.82f to 0.82f
+        else -> 0.46f to 0.30f
+    }
     val tintBrush = Brush.verticalGradient(
         colorStops = arrayOf(
             0.0f to scheme.surface.copy(alpha = tintTop),
@@ -170,17 +187,50 @@ fun GlassSurface(
                 )
         )
         if (showBorder) {
+            /* v1.0.7：色散描边（dispersion edge）—— 白 → 琥珀 → 冷蓝的细渐变，
+               模拟光线掠过玻璃棱镜时边缘的色散；比纯灰 outline 更有「液态」质感。
+               渐变只画 1dp 描边，零额外 GPU 成本。 */
+            val edgeBrush = Brush.linearGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.55f),
+                    AmberPrimary.copy(alpha = 0.38f),
+                    Color(0xFFBFD6FF).copy(alpha = 0.42f),
+                    Color.White.copy(alpha = 0.22f)
+                )
+            )
             Box(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), shape)
+                    .border(1.dp, edgeBrush, shape)
             )
         }
         // 4) 内容（永远锐利，不参与模糊）。
         // 这一层是唯一「决定」外层 Box 尺寸的层：不写尺寸修饰符 = 按内容自然测量，
         // 有固定 size/height 的调用点则由外层 modifier 决定，contentAlignment 照常生效。
         Box(Modifier, contentAlignment = contentAlignment, content = content)
+    }
+}
+
+/**
+ * 主页卡片级玻璃容器：全透明毛玻璃 + 微弱背景暗化遮罩。
+ * 红线：壁纸可能过亮过花，正文必须有稳定对比度 —— 遮罩只压 5% 黑，
+ * 既能托住文字，又不会把玻璃变回「死灰面板」。
+ * 业务里替代 Material Card 使用；内容按自然测量，调用方自带 padding。
+ */
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(20.dp),
+    content: @Composable BoxScope.() -> Unit
+) {
+    GlassSurface(modifier = modifier, shape = shape, showBorder = true) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(Color.Black.copy(alpha = 0.05f))
+        )
+        content()
     }
 }
 
@@ -204,4 +254,10 @@ private val BLUR_DP: Dp = 10.dp
 @Composable
 fun ProvideWallpaper(wallpaperPath: String?, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalWallpaperPath provides wallpaperPath, content = content)
+}
+
+/** 在框架层注入液态玻璃开关：关闭时所有 [GlassSurface] 自动降级为纯色底板（性能模式）。 */
+@Composable
+fun ProvideLiquidGlass(enabled: Boolean, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalLiquidGlass provides enabled, content = content)
 }

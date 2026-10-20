@@ -71,6 +71,8 @@ class SettingsViewModel @Inject constructor(
     val lastSyncAt: Flow<String> = settings.lastSyncAt
     /** v1.2.1：成就解锁音效开关 */
     val achSound: Flow<Boolean> = settings.achSound
+    /** v1.0.7：液态玻璃特效全局开关（默认开启；关闭 = 性能模式） */
+    val liquidGlass: Flow<Boolean> = settings.liquidGlass
     // v1.0.4：字号档位（fontScale / setFontScale）已随「字号大小设置移除」一并下线，
     // 文字大小改为完全跟随系统字体缩放。
 
@@ -109,6 +111,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setTheme(v: String) = viewModelScope.launch { settings.setTheme(v) }
     fun setAchSound(v: Boolean) = viewModelScope.launch { settings.setAchSound(v) }
+    fun setLiquidGlass(v: Boolean) = viewModelScope.launch { settings.setLiquidGlass(v) }
     fun setAutoSync(v: Boolean) = viewModelScope.launch { settings.setAutoSync(v) }
     fun setNotify(v: Boolean) = viewModelScope.launch { settings.setNotify(v) }
     fun setWallpaper(path: String) = viewModelScope.launch { settings.setWallpaper(path) }

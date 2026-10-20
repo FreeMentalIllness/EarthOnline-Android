@@ -1,8 +1,12 @@
 package com.example.earthonline.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -39,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassSpring
 import com.example.earthonline.ui.theme.GlassSurface
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.res.painterResource
@@ -60,6 +66,7 @@ import com.example.earthonline.ui.navigation.Screen
 import com.example.earthonline.ui.navigation.bottomNavItems
 import com.example.earthonline.ui.navigation.settingsSubRoutes
 import com.example.earthonline.ui.theme.ProvideWallpaper
+import com.example.earthonline.ui.theme.ProvideLiquidGlass
 import com.example.earthonline.ui.settings.SettingsViewModel
 import com.example.earthonline.util.AchievementSound
 import com.example.earthonline.util.rememberIsOnline
@@ -122,6 +129,8 @@ fun MainScaffold(
     // v1.0.6：当日轮换壁纸（含相册筛选）由 ViewModel 统一计算，避免组合层做 JSON 解析
     val effectiveWallpaper by settingsVm.effectiveWallpaper.collectAsStateWithLifecycle(initialValue = "")
     val quickNotif by settingsVm.quickNotif.collectAsStateWithLifecycle(initialValue = false)
+    // v1.0.7：液态玻璃特效开关（默认开启；关闭 = 性能模式，去所有高斯模糊）
+    val liquidGlass by settingsVm.liquidGlass.collectAsStateWithLifecycle(initialValue = true)
 
     // 音效开关变化时同步给播放器（关闭时顺带释放 SoundPool，省一份常驻内存）
     LaunchedEffect(achSound) { AchievementSound.setEnabled(achSound) }
@@ -183,7 +192,8 @@ fun MainScaffold(
         }
     }
 
-    Scaffold(
+    ProvideLiquidGlass(liquidGlass) {
+        Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             /* v1.0.7：底部导航为「悬浮液态玻璃胶囊」—— 左右 + 底部留白、大圆角，
@@ -217,24 +227,24 @@ fun MainScaffold(
                             )
                     )
                     // ② 悬浮毛玻璃胶囊（含柔影）
-                    // v1.0.7：真机反馈「太高」—— 高度 60 -> 52dp，左右留白 16 -> 12dp，
-                    // 底部留白 14 -> 8dp，圆角随高度收为 24dp，阴影同步减弱（也更省 GPU）。
-                    // 52dp 仍高于 48dp 最小触摸目标，四个 Tab 的点击热区不受影响。
+                    // v1.0.7：真机反馈「太高」—— 高度 52 -> 48dp，左右留白 12 -> 10dp，
+                    // 底部留白 8 -> 6dp，圆角收为 22dp。48dp 仍满足最小触摸目标，
+                    // 视觉上是一条更精致的悬浮玻璃条。
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 8.dp)
+                            .padding(horizontal = 10.dp)
+                            .padding(bottom = 6.dp)
                     ) {
                         GlassSurface(
-                            shape = RoundedCornerShape(24.dp),
+                            shape = RoundedCornerShape(22.dp),
                             showBorder = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp)
+                                .height(48.dp)
                                 .shadow(
-                                    elevation = 12.dp,
-                                    shape = RoundedCornerShape(24.dp),
+                                    elevation = 10.dp,
+                                    shape = RoundedCornerShape(22.dp),
                                     ambientColor = Color.Black,
                                     spotColor = Color.Black
                                 )
@@ -247,33 +257,13 @@ fun MainScaffold(
                                     val selected = currentRoute == item.route ||
                                             currentRoute in item.altRoutes ||
                                             navBackStackEntry?.destination?.hierarchy?.any { it.route == item.route } == true
-                                    NavigationBarItem(
+                                    // v1.0.7：自绘导航项 —— 官方 NavigationBarItem 有最小高度约束，
+                                    // 塞进 48dp 胶囊会被撑高；自绘 Icon+Text 完全可控尺寸。
+                                    NavTab(
                                         selected = selected,
+                                        label = item.label,
+                                        iconRes = item.iconRes,
                                         onClick = { navigateToTab(navController, item.route) },
-                                        icon = {
-                                            Icon(
-                                                painterResource(item.iconRes),
-                                                contentDescription = item.label,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        },
-                                        label = {
-                                            Text(
-                                                item.label,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1
-                                            )
-                                        },
-                                        // v1.2.3：底部导航配色统一为「暖琥珀选中」。
-                                        // v1.0.2+：未选中色改为主题派生（浅色=深棕灰 / 深色=浅灰 #B6B6BF 系），
-                                        // 修复深色模式下 #6B5B4F 对比度不足的问题。
-                                        colors = NavigationBarItemDefaults.colors(
-                                            selectedIconColor = AmberPrimary,
-                                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            selectedTextColor = AmberPrimary,
-                                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            indicatorColor = AmberPrimary.copy(alpha = 0.14f)
-                                        ),
                                         modifier = Modifier.weight(1f)
                                     )
                                 }
@@ -351,6 +341,55 @@ fun MainScaffold(
             if (showAccounting) {
                 AccountingDownloadDialog(onDismiss = { showAccounting = false })
             }
+        }
+    }
+    }
+}
+
+/**
+ * v1.0.7：底部导航自绘项 —— 图标 + 一行小字，选中态琥珀色 + 背景胶囊微着色。
+ * 不用官方 NavigationBarItem：它的最小高度约束会把 48dp 胶囊撑变形；
+ * 自绘后高度、内边距、水波纹边界全部可控（clip 让 ripple 不越出胶囊圆角）。
+ * 选中态背景用 spring 淡入淡出，切换 Tab 时是一段连续的过渡而不是硬切。
+ */
+@Composable
+private fun NavTab(
+    selected: Boolean,
+    label: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tint = if (selected) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (selected) 0.10f else 0f,
+        animationSpec = GlassSpring,
+        label = "navTabBg"
+    )
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AmberPrimary.copy(alpha = bgAlpha))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = label,
+                tint = tint,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+                maxLines = 1
+            )
         }
     }
 }

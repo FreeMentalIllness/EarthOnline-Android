@@ -146,10 +146,6 @@ data class HomeUiState(
     val dailyDraw: ThrowbackItem? = null,
     /** 用户自定义称号（空 = 默认「旅行者」） */
     val customTitle: String = "",
-    /** 主页佩戴的徽章（最多 3 枚，来自已解锁成就） */
-    val badges: List<BadgeItem> = emptyList(),
-    /** 全部已解锁成就（供「佩戴徽章」管理对话框选择） */
-    val badgePool: List<BadgeItem> = emptyList(),
     /** v1.0.4：待庆祝的新等级（null = 无）；等级=周岁，由 DataStore 已庆祝档位推导 */
     val levelUp: Int? = null
 ) {
@@ -171,13 +167,6 @@ data class ThrowbackItem(
     val day: String,
     val kind: String,   // memo / task / ach / loc
     val title: String
-)
-
-/** v1.0.3：主页佩戴徽章（来自已解锁成就） */
-data class BadgeItem(
-    val id: String,
-    val title: String,
-    val desc: String
 )
 
 private data class TaskStat(val total: Int, val done: Int)
@@ -209,7 +198,6 @@ private data class Parts(
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
     val bundle: Bundle = Bundle(),
     val customTitle: String = "",
-    val badgeIds: List<String> = emptyList(),
     /** v1.0.4：已庆祝过的等级（-1 = 从未记录，首次记录不庆祝） */
     val lastCelebrated: Int = -1
 )
@@ -309,14 +297,6 @@ class HomeViewModel @Inject constructor(
     /** v1.0.3：自定义称号 */
     private val customTitleFlow: Flow<String> = settingsDs.customTitle
 
-    /** v1.0.3：主页佩戴徽章 id 列表（JSON 数组，最多 3） */
-    private val badgeIdsFlow: Flow<List<String>> = settingsDs.homeBadgesJson.map { txt ->
-        if (txt.isBlank()) emptyList()
-        else runCatching {
-            json.decodeFromString(ListSerializer(String.serializer()), txt)
-        }.getOrDefault(emptyList())
-    }
-
     /** v1.0.4：已庆祝过的等级（-1 = 从未记录） */
     private val lastCelebratedFlow: Flow<Int> = settingsDs.lastCelebratedLevel
 
@@ -345,7 +325,6 @@ class HomeViewModel @Inject constructor(
             .combine(quickEntriesFlow) { parts, quick -> parts.copy(quickEntries = quick) }
             .combine(bundleFlow) { parts, bundle -> parts.copy(bundle = bundle) }
             .combine(customTitleFlow) { parts, title -> parts.copy(customTitle = title) }
-            .combine(badgeIdsFlow) { parts, ids -> parts.copy(badgeIds = ids) }
             .combine(lastCelebratedFlow) { parts, lv -> parts.copy(lastCelebrated = lv) }
             .map { it.toUi() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
@@ -607,26 +586,8 @@ class HomeViewModel @Inject constructor(
             throwback = buildThrowback(bundle),
             dailyDraw = buildDailyDraw(bundle),
             customTitle = customTitle,
-            badges = badgeIds.takeNotNull(3) { id ->
-                bundle.achievements.firstOrNull { it.id == id }?.let {
-                    BadgeItem(it.id, it.title.ifBlank { "成就" }, it.desc)
-                }
-            },
-            badgePool = bundle.achievements.map {
-                BadgeItem(it.id, it.title.ifBlank { "成就" }, it.desc)
-            },
             levelUp = levelUp
         )
-    }
-
-    /** 已解锁徽章按 id 取行，最多保留 [max] 枚（id 失效的自动丢弃） */
-    private inline fun <T> List<String>.takeNotNull(max: Int, transform: (String) -> T?): List<T> {
-        val out = ArrayList<T>(max)
-        for (id in this) {
-            if (out.size >= max) break
-            transform(id)?.let { out.add(it) }
-        }
-        return out
     }
 
     /** 记录日键集合：日志日 ∪ 完成任务日 ∪ 足迹日（任意一种记录都算「记录」） */
@@ -684,18 +645,7 @@ class HomeViewModel @Inject constructor(
         return pool[Math.floorMod(seed, pool.size)]
     }
 
-    /* ————— v1.0.3：徽章佩戴 / 回忆彩蛋计数 ————— */
-
-    /** 佩戴/摘下徽章（最多 3 枚；[achId] 已佩戴则摘下） */
-    fun toggleBadge(achId: String) {
-        viewModelScope.launch {
-            val cur = badgeIdsFlow.first()
-            val next = if (achId in cur) cur - achId else (cur + achId).takeLast(3)
-            settingsDs.setHomeBadgesJson(
-                json.encodeToString(ListSerializer(String.serializer()), next)
-            )
-        }
-    }
+    /* ————— 回忆彩蛋计数 ————— */
 
     /** 主页翻开「历年今日」卡时计数（彩蛋「时光回声」判定源） */
     fun onThrowbackSeen() {

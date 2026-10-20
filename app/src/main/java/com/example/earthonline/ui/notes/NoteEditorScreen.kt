@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
@@ -200,12 +201,15 @@ fun NoteEditorScreen(
                 )
             }
 
-            // v1.0.7：格式化工具栏（加粗 / 列表 / 待办项）—— 直接插入 Markdown 语法，
-            // 与预览渲染器（RichText）天然兼容，所见即所得。
+            // v1.0.7：Notion 式格式工具栏 —— 标题 / 加粗 / 引用 / 无序 / 有序 / 待办，
+            // 全部直接插入 Markdown 语法，与预览渲染器（RichText）天然兼容，所见即所得。
             if (!preview) {
                 FormatToolbar(
+                    onTitle = { linePrefix("# ") },
                     onBold = { surround("**", "**", "加粗文本") },
+                    onQuote = { linePrefix("> ") },
                     onList = { linePrefix("- ") },
+                    onOrdered = { linePrefix("1. ") },
                     onTodo = { linePrefix("- [ ] ") }
                 )
             }
@@ -223,6 +227,8 @@ fun NoteEditorScreen(
                     value = body,
                     onValueChange = { body = it },
                     placeholder = { Text("写点什么…") },
+                    // v1.0.7：加大行距（默认 1.4 倍偏挤），光标所在行不再与邻行糊在一起
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(lineHeight = 28.sp),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -277,40 +283,49 @@ private fun MarkdownPreview(markdown: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * v1.0.7：笔记格式化工具栏。三个按钮对应主流笔记最常用语法，
- * 点击即在正文光标处插入 Markdown（加粗 / 无序列表 / 待办项）。
- * 行内语法走 [FormatToolbar] 的回调由编辑器自行包裹选区。
+ * v1.0.7：Notion 式笔记格式工具栏，两行共六个常用块语法。
+ * 行内语法（加粗）由编辑器包裹选区；行首语法（标题/引用/列表/有序/待办）插到光标行行首。
  */
 @Composable
 private fun FormatToolbar(
+    onTitle: () -> Unit,
     onBold: () -> Unit,
+    onQuote: () -> Unit,
     onList: () -> Unit,
+    onOrdered: () -> Unit,
     onTodo: () -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FormatButton("H 标题", onTitle)
+            FormatButton("B", onBold, bold = true)
+            FormatButton("❝ 引用", onQuote)
+        }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FormatButton("• 列表", onList)
+            FormatButton("1. 有序", onOrdered)
+            FormatButton("☑ 待办", onTodo)
+        }
+    }
+}
+
+@Composable
+private fun FormatButton(text: String, onClick: () -> Unit, bold: Boolean = false) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+        modifier = Modifier.height(34.dp)
     ) {
-        OutlinedButton(
-            onClick = onBold,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-            modifier = Modifier.height(34.dp)
-        ) {
-            Text("B", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-        }
-        OutlinedButton(
-            onClick = onList,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-            modifier = Modifier.height(34.dp)
-        ) {
-            Text("• 列表", style = MaterialTheme.typography.labelMedium)
-        }
-        OutlinedButton(
-            onClick = onTodo,
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-            modifier = Modifier.height(34.dp)
-        ) {
-            Text("☑ 待办", style = MaterialTheme.typography.labelMedium)
-        }
+        Text(
+            text,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+            style = MaterialTheme.typography.labelMedium
+        )
     }
 }

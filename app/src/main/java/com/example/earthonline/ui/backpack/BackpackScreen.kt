@@ -10,10 +10,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -24,6 +29,10 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +56,7 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.pressScaleClickable
 import kotlinx.serialization.json.Json
 
 @Composable
@@ -190,6 +200,8 @@ private fun ItemsPane(
     var query by remember { mutableStateOf("") }
     // null=全部，""=未分类，其它=分类名
     var cat by remember { mutableStateOf<String?>(null) }
+    // v1.0.7：网格（带预览/大图）/ 列表（纯文字，一页更多）双模式
+    var grid by rememberSaveable { mutableStateOf(false) }
     val filtered = remember(items, query, cat) {
         items.filter { it ->
             val matchCat = when (cat) {
@@ -219,6 +231,8 @@ private fun ItemsPane(
             selected = cat,
             onSelect = { cat = it }
         )
+        // v1.0.7：网格 / 列表视图切换
+        ViewModeToggle(grid = grid, onToggle = { grid = !grid })
         if (filtered.isEmpty()) {
             if (items.isEmpty()) {
                 EmptyState(
@@ -232,11 +246,27 @@ private fun ItemsPane(
             } else {
                 EmptyHint(if (query.isBlank()) "该分类下暂无物品" else "没有匹配的物品", emoji = "🔍")
             }
+        } else if (grid) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
+            ) {
+                gridItems(
+                    filtered,
+                    key = { it.id },
+                    contentType = { "itemTile" }
+                ) { ItemGridTile(it, onEdit = { onEditItem(it) }, onDelete = { vm.deleteItem(it.id) }) }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
             ) {
                 items(
                     filtered,
@@ -248,11 +278,74 @@ private fun ItemsPane(
     }
 }
 
+/** v1.0.7：背包网格模式下的物品磁贴（大图标 + 名称 + 分类，一眼扫更多） */
+@Composable
+private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
+        shape = RoundedCornerShape(UiDimens.ItemRadius)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "删除",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            Box(
+                Modifier.fillMaxWidth().height(64.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("📦", style = MaterialTheme.typography.headlineMedium)
+            }
+            Text(
+                item.name,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            item.category?.takeIf { it.isNotBlank() }?.let {
+                AssistChip(
+                    onClick = {},
+                    label = { Text(it, style = MaterialTheme.typography.labelSmall) }
+                )
+            }
+        }
+    }
+}
+
+/** v1.0.7：网格 / 列表视图切换按钮（物品与收藏共用） */
+@Composable
+private fun ViewModeToggle(grid: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End
+    ) {
+        TextButton(
+            onClick = onToggle,
+            modifier = Modifier.padding(horizontal = 8.dp)
+        ) {
+            Text(if (grid) "☰ 列表模式" else "⊞ 网格模式", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
 @Composable
 private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () -> Unit) {
     // v1.0.4：整卡可点进入编辑（删除按钮自身消费点击，不会误触）
+    // v1.0.7：按压缩放反馈（94% -> 100% spring 弹回）
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit),
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Row(
@@ -299,6 +392,8 @@ private fun CollectionsPane(
 ) {
     var query by remember { mutableStateOf("") }
     var cat by remember { mutableStateOf<String?>(null) }
+    // v1.0.7：网格（带封面预览）/ 列表（纯文字）双模式
+    var grid by rememberSaveable { mutableStateOf(false) }
     val filtered = remember(collections, query, cat) {
         collections.filter { c ->
             val matchCat = when (cat) {
@@ -326,6 +421,7 @@ private fun CollectionsPane(
             selected = cat,
             onSelect = { cat = it }
         )
+        ViewModeToggle(grid = grid, onToggle = { grid = !grid })
         if (filtered.isEmpty()) {
             if (collections.isEmpty()) {
                 EmptyState(
@@ -338,11 +434,27 @@ private fun CollectionsPane(
             } else {
                 EmptyHint("没有匹配的收藏", emoji = "🔍")
             }
+        } else if (grid) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
+            ) {
+                gridItems(
+                    filtered,
+                    key = { it.id },
+                    contentType = { "collectionTile" }
+                ) { CollectionGridTile(it, vm, context, onEdit = { onEditCollection(it) }) }
+            }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(vertical = 8.dp)
+                // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
             ) {
                 items(
                     filtered,
@@ -354,20 +466,156 @@ private fun CollectionsPane(
     }
 }
 
+/**
+ * v1.0.7：收藏网格磁贴 —— 顶部封面预览（PDF 首页 / 音频内嵌封面 / 图片缩略图），
+ * 无封面能力时留白显示默认图标，绝不报错。
+ */
+@Composable
+private fun CollectionGridTile(
+    c: CollectionEntity,
+    vm: BackpackViewModel,
+    context: Context,
+    onEdit: () -> Unit
+) {
+    val meta = remember(c.fileMetaJson) {
+        c.fileMetaJson?.let { runCatching { Json.decodeFromString(CollectionFileMeta.serializer(), it) }.getOrNull() }
+    }
+    val file = remember(c.fileUri) { c.fileUri?.let { File(context.filesDir, it) } }
+    val coverBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, c.id, file?.absolutePath, meta?.mime) {
+        value = withContext(Dispatchers.IO) { extractCover(context, file, meta?.mime) }
+    }
+    val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
+    Card(
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
+        shape = RoundedCornerShape(UiDimens.ItemRadius)
+    ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                Modifier.fillMaxWidth().height(96.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                when {
+                    meta?.mime?.startsWith("image/") == true && file != null -> {
+                        AsyncImage(
+                            model = file,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    coverImage != null -> {
+                        Image(
+                            bitmap = coverImage,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    else -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Filled.Description,
+                                null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                c.title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            meta?.let {
+                Text(
+                    formatSize(it.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * v1.0.7：智能封面提取。
+ *  - PDF：渲染第一页为位图（白底）；
+ *  - 音频：提取内嵌封面（ID3 / APIC）；
+ *  - 其它类型或提取失败：返回 null，调用方用默认图标兜底，绝不抛异常。
+ */
+private fun extractCover(context: Context, file: File?, mime: String?): android.graphics.Bitmap? {
+    if (file == null || !file.exists()) return null
+    val isPdf = mime?.endsWith("pdf", ignoreCase = true) == true || file.extension.equals("pdf", true)
+    val isAudio = mime?.startsWith("audio/") == true ||
+            file.extension.lowercase() in setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav")
+    return runCatching {
+        when {
+            isPdf -> {
+                android.os.ParcelFileDescriptor
+                    .open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+                    .use { pfd ->
+                        android.graphics.pdf.PdfRenderer(pfd).use { renderer ->
+                            if (renderer.pageCount <= 0) return@use null
+                            renderer.openPage(0).use { page ->
+                                val pw = page.width.coerceAtLeast(1)
+                                val ph = page.height.coerceAtLeast(1)
+                                val w = 600.coerceAtMost(pw)
+                                val h = (w.toFloat() * ph / pw).toInt().coerceAtLeast(1)
+                                val bmp = android.graphics.Bitmap.createBitmap(
+                                    w, h, android.graphics.Bitmap.Config.ARGB_8888
+                                )
+                                bmp.eraseColor(android.graphics.Color.WHITE)
+                                page.render(
+                                    bmp,
+                                    null,
+                                    null,
+                                    android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
+                                )
+                                bmp
+                            }
+                        }
+                    }
+            }
+            isAudio -> {
+                val mmr = android.media.MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(file.absolutePath)
+                    val art = mmr.embeddedPicture
+                    if (art != null) {
+                        android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
+                    } else null
+                } finally {
+                    runCatching { mmr.release() }
+                }
+            }
+            else -> null
+        }
+    }.getOrNull()
+}
+
 @Composable
 private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: Context, onEdit: () -> Unit) {
     val meta = remember(c.fileMetaJson) {
         c.fileMetaJson?.let { runCatching { Json.decodeFromString(CollectionFileMeta.serializer(), it) }.getOrNull() }
     }
     // v1.0.6：收藏封面预览 —— 图片直接出缩略图，文本文件自动读取前几行排版，无预览能力的类型给图标兜底。
+    // v1.0.7：PDF 渲染首页、音频提取内嵌封面（extractCover），后台线程跑，失败一律兜底图标。
     val file = remember(c.fileUri) { c.fileUri?.let { File(context.filesDir, it) } }
     val previewText = remember(c.id) {
         file?.takeIf { it.exists() && (meta?.mime?.startsWith("text/") == true || it.extension in setOf("txt", "md", "json", "csv", "log")) }
             ?.runCatching { readLines().take(3).joinToString("\n") }?.getOrNull()
     }
+    val coverBitmap by produceState<android.graphics.Bitmap?>(initialValue = null, c.id, file?.absolutePath, meta?.mime) {
+        value = withContext(Dispatchers.IO) { extractCover(context, file, meta?.mime) }
+    }
+    val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
     // v1.0.4：整卡可点进入编辑（删除 / 打开按钮各自消费点击，不会误触）
+    // v1.0.7：按压缩放反馈
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit),
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -381,6 +629,14 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
                         meta?.mime?.startsWith("image/") == true -> {
                             AsyncImage(
                                 model = file,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        coverImage != null -> {
+                            Image(
+                                bitmap = coverImage,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()

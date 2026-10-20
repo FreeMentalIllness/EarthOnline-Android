@@ -2,8 +2,8 @@ package com.example.earthonline.ui.navigation
 
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -54,17 +54,21 @@ fun AppNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        /* v1.2.1：页面切换过渡。
-           进场的页从下方 1/10 高度处上滑 + 淡入，离场的页只淡出（不做反向位移，
-           否则两页同时动会显得「晃」）。参数都很短（170~260ms）——
-           导航动画超过 300ms 就会让人觉得「点了要等一下」。 */
+        /* v1.0.7：页面切换过渡升级为「横向推入 + 淡入」的连续动画。
+           参照参考项目的转场质感：新页从右侧半屏处推入、旧页同步左移淡出，
+           返回时方向反转；推入幅度控制在半屏、时长 300ms ——
+           推满整屏会「晃」，太慢又会让人觉得「点了要等」。 */
         enterTransition = {
-            fadeIn(tween(170)) + slideInVertically(tween(260)) { it / 10 }
+            fadeIn(tween(220)) + slideInHorizontally(tween(300)) { it / 2 }
         },
-        exitTransition = { fadeOut(tween(140)) },
-        popEnterTransition = { fadeIn(tween(170)) },
+        exitTransition = {
+            fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it / 2 }
+        },
+        popEnterTransition = {
+            fadeIn(tween(220)) + slideInHorizontally(tween(300)) { -it / 2 }
+        },
         popExitTransition = {
-            fadeOut(tween(140)) + slideOutVertically(tween(200)) { it / 10 }
+            fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { -it / 2 }
         }
     ) {
         composable(Screen.Home.route) {

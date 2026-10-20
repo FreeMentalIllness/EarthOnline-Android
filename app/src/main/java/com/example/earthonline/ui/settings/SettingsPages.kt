@@ -84,6 +84,8 @@ fun AppearanceRoute(
     val theme by vm.theme.collectAsStateWithLifecycle(initialValue = "system")
     val wallpaper by vm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
     val wallpaperAlpha by vm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
+    // v1.0.7：液态玻璃特效开关（默认开启；关闭 = 性能模式，去所有高斯模糊 / RenderEffect）
+    val liquidGlass by vm.liquidGlass.collectAsStateWithLifecycle(initialValue = true)
     // v1.0.4：字号档位设置已移除 —— 应用内不再额外缩放文字，直接跟随系统字体大小，
     // 由系统无障碍设置统一控制（对应需求「删除字号大小设置，自动适配」）。
     // v1.0.3：壁纸从记忆相册随机轮换
@@ -120,6 +122,19 @@ fun AppearanceRoute(
                         ThemeChip("跟随系统", "system", theme) { vm.setTheme("system") }
                         ThemeChip("浅色", "light", theme) { vm.setTheme("light") }
                         ThemeChip("深色", "dark", theme) { vm.setTheme("dark") }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    // v1.0.7：液态玻璃特效全局开关（默认开启）
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("液态玻璃特效（Liquid Glass）", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "开启：毛玻璃模糊 + 高光描边 + 半透明折射；关闭（性能模式）：去全部高斯模糊，改用高对比半透明纯色底板，低端机更流畅。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OnOffSwitch(checked = liquidGlass, onCheckedChange = { vm.setLiquidGlass(it) })
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

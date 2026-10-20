@@ -90,6 +90,13 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val SKIP_NEXT_PULL = booleanPreferencesKey("skip_next_pull")
         /** v1.0.6：高德 Web 服务 Key（地图搜索 / 路径规划走 REST，与 Android 地图 Key 是两套） */
         val AMAP_WEB_KEY = stringPreferencesKey("amap_web_key")
+        /**
+         * v1.0.7：液态玻璃特效（Liquid Glass）全局开关。
+         * - true（默认）：启用毛玻璃背景模糊 + 高光描边 + 半透明折射观感；
+         * - false（性能模式）：去掉所有高斯模糊 / RenderEffect，降级为高对比度半透明纯色底板，
+         *   保障低端机与旧机型绝对流畅。读取方见 ui/theme/Glass.kt 的 GlassSurface。
+         */
+        val LIQUID_GLASS = booleanPreferencesKey("liquid_glass")
     }
 
     val onboardingDone: Flow<Boolean> = ds.data.map { it[ONBOARDING_DONE] ?: false }
@@ -200,6 +207,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** v1.0.6：高德 Web 服务 Key（地图搜索 / 路径规划走 REST API，与 Android 地图 Key 是两套） */
     val amapWebKey: Flow<String> = ds.data.map { it[AMAP_WEB_KEY] ?: "" }
     suspend fun setAmapWebKey(v: String) = ds.edit { it[AMAP_WEB_KEY] = v.trim() }
+
+    /** v1.0.7：液态玻璃特效开关（默认开启；关闭 = 性能模式，去所有高斯模糊 / RenderEffect） */
+    val liquidGlass: Flow<Boolean> = ds.data.map { it[LIQUID_GLASS] ?: true }
+    suspend fun setLiquidGlass(v: Boolean) = ds.edit { it[LIQUID_GLASS] = v }
 
     /**
      * 清空「用户数据键」，保留应用设置键。与 Web 端 resetAllData 的键语义对齐：
