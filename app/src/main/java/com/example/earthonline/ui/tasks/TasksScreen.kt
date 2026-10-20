@@ -183,7 +183,7 @@ fun TasksScreen(
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("任务") },

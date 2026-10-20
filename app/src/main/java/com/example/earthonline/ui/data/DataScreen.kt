@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -56,7 +57,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
     var detailDay by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("数据看板") },
@@ -107,37 +108,22 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                     StatCard("成就", unlocked, Modifier.weight(1f))
                 }
             }
-            // 「全部动态」入口：与首页最近动态的完整列表页（AllActivitiesRoute）同一目的地；
-            // v1.0.3：下方并列「记忆相册」入口（批量导入 / 按月归档相册墙）
+            // 「全部动态」入口：与首页最近动态的完整列表页（AllActivitiesRoute）同一目的地。
+            // v1.0.7：移除「记忆相册」入口 —— 相册已有主页速览直达，看板不再重复摆放。
             item {
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
-                    Row(Modifier.fillMaxWidth()) {
-                        TextButton(
-                            onClick = { moreActions.onNavigate(Screen.AllActivities.route) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = AmberPrimary)
-                        ) {
-                            Text(
-                                "📜 查看全部动态 ›",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        TextButton(
-                            onClick = { moreActions.onNavigate(Screen.Album.route) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            colors = ButtonDefaults.textButtonColors(contentColor = AmberPrimary)
-                        ) {
-                            Text(
-                                "📷 记忆相册 ›",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                    TextButton(
+                        onClick = { moreActions.onNavigate(Screen.AllActivities.route) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = AmberPrimary)
+                    ) {
+                        Text(
+                            "📜 查看全部动态 ›",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }

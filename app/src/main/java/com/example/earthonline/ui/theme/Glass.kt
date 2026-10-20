@@ -116,7 +116,10 @@ fun GlassSurface(
            内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
         if (useBackdrop) {
-            // 1) 模糊壁纸背景（GPU 档）
+            // 1) 模糊壁纸背景（GPU 档）。
+            //    v1.0.7 性能关键：毛玻璃底图按 160px 小图采样 —— 模糊之后反正是一团色晕，
+            //    小图的视觉结果与全尺寸图完全一致，但每帧的上传带宽 / 采样开销大幅下降；
+            //    之前直接用 File 全尺寸解码，N 个玻璃卡片 = N 张全尺寸位图常驻显存，是卡顿主源之一。
             Box(
                 Modifier
                     .matchParentSize()
@@ -125,7 +128,11 @@ fun GlassSurface(
                     .background(Color.Transparent)
             ) {
                 AsyncImage(
-                    model = File(wallPath!!),
+                    model = coil.request.ImageRequest.Builder(LocalContext.current)
+                        .data(File(wallPath!!))
+                        .size(160)
+                        .crossfade(false)
+                        .build(),
                     contentDescription = null,
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier.matchParentSize()
@@ -188,9 +195,10 @@ private fun Modifier.backdrop(tier: GlassTier): Modifier {
     } else blurred
 }
 
-/* v1.0.7：毛玻璃模糊半径由 14dp 提到 18dp —— 更明显的磨砂质感，
-   弱化「深色壁纸上透出黑块」的观感，同时仍远低于造成掉帧的阈值。 */
-private val BLUR_DP: Dp = 18.dp
+/* v1.0.7：模糊半径 18dp -> 10dp（真机反馈明显卡顿）。
+   Modifier.blur 的开销随半径非线性增长，且每个 GlassSurface 每帧都要跑一次；
+   10dp 已足够「磨砂」，18dp 属于过度消费 GPU。低端降级（FLAT 纯色档）不受影响。 */
+private val BLUR_DP: Dp = 10.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */
 @Composable

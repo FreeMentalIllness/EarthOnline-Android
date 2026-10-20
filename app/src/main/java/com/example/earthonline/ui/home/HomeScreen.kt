@@ -6,6 +6,14 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -702,16 +710,22 @@ private fun OverviewGrid(
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
 
-    // v1.0.7：速览改为「默认 6 + 更多收纳」——
-    //   默认常驻：任务 / 背包 / 笔记 / 相册 / 地图 / 记账；
-    //   其余（数据 / 成就 / 系统）收进「更多」按钮，点击展开完整华夫菜单。
+    // v1.0.7：速览改为「3x2 网格 + 右上角展开」——
+    //   收起态固定 6 格（任务/背包/笔记/相册/地图/记账），两行三列，不受历史自定义影响
+    //   （旧版本存过的显隐集合曾把网格挤成 4 格/2 列，违反 3x2 规格）；
+    //   其余入口（数据/成就/系统）由右上角「展开」按钮平滑放出/收回。
     val DEFAULT_IDS = setOf("tasks", "backpack", "notes", "album", "map", "accounting")
-    val defaultEntries = visible.filter { it.id in DEFAULT_IDS }
+    val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
     var expanded by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier.animateContentSize(
+            animationSpec = tween(300, easing = FastOutSlowInEasing)
+        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -719,64 +733,80 @@ private fun OverviewGrid(
         ) {
             // weight 让标题占据剩余宽度：大字号下标题换行也不会把右侧按钮挤出屏幕
             SectionHeader("🧭 速览", Modifier.weight(1f))
-            // 带文字的入口按钮：比纯图标更易发现、易点中（与「最近动态」的自定义入口同一规范）
+            // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
             TextButton(
-                onClick = onEditEntries,
+                onClick = { expanded = !expanded },
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.height(30.dp)
             ) {
-                Text("自定义", style = MaterialTheme.typography.labelMedium, color = AmberPrimary)
-            }
-        }
-
-        // v1.0.7：华夫菜单网格 —— 4 列方形图标格（大字号自动降列），
-        // 每格点击时有琥珀色聚光灯从触点扩散（高光跟随），低端机由 GlassTier 自动降级。
-        val cols = when {
-            LocalDensity.current.fontScale >= 1.3f -> 2
-            LocalDensity.current.fontScale >= 1.15f -> 3
-            else -> 4
-        }
-        // 基础网格 = 默认入口 + 「更多」按钮（仅当存在更多入口时显示）
-        val baseTiles = buildList {
-            addAll(defaultEntries)
-            if (moreEntries.isNotEmpty()) {
-                add(
-                    HomeEntry(
-                        id = "more",
-                        icon = if (expanded) "🔼" else "⋯",
-                        label = if (expanded) "收起" else "更多",
-                        sub = "",
-                        route = null
-                    )
+                Text(
+                    if (expanded) "收起 ▲" else "展开 ▼",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AmberPrimary,
+                    maxLines = 1
                 )
             }
         }
-        val tiles = if (expanded) baseTiles + moreEntries else baseTiles
 
-        tiles.chunked(cols).forEach { rowEntries ->
+        // v1.0.7：3 列网格（用户指定 3x2）；特大字号降为 2 列防挤压
+        val cols = if (LocalDensity.current.fontScale >= 1.5f) 2 else 3
+        defaultEntries.chunked(cols).forEach { rowEntries ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 rowEntries.forEach { entry ->
-                    if (entry.id == "more") {
-                        WaffleTile(
-                            icon = entry.icon,
-                            label = entry.label,
-                            modifier = Modifier.weight(1f)
-                        ) { expanded = !expanded }
-                    } else {
-                        WaffleTile(
-                            icon = entry.icon,
-                            label = entry.label,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (entry.route != null) onNavigate(entry.route) else onAccounting()
-                        }
+                    WaffleTile(
+                        icon = entry.icon,
+                        label = entry.label,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (entry.route != null) onNavigate(entry.route) else onAccounting()
                     }
                 }
                 // 末行不足一整行时用空白占位，保持左右对齐
                 repeat(cols - rowEntries.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+
+        // 展开区：更多入口 + 自定义入口，垂直展开 + 淡入淡出（与容器 animateContentSize 协同）
+        AnimatedVisibility(
+            visible = expanded && moreEntries.isNotEmpty(),
+            enter = expandVertically(tween(300, easing = FastOutSlowInEasing)) +
+                fadeIn(tween(220)),
+            exit = shrinkVertically(tween(260, easing = FastOutSlowInEasing)) +
+                fadeOut(tween(180))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                moreEntries.chunked(cols).forEach { rowEntries ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        rowEntries.forEach { entry ->
+                            WaffleTile(
+                                icon = entry.icon,
+                                label = entry.label,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                            }
+                        }
+                        repeat(cols - rowEntries.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                // 自定义入口（原右上角按钮，收进展开区）
+                TextButton(
+                    onClick = onEditEntries,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 4.dp)
+                ) {
+                    Text(
+                        "自定义速览入口",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

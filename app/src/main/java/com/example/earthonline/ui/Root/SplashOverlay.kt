@@ -51,8 +51,10 @@ import com.example.earthonline.R
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.delay
 
-/** 开屏最短展示时长：太短像闪一下，太长让人等。900ms 是「看得清但不觉得拖」的甜点。 */
-const val SPLASH_MIN_MS = 900L
+/** 开屏最短展示时长：v1.0.7 由 900ms 提到 1400ms —— 真机反馈「动画丢失」，
+ *  实际是动画太短、被当作闪一下忽略了。1.4s 让「图标放大 + 文字上浮 + 进度线」
+ *  完整走完一个可辨认的节奏，仍不至于让人等得烦躁。 */
+const val SPLASH_MIN_MS = 1400L
 
 /**
  * v1.0.0：开屏底色 = **纯白**（浅色模式）。

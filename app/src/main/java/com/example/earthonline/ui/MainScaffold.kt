@@ -217,25 +217,24 @@ fun MainScaffold(
                             )
                     )
                     // ② 悬浮毛玻璃胶囊（含柔影）
+                    // v1.0.7：真机反馈「太高」—— 高度 60 -> 52dp，左右留白 16 -> 12dp，
+                    // 底部留白 14 -> 8dp，圆角随高度收为 24dp，阴影同步减弱（也更省 GPU）。
+                    // 52dp 仍高于 48dp 最小触摸目标，四个 Tab 的点击热区不受影响。
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 14.dp)
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 8.dp)
                     ) {
                         GlassSurface(
-                            shape = RoundedCornerShape(28.dp),
+                            shape = RoundedCornerShape(24.dp),
                             showBorder = true,
-                            /* v1.0.6：胶囊高度收到 60dp（原 NavigationBar 满铺 80dp），
-                               视觉上明显更轻盈，也让主页内容多出一屏空间。
-                               固定高度而非「内容撑高」：底栏是四个等分格子，高度必须确定，
-                               否则图标 / 文字比例会随字号档位漂移。 */
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(60.dp)
+                                .height(52.dp)
                                 .shadow(
-                                    elevation = 20.dp,
-                                    shape = RoundedCornerShape(28.dp),
+                                    elevation = 12.dp,
+                                    shape = RoundedCornerShape(24.dp),
                                     ambientColor = Color.Black,
                                     spotColor = Color.Black
                                 )

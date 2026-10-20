@@ -90,9 +90,15 @@ class MainActivity : ComponentActivity() {
            万一 Compose 首帧还没画完，露出的也是主主题的 windowBackground（同样是米色），不会白闪。 */
         splash.setOnExitAnimationListener { splashScreenView -> splashScreenView.remove() }
 
-        // 首帧绘制前读偏好只需几十毫秒；这段时间保持启动图，
-        // 避免"老用户先看到引导页再跳主页"的错帧（也是冷启动观感的一部分）
-        splash.setKeepOnScreenCondition { !contentReady }
+        /* v1.0.7：撤掉 keepOnScreenCondition —— 这是「开屏动画丢失」的根因。
+           之前用 `!contentReady` 把系统启动图一直摁在屏幕上：偏好读取慢的设备上，
+           用户看到的是好几秒「纯色空屏」（系统启动图只有一张无图标的纯色底），
+           等 Compose 开屏页 underneath 早就把动画播完了 —— 动画等于没放。
+           现在改为：系统启动图在首帧（= Compose 开屏页第一帧）立即让位，
+           「纯色背景 -> 图标放大/文字上浮/进度线 -> 主页」全程由 SplashOverlay 播放，
+           偏好读取期间动画照常进行，无空屏、无闪跳。
+           首帧内容安全：onboardingDone 读出前 Root 只铺 SplashBackground 纯色层。 */
+        // 首帧绘制前读偏好只需几十毫秒（v1.0.7 起不再用它摁住系统启动图）
 
         startRoute = intent?.getStringExtra(EXTRA_ROUTE) ?: Screen.Home.route
         // v1.0.5 灵感接力：通知点击带 inspire extra

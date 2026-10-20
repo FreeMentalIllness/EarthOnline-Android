@@ -104,7 +104,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("📷 记忆相册") },
