@@ -5,6 +5,7 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,41 +14,62 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.FormatUnderlined
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.util.rememberImagePicker
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 笔记编辑页（v1.0.11 彻底重写为 WYSIWYG 富文本）。
+ * 笔记编辑页（v1.0.12 第三版：标题 + 工具栏 + 正文一次到位）。
  *
- * 核心变化：正文改用 richeditor-compose 的 [RichTextEditor]（所见即所得）——
- * 加粗 / 斜体 / 下划线 / 列表等操作直接在渲染后的文本上生效（toggleSpanStyle），
- * 不再向输入框插入 `**` `<u>` 等 Markdown 源码；存储层仍是 Markdown
- * （保存时 toMarkdown()，载入时 setMarkdown()），跨端与旧数据完全兼容。
- * 取消「无/灵感/待办/日记/想法」默认分类，标签完全由用户自定义。
+ * 本轮解决的三个硬问题：
+ *  1. 【新建即完整】标题输入框 / 格式化工具栏 / 正文区同时在场，进来就能写、就能排版；
+ *  2. 【绝不显示源码】正文用 richeditor 富文本渲染（WYSIWYG）。载入时先 setMarkdown，
+ *     若解析后仍残留 `**` / `<u>` / `##` 等源码标记，再走 HTML 解析兜底，
+ *     最后退化为纯文本 —— 任何情况下都不会把 Markdown 源码糊在正文里；
+ *  3. 【工具栏恒在】工具栏挂在 Scaffold 的 bottomBar 上并带 imePadding，
+ *     键盘弹出时整体上浮贴在键盘之上，不会被遮挡。
+ *
+ * 存储：markdown 列（跨端兼容）+ text 纯文本列兜底；标题以 `# 标题` 形式存在
+ * Markdown 首行，不新增数据库列，升级零迁移。
  */
 @Composable
 fun NoteEditorRoute(
@@ -68,22 +90,58 @@ fun NoteEditorScreen(
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    // v1.0.11：WYSIWYG 富文本状态（编辑即渲染，不再暴露 Markdown 源码）
+    val context = LocalContext.current
     val rich = rememberRichTextState()
+
+    var title by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
+    var showTagRow by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
+    var bodyScale by remember { mutableFloatStateOf(1f) }
+
+    /* ---------- 撤销 / 重做：自建快照栈（richeditor 本版无内置 undo） ---------- */
+    val history = remember { mutableStateListOf<String>() }
+    var histIndex by remember { mutableIntStateOf(-1) }
+    var applyingHistory by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) {
         if (id.isNotBlank()) {
-            val m = vm.getNote(id)
-            if (m != null) {
-                runCatching { rich.setMarkdown(m.text) }
+            vm.getNote(id)?.let { m ->
+                val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
+                val (t, rest) = splitTitle(md)
+                title = t
+                loadRich(rich, rest)
                 tags = NotesViewModel.tagsOf(m)
             }
         }
         loaded = true
+        history.clear()
+        history.add(rich.toHtml())
+        histIndex = 0
+    }
+
+    // 输入停顿 400ms 记一次快照；主动 undo/redo 期间不记录
+    LaunchedEffect(Unit) {
+        snapshotFlow { rich.toHtml() }.collectLatest { html ->
+            if (applyingHistory) return@collectLatest
+            delay(400)
+            if (history.getOrNull(histIndex) != html) {
+                while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
+                history.add(html)
+                if (history.size > 80) history.removeAt(0)
+                histIndex = history.lastIndex
+            }
+        }
+    }
+
+    fun applyHistory(target: Int) {
+        if (target < 0 || target > history.lastIndex) return
+        applyingHistory = true
+        histIndex = target
+        runCatching { rich.setHtml(history[target]) }
+        applyingHistory = false
     }
 
     fun commitTag() {
@@ -92,12 +150,7 @@ fun NoteEditorScreen(
         tagInput = ""
     }
 
-    /* ==================== 工具栏状态与助手 ==================== */
-    val context = LocalContext.current
-    /** 字号档位（1f / 1.15f / 1.3f 循环），作用于编辑器正文 */
-    var bodyScale by remember { mutableFloatStateOf(1f) }
-
-    /** 把 content uri 复制进应用私有 note_media 目录，成功回调文件路径；失败 Toast */
+    /* ---------- 图片 / 附件：复制到私有目录，富文本里以链接态呈现 ---------- */
     fun importIntoNoteMedia(uri: Uri, fallbackName: String, onDone: (String) -> Unit) {
         scope.launch {
             val path = withContext(Dispatchers.IO) {
@@ -123,33 +176,47 @@ fun NoteEditorScreen(
         }
     }
 
-    // 插入图片 / 插入本地文件：以富文本链接形态插入（WYSIWYG 可见可点），
-    // 导出 Markdown 时为 [名称](file://路径)，与列表页附件打开逻辑完全兼容。
-    val pickNoteImage = rememberImagePicker(onPicked = { uri ->
-        importIntoNoteMedia(uri, "image.jpg") { path ->
-            rich.addLink("🖼 图片", "file://$path")
-        }
+    val pickImage = rememberImagePicker(onPicked = { uri ->
+        importIntoNoteMedia(uri, "image.jpg") { path -> rich.addLink("🖼 图片", "file://$path") }
     })
-    val pickNoteFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri ->
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             importIntoNoteMedia(uri, "file") { path ->
-                val display = path.substringAfterLast('_')
-                rich.addLink("📎 $display", "file://$path")
+                rich.addLink("📎 ${path.substringAfterLast('_')}", "file://$path")
             }
         }
     }
 
-    fun save(): Boolean {
-        val text = rich.toMarkdown()
-        if (text.isBlank()) return false
+    /* ---------- 待办：行首 ☐ / ☑，再点一次切换勾选态 ---------- */
+    fun toggleTodo() {
+        val txt = rich.toText()
+        val caret = rich.selection.start.coerceIn(0, txt.length)
+        val nl = txt.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
+        val lineStart = if (nl < 0) 0 else nl + 1
+        if (lineStart < txt.length && (txt[lineStart] == '☐' || txt[lineStart] == '☑')) {
+            val next = if (txt[lineStart] == '☐') "☑" else "☐"
+            runCatching { rich.replaceTextRange(TextRange(lineStart, lineStart + 1), next) }
+        } else {
+            runCatching { rich.addTextAtIndex(lineStart, "☐ ") }
+        }
+    }
+
+    fun save() {
+        val plain = rich.toText().trim()
+        val t = title.trim()
+        if (t.isBlank() && plain.isBlank()) {
+            onBack()
+            return
+        }
         commitTag()
+        val mdBody = rich.toMarkdown().trim()
+        val markdown = if (t.isBlank()) mdBody else "# $t\n\n$mdBody"
+        val plainBody = if (t.isBlank()) plain
+        else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
         scope.launch {
-            vm.saveNote(id.ifBlank { null }, text, tags)
+            vm.saveNote(id.ifBlank { null }, plainBody.ifBlank { t }, tags, markdown)
             onBack()
         }
-        return true
     }
 
     Scaffold(
@@ -158,14 +225,12 @@ fun NoteEditorScreen(
             TopAppBar(
                 title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        // 有内容就顺手存一下，避免用户以为丢了
-                        if (rich.toMarkdown().isNotBlank()) save() else onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    IconButton(onClick = { save() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回并保存")
                     }
                 },
                 actions = {
+                    TextButton(onClick = { save() }, enabled = loaded) { Text("保存") }
                     if (id.isNotBlank()) {
                         IconButton(onClick = { showDelete = true }) {
                             Icon(
@@ -176,6 +241,36 @@ fun NoteEditorScreen(
                         }
                     }
                     SettingsIconButton(actions = moreActions)
+                }
+            )
+        },
+        /* 工具栏挂在 bottomBar：imePadding 让它在键盘弹出时贴在键盘上沿，永不被遮挡 */
+        bottomBar = {
+            EditorFormatBar(
+                modifier = Modifier.imePadding(),
+                canUndo = histIndex > 0,
+                canRedo = histIndex >= 0 && histIndex < history.lastIndex,
+                onUndo = { applyHistory(histIndex - 1) },
+                onRedo = { applyHistory(histIndex + 1) },
+                onBold = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                onItalic = {
+                    rich.toggleSpanStyle(
+                        SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    )
+                },
+                onUnderline = { rich.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                onHeading = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
+                onTodo = { toggleTodo() },
+                onBullet = { rich.toggleUnorderedList() },
+                onOrdered = { rich.toggleOrderedList() },
+                onImage = { pickImage() },
+                onFile = { pickFile.launch("*/*") },
+                onFontSize = {
+                    bodyScale = when (bodyScale) {
+                        1f -> 1.15f
+                        1.15f -> 1.3f
+                        else -> 1f
+                    }
                 }
             )
         }
@@ -191,30 +286,49 @@ fun NoteEditorScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 标签编辑区（完全用户自定义，无默认分类）
+            /* 标题：进来第一眼就是标题框（对标参考图四的大标题） */
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it.replace("\n", "") },
+                placeholder = { Text("标题") },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                shape = RoundedCornerShape(14.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // 标签：默认收起，避免首屏被标签区挤占
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                tags.forEach { t ->
+                tags.take(4).forEach { t ->
                     InputChip(
                         selected = false,
                         onClick = { tags = tags - t },
-                        label = { Text("#$t") },
+                        label = { Text("#$t", style = MaterialTheme.typography.labelSmall) },
                         trailingIcon = {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = "移除标签",
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     )
                 }
+                TextButton(onClick = { showTagRow = !showTagRow }) {
+                    Text(
+                        if (tags.isEmpty() && !showTagRow) "＋ 标签" else "标签",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+            if (showTagRow) {
                 OutlinedTextField(
                     value = tagInput,
                     onValueChange = {
@@ -226,51 +340,37 @@ fun NoteEditorScreen(
                             tagInput = parts.last()
                         } else tagInput = it
                     },
-                    placeholder = { Text("加标签") },
+                    placeholder = { Text("输入标签，回车确认") },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { commitTag() }),
-                    modifier = Modifier.weight(1f).defaultMinSize(minWidth = 100.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            // v1.0.11：WYSIWYG 工具栏 —— 点击直接在富文本上生效，绝不插入 Markdown 符号
-            FormatToolbar(
-                onTitle = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                onBold = { rich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-                onItalic = { rich.toggleSpanStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) },
-                onUnderline = { rich.toggleSpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                onFontSize = {
-                    bodyScale = when (bodyScale) {
-                        1f -> 1.15f
-                        1.15f -> 1.3f
-                        else -> 1f
-                    }
-                },
-                onTodo = { rich.toggleUnorderedList() },
-                onQuote = { rich.toggleCodeSpan() },
-                onOrdered = { rich.toggleOrderedList() },
-                onImage = { pickNoteImage() },
-                onFile = { pickNoteFile.launch("*/*") }
-            )
-
-            // WYSIWYG 编辑器：编辑即渲染，所见即所得
-            RichTextEditor(
-                state = rich,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = (16 * bodyScale).sp,
-                    lineHeight = (28 * bodyScale).sp
-                ),
-                placeholder = { Text("写点什么…") },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f)
-            )
-
-            Button(
-                onClick = { save() },
-                enabled = rich.toMarkdown().isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("保存") }
+            /* 正文区：外层玻璃卡 + 内层高不透明底板 ——
+               壁纸再花，正文底色也稳定，字永远读得清（参考图二的磨砂质感）。 */
+            GlassCard(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                shape = RoundedCornerShape(UiDimens.CardRadius)
+            ) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
+                )
+                RichTextEditor(
+                    state = rich,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = (16 * bodyScale).sp,
+                        lineHeight = (28 * bodyScale).sp
+                    ),
+                    placeholder = { Text("写点什么…支持加粗、列表、待办、插图") },
+                    shape = RoundedCornerShape(UiDimens.CardRadius),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
         }
     }
 
@@ -294,68 +394,151 @@ fun NoteEditorScreen(
 }
 
 /**
- * v1.0.11：WYSIWYG 笔记格式工具栏（对标专业笔记软件）——
- * B / I / U / A± / 待办 / H / 1. 有序 / ❝ / 🖼 / 📎，单行横向滚动恒定可见。
- * 全部操作直接作用于富文本（toggleSpanStyle / toggle 列表），不再插入 Markdown 符号。
+ * 富文本载入的三级兜底 —— 保证「绝不在正文里显示 Markdown 源码」：
+ * ① setMarkdown（正常路径，同库往返）；
+ * ② 若仍残留源码标记 → 走 HTML 解析（`<u>` 之类内联标签只有 HTML 通道认）；
+ * ③ 再不行 → 纯文本，至少用户看到的是干净文字。
+ */
+private fun loadRich(rich: RichTextState, source: String) {
+    if (source.isBlank()) return
+    runCatching { rich.setMarkdown(source) }
+    val probe = runCatching { rich.toText() }.getOrDefault("")
+    val hasResidue = probe.contains("**") ||
+        probe.contains("<u>") || probe.contains("</u>") ||
+        probe.contains("](") || probe.contains("##")
+    if (hasResidue) {
+        val htmlOk = runCatching { rich.setHtml(markdownToHtml(source)) }.isSuccess
+        val after = runCatching { rich.toText() }.getOrDefault("")
+        if (!htmlOk || after.contains("**") || after.contains("<u>")) {
+            runCatching { rich.setText(markdownToPlain(source)) }
+        }
+    }
+}
+
+/**
+ * 极简 Markdown → HTML（只服务兜底路径）：标题 / 粗体 / 斜体 / 链接 / 换行。
+ * 列表标记降级为「• 」文字 —— 宁可少一层语义，也不让源码露出来。
+ */
+private fun markdownToHtml(md: String): String {
+    val sb = StringBuilder()
+    md.lines().forEach { raw ->
+        val line = raw.trimEnd()
+        when {
+            line.isBlank() -> sb.append("<br>")
+            line.startsWith("### ") ->
+                sb.append("<h3>").append(inlineHtml(line.removePrefix("### "))).append("</h3>")
+            line.startsWith("## ") ->
+                sb.append("<h2>").append(inlineHtml(line.removePrefix("## "))).append("</h2>")
+            line.startsWith("# ") ->
+                sb.append("<h1>").append(inlineHtml(line.removePrefix("# "))).append("</h1>")
+            line.startsWith("- ") || line.startsWith("* ") ->
+                sb.append("<p>• ").append(inlineHtml(line.substring(2))).append("</p>")
+            else -> sb.append("<p>").append(inlineHtml(line)).append("</p>")
+        }
+    }
+    return sb.toString()
+}
+
+private fun inlineHtml(text: String): String {
+    var s = text
+    s = s.replace(Regex("\\*\\*(.+?)\\*\\*"), "<b>$1</b>")
+    s = s.replace(Regex("(?<!\\*)\\*(?!\\*)(.+?)\\*(?!\\*)"), "<i>$1</i>")
+    s = s.replace(Regex("\\[([^]]{0,120})]\\(([^)]{0,300})\\)"), "<a href=\"$2\">$1</a>")
+    return s
+}
+
+/** 把首行 `# 标题` 拆出来；没有标题行时 title 为空、正文原样。 */
+private fun splitTitle(md: String): Pair<String, String> {
+    val firstLine = md.lineSequence().firstOrNull().orEmpty()
+    if (!firstLine.trimStart().startsWith("#")) return "" to md
+    val t = firstLine.trim().trimStart('#').trim()
+    val rest = md.substring(firstLine.length).trimStart('\n')
+    return t to rest
+}
+
+/**
+ * 编辑工具栏（对标参考图四）：撤销 / 重做 | B I U H | ☑ 待办 • 列表 1. 有序 | 🖼 图片 📎 附件 | A±
+ * 单行横向滚动，恒定可见；全部按钮直接作用于富文本，不插入任何 Markdown 符号。
  */
 @Composable
-private fun FormatToolbar(
-    onTitle: () -> Unit,
+private fun EditorFormatBar(
+    modifier: Modifier = Modifier,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onBold: () -> Unit,
     onItalic: () -> Unit,
     onUnderline: () -> Unit,
-    onFontSize: () -> Unit,
+    onHeading: () -> Unit,
     onTodo: () -> Unit,
-    onQuote: () -> Unit,
+    onBullet: () -> Unit,
     onOrdered: () -> Unit,
     onImage: () -> Unit,
-    onFile: () -> Unit
+    onFile: () -> Unit,
+    onFontSize: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        tonalElevation = 3.dp
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FormatButton("B", onBold, bold = true)
-            FormatButton("I", onItalic, italic = true)
-            FormatButton("U", onUnderline, underline = true)
-            FormatButton("A±", onFontSize)
-            FormatButton("☑ 待办", onTodo)
-            FormatButton("H", onTitle)
-            FormatButton("1. 有序", onOrdered)
-            FormatButton("❝", onQuote)
-            FormatButton("🖼 图片", onImage)
-            FormatButton("📎 文件", onFile)
+            ToolIcon(Icons.Default.Undo, "撤销", canUndo, onUndo)
+            ToolIcon(Icons.Default.Redo, "重做", canRedo, onRedo)
+            ToolDivider()
+            ToolIcon(Icons.Default.FormatBold, "加粗", true, onBold)
+            ToolIcon(Icons.Default.FormatItalic, "斜体", true, onItalic)
+            ToolIcon(Icons.Default.FormatUnderlined, "下划线", true, onUnderline)
+            ToolIcon(Icons.Default.Title, "标题", true, onHeading)
+            ToolDivider()
+            ToolIcon(Icons.Default.CheckBox, "待办", true, onTodo)
+            ToolIcon(Icons.Default.FormatListBulleted, "无序列表", true, onBullet)
+            ToolIcon(Icons.Default.FormatListNumbered, "有序列表", true, onOrdered)
+            ToolDivider()
+            ToolIcon(Icons.Default.Image, "插入图片", true, onImage)
+            ToolIcon(Icons.Default.AttachFile, "插入附件", true, onFile)
+            ToolDivider()
+            ToolText("A±", onFontSize)
         }
     }
 }
 
 @Composable
-private fun FormatButton(
-    text: String,
-    onClick: () -> Unit,
-    bold: Boolean = false,
-    italic: Boolean = false,
-    underline: Boolean = false
-) {
-    OutlinedButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-        modifier = Modifier.height(32.dp)
-    ) {
-        Text(
-            text,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
-            fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal,
-            textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None,
-            style = MaterialTheme.typography.labelMedium
+private fun ToolIcon(icon: ImageVector, desc: String, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(38.dp)) {
+        Icon(
+            icon,
+            contentDescription = desc,
+            modifier = Modifier.size(20.dp),
+            tint = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
         )
     }
+}
+
+@Composable
+private fun ToolText(text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.height(38.dp)) {
+        Text(text, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun ToolDivider() {
+    Box(
+        Modifier
+            .padding(horizontal = 4.dp)
+            .width(1.dp)
+            .height(20.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    )
 }

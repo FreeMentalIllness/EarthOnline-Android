@@ -70,6 +70,7 @@ import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.UserAvatar
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.ui.theme.GlassSpring
 import com.example.earthonline.ui.theme.GlassSpringIntSize
 import com.example.earthonline.ui.theme.pressScale
@@ -854,20 +855,22 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
 }
 
 /**
- * v1.0.7：华夫菜单单格。方形图标 + 标签，居中排布；
- * 点击时从触点扩散一团琥珀色聚光灯（高光跟随触点），抬手即消散。
+ * v1.0.12：华夫菜单单格 —— 材质统一为 [GlassSurface]。
+ * 之前这里是一个裸 Box + 1dp outlineVariant 描边，跟任务/笔记/背包的液态玻璃卡
+ * 完全是两套材质（无毛玻璃、无底部暗化、无高光边），是「速览卡片与其它卡片不一致」的根源。
+ * 现在：同一套玻璃底 + 同一套色散高光描边 + 同一 16dp 圆角，只保留触点聚光灯与按压缩放。
  */
 @Composable
 private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var spot by remember { mutableStateOf<Offset?>(null) }
-    val shape = RoundedCornerShape(UiDimens.ItemRadius)
-    Box(
-        modifier
+    val shape = RoundedCornerShape(UiDimens.CardRadius)
+    GlassSurface(
+        shape = shape,
+        showBorder = true,
+        modifier = modifier
             .aspectRatio(1f)
-            .clip(shape)
             // v1.0.7：按压缩放（94% -> 100% spring 弹回），连续按压反馈
             .pressScale(pressed = spot != null, pressedScale = 0.94f)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { offset ->
@@ -878,23 +881,28 @@ private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifie
                     onTap = { onClick() }
                 )
             }
-            .drawWithContent {
-                drawContent()
-                val s = spot
-                if (s != null) {
-                    val r = size.maxDimension * 0.8f
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(AmberPrimary.copy(alpha = 0.32f), Color.Transparent),
-                            center = s,
-                            radius = r
-                        ),
-                        radius = r,
-                        center = s
-                    )
-                }
-            }
     ) {
+        // 触点聚光灯（只叠在最上层，不参与测量）
+        Box(
+            Modifier
+                .matchParentSize()
+                .drawWithContent {
+                    drawContent()
+                    val s = spot
+                    if (s != null) {
+                        val r = size.maxDimension * 0.8f
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(AmberPrimary.copy(alpha = 0.32f), Color.Transparent),
+                                center = s,
+                                radius = r
+                            ),
+                            radius = r,
+                            center = s
+                        )
+                    }
+                }
+        )
         Column(
             Modifier.fillMaxSize().padding(8.dp),
             verticalArrangement = Arrangement.Center,

@@ -31,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.earthonline.data.network.UpdateInfo
 import com.example.earthonline.data.network.UpdateRepository
@@ -76,10 +78,30 @@ class MainActivity : ComponentActivity() {
     // v1.0.5 灵感接力：点通知进入 App 后弹「转待办」面板
     private var inspirePending by mutableStateOf(false)
 
+    @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         // Android 12+ SplashScreen API：清单已设 Theme.EarthOnline.Splash（postSplashScreenTheme 指回主主题）
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        /* v1.0.12：全面屏（edge-to-edge）—— 修复底部导航栏下方那条「白线」的根因。
+           旧配置里主题把 android:navigationBarColor 设成 ?attr/colorSurface（浅色主题=纯白），
+           而窗口内容又不延伸到系统栏 —— 于是胶囊底栏与屏幕底缘之间露出一条系统栏白条。
+           现在：内容直达屏幕边缘 + 系统栏全透明 + 关闭系统强制对比遮罩，
+           底栏下方直接透出壁纸；纯色背景下与背景同色，不再有割裂白杠。 */
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        val nightMode = (resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !nightMode
+            isAppearanceLightNavigationBars = !nightMode
+        }
 
         /* v1.2.2：撤掉系统默认的退出动画，直接移除启动图层。
            默认行为是让启动图上的图标再「缩放 + 淡出」一次，

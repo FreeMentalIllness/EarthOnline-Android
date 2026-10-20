@@ -706,7 +706,7 @@ private fun TaskRow(
                 // v1.0.5：多选模式下选中项高亮描边
                 .then(
                     if (selected) Modifier.border(
-                        2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(UiDimens.ItemRadius)
+                        2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(UiDimens.CardRadius)
                     ) else Modifier
                 )
                 .drawWithContent {
@@ -724,7 +724,7 @@ private fun TaskRow(
                         )
                     }
                 },
-            shape = RoundedCornerShape(UiDimens.ItemRadius)
+            shape = RoundedCornerShape(UiDimens.CardRadius)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),

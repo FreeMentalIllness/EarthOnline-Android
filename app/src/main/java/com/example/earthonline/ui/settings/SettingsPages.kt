@@ -394,29 +394,8 @@ fun GeneralRoute(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("数据管理", style = MaterialTheme.typography.labelMedium)
-                    SettingsNavItem(
-                        icon = Icons.Filled.DeleteOutline,
-                        label = "回收站",
-                        hint = "已删除内容保留 30 天，可随时恢复",
-                        onClick = { moreActions.onNavigate(Screen.RecycleBin.route) }
-                    )
-                }
-            }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("AI 对话", style = MaterialTheme.typography.labelMedium)
-                    val cfg = vm.parseAiConfig(aiConfigJson)
-                    Text(
-                        "当前：${if (cfg.baseUrl.isBlank()) "未配置" else cfg.baseUrl}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(onClick = { showAiConfig = true }, modifier = Modifier.fillMaxWidth()) { Text("配置 AI 接口") }
-                }
-            }
+            /* v1.0.12：删除「回收站」「AI 对话」两块 —— 入口已统一收在设置首页
+               （数据管理 / AI 配置），二级页不再重复，避免同一功能两处入口。 */
         }
     }
 }
@@ -746,60 +725,9 @@ fun BackupSyncRoute(
                     )
                 }
             }
-            // v1.0.5：危险区 —— 清空数据（醒目确认 + 可选删云端 + 防同步拉回，与 Web/Windows 三端一致）
-            Card(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-                )
-            ) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "危险区",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        "清空本机全部用户数据并恢复为全新种子数据。主题、壁纸、WebDAV 与 AI 配置等应用设置会保留。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = { showClearData = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("🗑️ 清空数据", color = MaterialTheme.colorScheme.error) }
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                val msg = vm.resyncToCloud()
-                                snackbar.showSnackbar(msg)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("☁️ 重新同步（上传当前数据到云端）") }
-                    Text(
-                        "「重新同步」会把当前（清空后的）数据上传云端覆盖旧备份，用于恢复多设备同步。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("隐私政策", style = MaterialTheme.typography.labelMedium)
-                    Text(
-                        "本应用不收集任何数据，所有内容只存在这台设备上。完整说明可随时查阅。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = { showPrivacy = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("查看隐私政策") }
-                }
-            }
+            /* v1.0.12：「危险区（清空数据）」与「隐私政策」已从本页移出 ——
+               清空数据归入设置首页「数据管理」，隐私政策归入「关于」。
+               本页只负责备份/同步本身，职责单一。 */
         }
     }
 }

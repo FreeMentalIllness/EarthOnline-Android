@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -80,13 +81,15 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                 )
             }
 
-            /* ==================== v1.0.11：分组设置 ====================
-               外观 / 数据与隐私 / AI / 关于；隐私政策 / AI 配置 / 回收站三个
-               高频入口统一提到设置首页；末尾新增「危险区」收纳清除所有数据。 */
+            /* ==================== v1.0.12：设置目录重组（去重 + 按功能归类） ====================
+               ① 去重：「通用」二级页里的「回收站」「AI 配置」、「数据与备份」二级页里的
+                  「清空数据」「隐私政策」全部删除 —— 入口只在首页出现一次，不再两处并存。
+               ② 归类：数据类操作（备份 / 回收站 / 清除数据）统一进「数据管理」，路径清晰；
+                  隐私政策归入「关于」（它是说明性内容，不是数据操作）。 */
             item {
-                SettingsSectionLabel("外观")
+                SettingsSectionLabel("外观与体验")
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
                     shape = RoundedCornerShape(18.dp),
                     tonalElevation = 1.dp
                 ) {
@@ -105,15 +108,25 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             icon = Icons.Filled.Build,
                             chip = ChipTeal,
                             label = "通用",
-                            hint = "提醒 · 音效 · 其他偏好"
+                            hint = "提醒 · 通知 · 音效"
                         ) { moreActions.onNavigate(Screen.SettingsGeneral.route) }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 66.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SettingsGroupRow(
+                            icon = Icons.Filled.SmartToy,
+                            chip = ChipPurple,
+                            label = "AI 配置",
+                            hint = "接口地址 · 密钥 · 模型"
+                        ) { moreActions.onNavigate(Screen.Ai.route) }
                     }
                 }
             }
             item {
-                SettingsSectionLabel("数据与隐私")
+                SettingsSectionLabel("数据管理")
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
                     shape = RoundedCornerShape(18.dp),
                     tonalElevation = 1.dp
                 ) {
@@ -139,35 +152,18 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                         SettingsGroupRow(
-                            icon = Icons.Filled.Lock,
-                            chip = ChipAmber,
-                            label = "隐私政策",
-                            hint = "数据收集 · 权限用途 · 第三方组件"
-                        ) { showPrivacy = true }
-                    }
-                }
-            }
-            item {
-                SettingsSectionLabel("AI")
-                Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                    shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 1.dp
-                ) {
-                    Column {
-                        SettingsGroupRow(
-                            icon = Icons.Filled.SmartToy,
-                            chip = ChipPurple,
-                            label = "AI 配置",
-                            hint = "接口地址 · 密钥 · 模型"
-                        ) { moreActions.onNavigate(Screen.Ai.route) }
+                            icon = Icons.Filled.DeleteForever,
+                            chip = ChipRed,
+                            label = "清除所有数据",
+                            hint = "清空本机用户数据，不可撤销"
+                        ) { showDanger = true }
                     }
                 }
             }
             item {
                 SettingsSectionLabel("关于")
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
                     shape = RoundedCornerShape(18.dp),
                     tonalElevation = 1.dp
                 ) {
@@ -178,23 +174,17 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
                             label = "关于",
                             hint = "版本 · 团队 · 赞助 · 更新"
                         ) { moreActions.onNavigate(Screen.SettingsAbout.route) }
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 66.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SettingsGroupRow(
+                            icon = Icons.Filled.Lock,
+                            chip = ChipAmber,
+                            label = "隐私政策",
+                            hint = "数据收集 · 权限用途 · 第三方组件"
+                        ) { showPrivacy = true }
                     }
-                }
-            }
-            // v1.0.11：危险区 —— 清除所有数据（红色警示 + 二次确认）
-            item {
-                SettingsSectionLabel("危险区")
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                    shape = RoundedCornerShape(18.dp),
-                    tonalElevation = 1.dp
-                ) {
-                    SettingsGroupRow(
-                        icon = Icons.Filled.DeleteOutline,
-                        chip = ChipRed,
-                        label = "清除所有数据",
-                        hint = "清空本机全部用户数据，不可撤销"
-                    ) { showDanger = true }
                 }
             }
         }

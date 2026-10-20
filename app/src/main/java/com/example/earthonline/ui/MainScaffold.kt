@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -204,6 +206,14 @@ fun MainScaffold(
     ProvideLiquidGlass(liquidGlass) {
         Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        /* v1.0.12：全面屏（edge-to-edge）适配。
+           MainActivity 已 setDecorFitsSystemWindows(false)，窗口内容直达屏幕边缘 ——
+           底部那条「白线」的根因就是旧配置 `navigationBarColor = ?attr/colorSurface`
+           （浅色主题下是纯白），在壁纸上像一条割裂的白杠。
+           外层 Scaffold 不再自己吃系统栏 inset（contentWindowInsets = 0），
+           由各页内层 Scaffold 的 TopAppBar / bottomBar 各自处理，
+           避免「外层 + 内层」双重加深，把内容顶下去两倍状态栏高度。 */
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
             /* v1.0.9：底部导航终版 —— 严格对标参考截图的紧凑悬浮胶囊。
                ① 【占位根因修复】此前 120dp 渐隐蒙版 Box 参与 bottomBar 测量，
@@ -310,7 +320,9 @@ fun MainScaffold(
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = innerPadding.calculateTopPadding() + 8.dp),
+                        // v1.0.12：全面屏后外层 Scaffold 不再吃 inset，横幅自己避让状态栏
+                        .statusBarsPadding()
+                        .padding(top = 8.dp),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
                     color = MaterialTheme.colorScheme.errorContainer,
                     tonalElevation = 4.dp

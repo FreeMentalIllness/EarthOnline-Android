@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -105,8 +106,8 @@ fun GlassSurface(
        - FLAT 档（低端机）：高对比度半透明纯色底板，不透明度拉满，优先可读性、零 GPU 消费。
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
-        tier == GlassTier.FLAT -> 0.86f to 0.86f
-        else -> 0.62f to 0.50f
+        tier == GlassTier.FLAT -> 0.94f to 0.94f
+        else -> 0.74f to 0.62f
     }
     val tintBrush = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -171,10 +172,11 @@ fun GlassSurface(
         }
         // 3) 独立可读性遮罩（GlassAccessibilityMode 的核心）：
         //    与模糊层解耦的纯色 surface 蒙层，无论壁纸多花、模糊多弱，都给文字一层稳定底色。
-        //    - 液态玻璃开启（GPU 档）：补 0.18 的 surface 蒙层，把有效不透明度抬到 ~0.7，
-        //      文字对比度稳；仍保留模糊透出的层次感。
+        //    - 液态玻璃开启（GPU 档）：补 0.24 的 surface 蒙层（v1.0.12 由 0.18 上调），
+        //      把有效不透明度抬到 ~0.82，任意壁纸下正文对比度都在 WCAG AA 以上；
+        //      同时仍保留壁纸的色相与模糊层次，不会退化成死灰面板。
         //    - FLAT 档（低端机 / 性能降级）：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
-        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.18f
+        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.24f
         if (scrimAlpha > 0f) {
             Box(
                 Modifier
@@ -225,22 +227,23 @@ fun GlassSurface(
 }
 
 /**
- * 主页卡片级玻璃容器：全透明毛玻璃 + 微弱背景暗化遮罩。
- * 红线：壁纸可能过亮过花，正文必须有稳定对比度 —— 遮罩只压 5% 黑，
- * 既能托住文字，又不会把玻璃变回「死灰面板」。
+ * 卡片级玻璃容器（全站列表卡 / 概览卡的唯一材质）：毛玻璃 + 独立暗化遮罩。
+ * 红线：壁纸可能过亮过花，正文必须有稳定对比度 —— v1.0.12 起内层暗化从 5% 提到 10%，
+ * 配合外层 scrim（0.24 surface）把卡片内文字区压到稳定的中低亮度，
+ * 既保住「背景半透明、透出壁纸色相」的质感，又保证正文清晰可读。
  * 业务里替代 Material Card 使用；内容按自然测量，调用方自带 padding。
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(20.dp),
+    shape: Shape = RoundedCornerShape(16.dp),
     content: @Composable BoxScope.() -> Unit
 ) {
     GlassSurface(modifier = modifier, shape = shape, showBorder = true) {
         Box(
             Modifier
                 .matchParentSize()
-                .background(Color.Black.copy(alpha = 0.05f))
+                .background(Color.Black.copy(alpha = if (isSystemInDarkTheme()) 0.06f else 0.10f))
         )
         content()
     }

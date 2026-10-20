@@ -2,7 +2,8 @@
     <!-- 深色模式：状态栏图标转浅色（对应 HTML [data-theme="dark"] 仅覆盖 CSS 变量） -->
     <style name="Theme.EarthOnline" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <!-- v1.0.12：系统导航栏透明，交给窗口内容（壁纸）——彻底消除底栏下方白色横条 -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <!-- 深色模式：窗口背景同步深色，避免「系统启动窗口(深) → Compose 首帧」之间的亮色闪帧；
              值与 SplashOverlay 深色变体（#1A1A1A）同源，三段接力依旧同色。 -->

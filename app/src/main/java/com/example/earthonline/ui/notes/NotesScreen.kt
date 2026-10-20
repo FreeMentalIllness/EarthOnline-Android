@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.notes
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,9 +16,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.GlassSurface
 import kotlinx.coroutines.launch
@@ -104,14 +109,10 @@ fun NotesScreen(
                 )
             }
 
-            // 常驻记录卡：打开笔记页就能写，不用先点「+」
-            QuickNoteCard(
-                onSave = { body, tags ->
-                    scope.launch {
-                        vm.saveNote(null, body, tags)
-                    }
-                }
-            )
+            // v1.0.12：新建笔记 = 直接进完整编辑页（标题 + 工具栏 + 正文一次到位）。
+            // 不再在列表页内联输入 —— 内联框没有工具栏，格式根本没法用，
+            // 这正是用户反馈「加粗/斜体点不动」的一半原因。
+            NewNoteEntry(onClick = { onEdit(null) })
 
             // 标签筛选：全部 + 已用过的标签（按使用次数排序）
             if (allTags.isNotEmpty()) {
@@ -164,6 +165,7 @@ fun NotesScreen(
                         items(notes, key = { it.id }) { m ->
                             NoteCard(
                                 text = m.text,
+                                markdown = m.markdown ?: m.text,
                                 tags = NotesViewModel.tagsOf(m),
                                 time = formatNoteTime(m.createdAt),
                                 onClick = { onEdit(m.id) },
@@ -193,130 +195,102 @@ fun NotesScreen(
 }
 
 /**
- * 快速记录卡：一段正文 + 若干标签，点「记下」即存。
- * 标签用一行输入框，回车或逗号即切分成一个标签。
+ * v1.0.12：新建笔记入口卡。
+ * 点击直接进入完整编辑页 —— 标题输入 + 格式化工具栏 + 正文区一步到位，
+ * 不再在列表页内联输入（内联框没有工具栏，格式根本用不了）。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuickNoteCard(onSave: (String, List<String>) -> Unit) {
-    var body by remember { mutableStateOf("") }
-    var tagInput by remember { mutableStateOf("") }
-    var tags by remember { mutableStateOf(listOf<String>()) }
-    // v1.0.11：取消「无/灵感/待办/日记/想法」默认分类，完全改为用户自定义标签
-    val expanded = remember { mutableStateOf(false) }
-
-    fun commitTag() {
-        val t = tagInput.trim().trim('#')
-        if (t.isNotBlank()) {
-            tags = NotesViewModel.normalizeTags(tags + t)
-        }
-        tagInput = ""
-    }
-
+private fun NewNoteEntry(onClick: () -> Unit) {
     GlassCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = body,
-                onValueChange = { body = it },
-                placeholder = { Text("此刻在想什么？") },
-                minLines = if (expanded.value) 4 else 2,
-                maxLines = 10,
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (expanded.value || tags.isNotEmpty() || tagInput.isNotBlank()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    tags.forEach { t ->
-                        InputChip(
-                            selected = false,
-                            onClick = { tags = tags - t },
-                            label = { Text("#$t") },
-                            trailingIcon = {
-                                Icon(Icons.Default.Close, contentDescription = "移除标签", modifier = Modifier.size(14.dp))
-                            }
-                        )
-                    }
-                    OutlinedTextField(
-                        value = tagInput,
-                        onValueChange = {
-                            // 逗号即切分，支持一次粘贴多个
-                            if (it.contains(',') || it.contains('，')) {
-                                val parts = it.split(',', '，')
-                                val last = parts.last()
-                                tags = NotesViewModel.normalizeTags(
-                                    tags + parts.dropLast(1).map { s -> s.trim().trim('#') }
-                                )
-                                tagInput = last
-                            } else tagInput = it
-                        },
-                        placeholder = { Text("标签") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { commitTag() }),
-                        modifier = Modifier.weight(1f).defaultMinSize(minWidth = 90.dp)
-                    )
-                }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
+                contentAlignment = Alignment.Center
+            ) { Text("✏️", style = MaterialTheme.typography.bodyLarge) }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "新建笔记",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "标题 · 正文 · 加粗 / 列表 / 待办 / 插图",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { expanded.value = !expanded.value }) {
-                    Text(if (expanded.value) "收起" else "展开")
-                }
-                Spacer(Modifier.width(6.dp))
-                Button(
-                    onClick = {
-                        commitTag()
-                        val finalBody = body.trim()
-                        if (finalBody.isBlank()) return@Button
-                        onSave(finalBody, tags)
-                        body = ""
-                        tagInput = ""
-                        tags = emptyList()
-                        expanded.value = false
-                    },
-                    enabled = body.isNotBlank()
-                ) { Text("记下") }
+            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary) {
+                Text(
+                    "＋ 写",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                )
             }
         }
     }
 }
 
-/** 卡片流里的一张笔记 */
+/**
+ * 卡片流里的一张笔记（v1.0.12：标题 + 纯文本摘要）。
+ * 关键修复：列表绝不直接渲染 Markdown 源码 —— 之前卡片上会出现 `### *小鸡小鸡*`
+ * 这种原始标记。现在标题取正文第一行、摘要做 markdown -> 纯文本收敛，
+ * 链接留文字、图片/HTML 标签直接剔除。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NoteCard(
     text: String,
+    markdown: String,
     tags: List<String>,
     time: String,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val plainLines = markdownToPlain(markdown).lines().filter { it.isNotBlank() }
+    val title = plainLines.firstOrNull()?.take(60).orEmpty().ifBlank {
+        text.lineSequence().firstOrNull { it.isNotBlank() }?.take(60).orEmpty()
+    }.ifBlank { "无标题笔记" }
+    val preview = plainLines.drop(1).joinToString(" ").take(180)
+
     GlassSurface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
         Column(
             Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 8,
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            if (preview.isNotBlank()) {
+                Text(
+                    preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -326,7 +300,7 @@ private fun NoteCard(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    tags.take(4).forEach { t ->
+                    tags.take(3).forEach { t ->
                         AssistChip(
                             onClick = {},
                             label = { Text("#$t", style = MaterialTheme.typography.labelSmall) }
@@ -349,6 +323,25 @@ private fun NoteCard(
             }
         }
     }
+}
+
+/**
+ * v1.0.12：Markdown -> 纯文本（列表摘要 / 标题提取共用）。
+ * 只做「看得见」的收敛：删标记、留文字，不追求完整解析 —— 全文渲染交给编辑页。
+ */
+internal fun markdownToPlain(md: String): String {
+    var s = md
+    s = s.replace(Regex("<[^>]{1,40}>"), "")
+    s = s.replace(Regex("!\\[[^]]{0,80}]\\([^)]{0,200}\\)"), "")
+    s = s.replace(Regex("\\[([^]]{0,120})]\\([^)]{0,200}\\)")) { it.groupValues[1] }
+    s = s.replace(Regex("^\\s{0,3}#{1,6}\\s*", RegexOption.MULTILINE), "")
+    s = s.replace(Regex("^\\s{0,3}[-*+]\\s+", RegexOption.MULTILINE), "")
+    s = s.replace(Regex("^\\s{0,3}\\d+[.)]\\s+", RegexOption.MULTILINE), "")
+    s = s.replace(Regex("^\\s{0,3}>\\s?", RegexOption.MULTILINE), "")
+    s = s.replace("**", "").replace("__", "").replace("~~", "").replace("`", "")
+    s = s.replace(Regex("(?<!\\*)\\*(?!\\*)"), "")
+    s = s.replace(Regex("[ \\t]{2,}"), " ")
+    return s.trim()
 }
 
 /** 2026-10-19T12:34 → 10-19 12:34 */

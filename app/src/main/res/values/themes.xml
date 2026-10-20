@@ -7,7 +7,8 @@
         <!-- v1.0.0：纯白。与系统启动图、Compose 开屏页同色（见 colors.xml 注释） -->
         <item name="android:windowBackground">@color/splash_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <!-- v1.0.12：系统导航栏透明，交给窗口内容（壁纸）——彻底消除底栏下方白色横条 -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
 

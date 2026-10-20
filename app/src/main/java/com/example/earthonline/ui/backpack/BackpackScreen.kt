@@ -316,7 +316,7 @@ private fun ItemsPane(
 private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
     GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.ItemRadius)
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -379,7 +379,7 @@ private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () ->
     // v1.0.7：按压缩放反馈（94% -> 100% spring 弹回）
     GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.ItemRadius)
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -523,7 +523,7 @@ private fun CollectionGridTile(
     // v1.0.8：单击打开/预览，长按进入编辑
     GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.ItemRadius)
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
@@ -651,7 +651,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
     // v1.0.8：单击整卡 = 打开/预览，长按 = 进入编辑；删除按钮各自消费点击不会误触
     GlassCard(
         modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.ItemRadius)
+        shape = RoundedCornerShape(UiDimens.CardRadius)
     ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (file != null) {
