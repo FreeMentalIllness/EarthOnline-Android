@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -127,7 +129,9 @@ fun ImageCropperDialog(
                 TopAppBar(
                     title = { Text(if (shape == CropShape.Circle) "裁剪头像" else "裁剪壁纸") },
                     navigationIcon = {
-                        IconButton(onClick = onDismiss) { Text("✕", style = MaterialTheme.typography.titleMedium) }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Rounded.Close, contentDescription = "取消裁剪")
+                        }
                     }
                 )
                 // 裁剪区

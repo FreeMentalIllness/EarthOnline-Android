@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
@@ -130,7 +131,9 @@ fun BackpackScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { if (tab == 0) showItem = true else showCollection = true },
-                containerColor = AmberPrimary
+                containerColor = AmberPrimary,
+                // v1.0.6 封板：统一圆形，跟主页 AI 按钮一个形状语言
+                shape = CircleShape
             ) { Icon(Icons.Rounded.Add, contentDescription = "新增") }
         }
     ) { padding ->

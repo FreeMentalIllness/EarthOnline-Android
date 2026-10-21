@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -201,7 +202,9 @@ fun TasksScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { addParentId = null; showAdd = true },
-                containerColor = AmberPrimary
+                containerColor = AmberPrimary,
+                // v1.0.6 封板：全套 FAB 统一圆形（M3 默认是 16dp 圆角方块，与主页圆形按钮不一致）
+                shape = CircleShape
             ) { Icon(Icons.Rounded.Add, contentDescription = "新增任务") }
         }
     ) { padding ->

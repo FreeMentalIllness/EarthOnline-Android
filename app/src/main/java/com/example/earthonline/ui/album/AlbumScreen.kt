@@ -27,7 +27,11 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import com.example.earthonline.ui.components.IconChip
+import com.example.earthonline.ui.components.ModuleTints
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -108,7 +112,21 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                title = { Text("📷 记忆相册") },
+                title = {
+                    // v1.0.6 封板：标题里的相机 Emoji → 圆角矢量图标芯片（与设置页同源）
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconChip(
+                            Icons.Rounded.PhotoLibrary,
+                            chipColor = ModuleTints.Album,
+                            chipSize = 30.dp,
+                            iconSize = 18.dp
+                        )
+                        Text("记忆相册")
+                    }
+                },
                 actions = {
                     // v1.0.7：全览网格 / 3D 翻页 视图切换
                     TextButton(onClick = {
@@ -138,7 +156,11 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { pickPhotos() }, containerColor = AmberPrimary) {
+            FloatingActionButton(
+                onClick = { pickPhotos() },
+                containerColor = AmberPrimary,
+                shape = CircleShape
+            ) {
                 if (importing) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 else Icon(Icons.Rounded.Add, contentDescription = "批量导入照片")
             }
@@ -164,14 +186,14 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
                 Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                     if (allPhotos.isEmpty()) {
                         EmptyState(
-                            emoji = "📷",
+                            icon = Icons.Rounded.PhotoLibrary,
                             title = "相册还是空的",
                             message = "点右下角批量导入老照片：自动按拍摄月份归档成相册墙，" +
                                 "每一张都能补一句当年的话、设为壁纸、归入自定义相册。"
                         )
                     } else {
                         EmptyState(
-                            emoji = "📂",
+                            icon = Icons.Rounded.FolderOpen,
                             title = "这个相册还没有照片",
                             message = "去别的相册看看，或在照片详情里把它归入这个相册。"
                         )
@@ -342,7 +364,14 @@ private fun AlbumChipRow(
             FilterChip(
                 selected = selectedId == album.id,
                 onClick = { onSelect(album.id) },
-                label = { Text("📁 ${album.name}") }
+                label = { Text(album.name) },
+                leadingIcon = {
+                    Icon(
+                        Icons.Rounded.FolderOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             )
         }
         item {
@@ -531,7 +560,7 @@ private fun FlipCard(
                     modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth()
                 ) {
                     Text(
-                        "💬 ${photo.note}",
+                        photo.note,
                         color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 2,
@@ -589,7 +618,19 @@ private fun AlbumDetailDialog(
     var note by remember(photo.id) { mutableStateOf(photo.note) }
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📝 ${photo.day}") },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.PhotoLibrary,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(photo.day)
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AsyncImage(
@@ -694,7 +735,19 @@ private fun AlbumManageDialog(
 
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("📁 相册管理") },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text("相册管理")
+            }
+        },
         text = {
             if (albums.isEmpty()) {
                 Text("还没有自定义相册。在相册页顶部点「＋ 新建相册」即可创建。",

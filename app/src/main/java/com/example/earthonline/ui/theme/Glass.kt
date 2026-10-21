@@ -284,8 +284,6 @@ fun GlassCard(
     // clip(shape) —— 背景与内容都锁进圆弧，任何调用点都不可能再出现方形直角。
     val userAlpha = LocalCardOpacity.current
     val opaque = userAlpha >= CARD_OPAQUE_THRESHOLD
-    // 内层暗化（v1.0.12 可读性层）跟随滑块线性缩放：0.74 = 历史基线值，0% 完全消失
-    val darkK = (userAlpha / 0.74f).coerceIn(0f, 1f)
     GlassSurface(
         modifier = modifier,
         shape = shape,
@@ -294,11 +292,8 @@ fun GlassCard(
         tintOverride = userAlpha,
         scrimOverride = if (opaque) 0f else (0.28f * (userAlpha / 0.74f)).coerceIn(0f, 0.4f)
     ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(Color.Black.copy(alpha = (if (isSystemInDarkTheme()) 0.06f else 0.10f) * darkK))
-        )
+        // v1.0.6 封板：删掉内层 10% 黑色暗化层 —— 它正是「卡片发灰、和速览瓦片不是一种白」的真凶。
+        // 可读性已由 GlassSurface 内部的 surface 蒙层（scrim）负责，无需再叠一层黑。
         content()
     }
 }

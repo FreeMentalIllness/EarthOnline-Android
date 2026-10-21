@@ -1,5 +1,13 @@
 package com.example.earthonline.ui.home
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backpack
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.earthonline.data.local.entity.AchievementEntity
@@ -78,9 +86,10 @@ private data class CustomTimelineEvent(
  */
 data class SearchHit(
     val key: String,     // kind + id，列表 key
-    val kind: String,    // task / item / collection
+    val kind: String,    // task / item / collection / memo / achievement / location
     val route: String,   // 点击后跳转的路由
-    val icon: String,
+    /** v1.0.6 封板：命中项图标改为矢量（Icons.Rounded），彻底清除搜索结果里的 Emoji */
+    val icon: ImageVector,
     val title: String,
     val sub: String
 )
@@ -460,7 +469,7 @@ class HomeViewModel @Inject constructor(
         val out = ArrayList<SearchHit>(tasks.size + items.size + cols.size + memos.size + achs.size + locs.size)
         tasks.take(8).forEach { t ->
             out += SearchHit(
-                key = "task-${t.id}", kind = "task", route = "tasks", icon = "📋",
+                key = "task-${t.id}", kind = "task", route = "tasks", icon = Icons.Rounded.Checklist,
                 title = t.title.ifBlank { "(未命名任务)" },
                 sub = listOfNotNull(
                     STATUS_LABEL[t.status],
@@ -470,14 +479,14 @@ class HomeViewModel @Inject constructor(
         }
         items.take(8).forEach { i ->
             out += SearchHit(
-                key = "item-${i.id}", kind = "item", route = "backpack", icon = "🎒",
+                key = "item-${i.id}", kind = "item", route = "backpack", icon = Icons.Rounded.Backpack,
                 title = i.name.ifBlank { "(未命名物品)" },
                 sub = i.category?.takeIf { it.isNotBlank() } ?: "未分类"
             )
         }
         cols.take(8).forEach { c ->
             out += SearchHit(
-                key = "col-${c.id}", kind = "collection", route = "collections", icon = "💗",
+                key = "col-${c.id}", kind = "collection", route = "collections", icon = Icons.Rounded.Favorite,
                 title = c.title.ifBlank { "(未命名收藏)" },
                 sub = c.note?.takeIf { it.isNotBlank() } ?: (c.category?.takeIf { it.isNotBlank() } ?: "未分类")
             )
@@ -485,21 +494,21 @@ class HomeViewModel @Inject constructor(
         // v1.0.5：搜索范围扩展到世界日志 / 成就 / 足迹
         memos.take(6).forEach { m ->
             out += SearchHit(
-                key = "memo-${m.id}", kind = "memo", route = "home", icon = "💡",
+                key = "memo-${m.id}", kind = "memo", route = "home", icon = Icons.Rounded.Lightbulb,
                 title = m.text.take(40).ifBlank { "(空白灵感)" },
                 sub = when (m.type) { "idea" -> "灵感"; "important" -> "重要"; else -> "日志" }
             )
         }
         achs.take(6).forEach { a ->
             out += SearchHit(
-                key = "ach-${a.id}", kind = "achievement", route = "achievements", icon = "🏆",
+                key = "ach-${a.id}", kind = "achievement", route = "achievements", icon = Icons.Rounded.EmojiEvents,
                 title = a.title.ifBlank { "(未命名成就)" },
                 sub = if (a.unlocked) "已解锁" else "未解锁 · ${a.desc.take(20)}"
             )
         }
         locs.take(6).forEach { l ->
             out += SearchHit(
-                key = "loc-${l.id}", kind = "location", route = "map", icon = "📍",
+                key = "loc-${l.id}", kind = "location", route = "map", icon = Icons.Rounded.Place,
                 title = l.name.ifBlank { "(未命名足迹)" },
                 sub = l.date.takeIf { it.isNotBlank() }?.let { "到访 $it" } ?: "足迹"
             )

@@ -28,23 +28,15 @@
             android:layout_width="40dp"
             android:layout_height="40dp">
 
+            <!-- 默认头像（位图 PNG：RemoteViews 对矢量支持不一致，这里只用位图兜底）；
+                 上传过头像时由渲染阶段替换成圆形 Bitmap，见 WidgetRenderer.roundAvatar -->
             <ImageView
                 android:id="@+id/widget_avatar"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="centerCrop"
+                android:src="@drawable/ic_default_avatar"
                 android:contentDescription="@string/widget_avatar_desc" />
-
-            <!-- 未上传头像时的兜底：直接画预设 emoji（RemoteViews 里 ImageView 无法做圆形裁剪，
-                 圆形头像是渲染阶段用 Canvas 切好的 Bitmap，见 WidgetRenderer.roundAvatar） -->
-            <TextView
-                android:id="@+id/widget_avatar_emoji"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:textSize="24sp"
-                android:text="🌍"
-                android:visibility="gone" />
         </FrameLayout>
 
         <LinearLayout
@@ -114,11 +106,11 @@
         <LinearLayout
             android:id="@+id/widget_entry_tasks"
             style="@style/WidgetEntry">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="✅"
-                android:textSize="16sp" />
+            <ImageView
+                android:id="@+id/widget_icon_tasks"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@string/widget_entry_tasks" />
             <TextView
                 style="@style/WidgetEntryLabel"
                 android:text="@string/widget_entry_tasks" />
@@ -127,11 +119,11 @@
         <LinearLayout
             android:id="@+id/widget_entry_backpack"
             style="@style/WidgetEntry">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🎒"
-                android:textSize="16sp" />
+            <ImageView
+                android:id="@+id/widget_icon_backpack"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@string/widget_entry_backpack" />
             <TextView
                 style="@style/WidgetEntryLabel"
                 android:text="@string/widget_entry_backpack" />
@@ -140,11 +132,11 @@
         <LinearLayout
             android:id="@+id/widget_entry_achievements"
             style="@style/WidgetEntry">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🏆"
-                android:textSize="16sp" />
+            <ImageView
+                android:id="@+id/widget_icon_achievements"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@string/widget_entry_achievements" />
             <TextView
                 style="@style/WidgetEntryLabel"
                 android:text="@string/widget_entry_achievements" />
@@ -153,11 +145,11 @@
         <LinearLayout
             android:id="@+id/widget_entry_data"
             style="@style/WidgetEntry">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📊"
-                android:textSize="16sp" />
+            <ImageView
+                android:id="@+id/widget_icon_data"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:contentDescription="@string/widget_entry_data" />
             <TextView
                 style="@style/WidgetEntryLabel"
                 android:text="@string/widget_entry_data" />

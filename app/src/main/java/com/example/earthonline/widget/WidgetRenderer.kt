@@ -10,6 +10,8 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Shader
+import android.graphics.drawable.Drawable
+import androidx.core.content.res.ResourcesCompat
 import android.appwidget.AppWidgetManager
 import android.net.Uri
 import android.view.View
@@ -123,18 +125,25 @@ object WidgetRenderer {
         val avatar = ImageDownsampler.decodeAvatar(
             profile?.avatarPath, profile?.avatarData, AVATAR_PX
         )?.let { roundAvatar(it, AVATAR_PX) }
+        // v1.0.6：不再用 emoji 兜底 —— 无头像时直接用默认头像位图（布局里已写好 src）
         if (avatar != null) {
-            views.setViewVisibility(R.id.widget_avatar, View.VISIBLE)
-            views.setViewVisibility(R.id.widget_avatar_emoji, View.GONE)
             views.setImageViewBitmap(R.id.widget_avatar, avatar)
         } else {
-            views.setViewVisibility(R.id.widget_avatar, View.GONE)
-            views.setViewVisibility(R.id.widget_avatar_emoji, View.VISIBLE)
-            views.setTextViewText(
-                R.id.widget_avatar_emoji,
-                avatarEmoji(profile?.avatarKey ?: "")
-            )
+            views.setImageViewResource(R.id.widget_avatar, R.drawable.ic_default_avatar)
         }
+
+        // 四个入口图标：RemoteViews 对矢量支持不一致（不同桌面 / 系统版本表现不同），
+        // 所以这里把矢量在渲染阶段画成位图再塞进 ImageView，杜绝 emoji 与矢量兼容问题。
+        views.setImageViewBitmap(R.id.widget_icon_tasks, iconBitmap(context, R.drawable.ic_widget_tasks))
+        views.setImageViewBitmap(
+            R.id.widget_icon_backpack,
+            iconBitmap(context, R.drawable.ic_widget_backpack)
+        )
+        views.setImageViewBitmap(
+            R.id.widget_icon_achievements,
+            iconBitmap(context, R.drawable.ic_widget_achievements)
+        )
+        views.setImageViewBitmap(R.id.widget_icon_data, iconBitmap(context, R.drawable.ic_widget_data))
 
         // 整块背景 -> 打开主页
         views.setOnClickPendingIntent(R.id.widget_root, openIntent(context, Screen.Home.route))
@@ -147,6 +156,24 @@ object WidgetRenderer {
         views.setOnClickPendingIntent(R.id.widget_entry_data, openIntent(context, Screen.Data.route))
 
         return views
+    }
+
+    /**
+     * 把矢量图标画成位图。
+     *
+     * ⚠️ 为什么不能直接 `setImageViewResource` 传矢量：RemoteViews 是在**桌面进程**里 inflate 的，
+     * 不同桌面 / 系统版本对 VectorDrawable 的支持不一致（历史上出现过直接 inflate 失败），
+     * 而位图是 100% 通用的。所以入口图标统一在这里预渲染成 ARGB_8888 位图再塞给 ImageView。
+     */
+    private fun iconBitmap(context: Context, id: Int): Bitmap? {
+        val d: Drawable = runCatching {
+            ResourcesCompat.getDrawable(context.resources, id, context.theme)
+        }.getOrNull() ?: return null
+        val size = (18f * context.resources.displayMetrics.density).roundToInt().coerceAtLeast(1)
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        d.setBounds(0, 0, size, size)
+        d.draw(Canvas(bmp))
+        return bmp
     }
 
     /** 单项查询的兜底：异常时返回默认值，不让整块小组件挂掉 */

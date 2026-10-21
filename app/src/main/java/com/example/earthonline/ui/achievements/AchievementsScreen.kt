@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -71,7 +72,8 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAdd = true },
-                containerColor = AmberPrimary
+                containerColor = AmberPrimary,
+                shape = CircleShape
             ) { Icon(Icons.Rounded.Add, "新增手动成就") }
         }
     ) { padding ->

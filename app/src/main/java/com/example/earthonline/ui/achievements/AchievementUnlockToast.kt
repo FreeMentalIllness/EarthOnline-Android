@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -120,7 +124,13 @@ private fun AchievementToastCard(
                     .background(AmberPrimary.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(if (isEgg) "🥚" else "🏆", style = MaterialTheme.typography.titleLarge)
+                // v1.0.6 封板：Emoji → 圆角矢量图标（彩蛋用「自动非凡」，普通用「奖杯」）
+                Icon(
+                    if (isEgg) Icons.Rounded.AutoAwesome else Icons.Rounded.EmojiEvents,
+                    contentDescription = null,
+                    tint = AmberPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
             }
             Column(Modifier.padding(end = 6.dp)) {
                 Text(

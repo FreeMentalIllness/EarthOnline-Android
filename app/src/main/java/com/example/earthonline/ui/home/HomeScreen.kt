@@ -66,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -190,6 +191,8 @@ fun HomeScreen(
     var showQuickEdit by remember { mutableStateOf(false) }
     // v1.0.19：AI 快捷中枢（右下角悬浮 + 按钮 → 液态玻璃底部抽屉）
     var showAiHub by remember { mutableStateOf(false) }
+    // v1.0.6 封板：搜索框是否聚焦 —— 聚焦时隐藏 AI 悬浮按钮（键盘顶起后它会压在速览瓦片上）
+    var searchFocused by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         // v1.0.18（死命令 3）：顶部整块全幅出血 —— Column 包裹「实心顶块 + 内容列表」。
@@ -227,7 +230,8 @@ fun HomeScreen(
                 query = query,
                 results = results,
                 onQueryChange = onQueryChange,
-                onPickResult = onPickResult
+                onPickResult = onPickResult,
+                onFocusChange = { searchFocused = it }
             )
         }
 
@@ -304,10 +308,13 @@ fun HomeScreen(
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
         // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp）；
         // v1.0.20：键盘让位由 MainScaffold 统一处理，这里不再自带 imePadding。
-        Box(
-            Modifier
+        AnimatedVisibility(
+            visible = !searchFocused,
+            modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 18.dp, bottom = 96.dp)
+                .padding(end = 18.dp, bottom = 96.dp),
+            enter = fadeIn(),
+            exit = fadeOut()
         ) {
             Box(
                 Modifier
@@ -512,7 +519,9 @@ private fun HomeSearchBox(
     query: String,
     results: List<SearchHit>,
     onQueryChange: (String) -> Unit,
-    onPickResult: (SearchHit) -> Unit
+    onPickResult: (SearchHit) -> Unit,
+    /** v1.0.6 封板：搜索框聚焦回调 —— 键盘弹起时主页右下的 AI 悬浮按钮要让位，别压在速览瓦片上 */
+    onFocusChange: (Boolean) -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -529,7 +538,9 @@ private fun HomeSearchBox(
                 }
             },
             shape = RoundedCornerShape(50),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { onFocusChange(it.isFocused) }
         )
         if (query.isNotBlank()) {
             // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
@@ -555,7 +566,13 @@ private fun HomeSearchBox(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Text(hit.icon, style = MaterialTheme.typography.titleMedium)
+                                    // v1.0.6 封板：搜索命中项图标改为彩色圆角矢量芯片（与速览 / 设置页同源）
+                                IconChip(
+                                    hit.icon,
+                                    chipColor = hitTint(hit.kind),
+                                    chipSize = 32.dp,
+                                    iconSize = 18.dp
+                                )
                                     Column(Modifier.weight(1f)) {
                                         Text(
                                             hit.title,
@@ -914,6 +931,17 @@ private fun OverviewGrid(
             }
         }
     }
+}
+
+/** 搜索命中项的模块语义色（与速览瓦片同一套 [ModuleTints]） */
+private fun hitTint(kind: String): Color = when (kind) {
+    "task" -> ModuleTints.Tasks
+    "item" -> ModuleTints.Backpack
+    "collection" -> ModuleTints.Album
+    "memo" -> ModuleTints.Notes
+    "achievement" -> ModuleTints.Achievements
+    "location" -> ModuleTints.Map
+    else -> AmberPrimary
 }
 
 /** 速览自定义入口的配置面板（BottomSheet 内容）：勾选显示 / 隐藏，至少保留一个 */
