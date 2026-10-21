@@ -40,8 +40,12 @@ android {
         // versionCode 33 = v1.0.16：全局图标现代化升级（笔记工具栏与各页操作图标统一改用圆角风格 Icons.Rounded.*，设置页与底部导航自绘图标不变）。
         // versionCode 34 = v1.0.17：主页 Logo/速览入口/最近动态/人生时间轴/任务页/背包页 Emoji 全面换装圆角矢量 + 笔记工具栏键盘贴合根因修复（imePadding 挂错层级）+ 玻璃卡片可读性强化（scrim 0.28/着色下限 0.66）。
         // versionCode 35 = v1.0.18：底层 UI 组件重构——全局 30 处默认 Card 全部替换为统一 GlassCard（消灭黑色 elevation 阴影）；全站 Emoji 清零换圆角矢量；主页顶部实心块全幅出血；新增「卡片背景不透明度」滑块（DataStore）；笔记工具栏固定标题栏正下方。
-        versionCode = 37
-        versionName = "1.0.20"
+        // versionCode 38 = v1.0.6（最终封板）：内部迭代 1.0.18~1.0.21 统一收敛为对外 v1.0.6 发版，
+        // 版本号以此为准（AppInfo.kt / Web core.js / Windows csproj 三端同步），versionCode 只增不减。
+        // 本版要点：液态玻璃底层重构 + 全局透明度自定义 + 笔记系统重构 + AI 快捷中枢（真实大模型）
+        // + 图标全面圆角矢量化 + 键盘唤起/让位 Bug 修复。
+        versionCode = 38
+        versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }

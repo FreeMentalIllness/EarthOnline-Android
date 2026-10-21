@@ -73,6 +73,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -179,6 +181,9 @@ fun HomeScreen(
     onLevelCelebrated: (Int) -> Unit = {}
 ) {
     val context = LocalContext.current
+    // v1.0.6 封板：AI 抽屉关闭后清焦点 / 收键盘用（底层输入框绝不重新请求焦点）
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     var showAddTimeline by remember { mutableStateOf(false) }
     // 主页速览「自定义入口」配置面板（BottomSheet）
@@ -331,7 +336,15 @@ fun HomeScreen(
         // v1.0.19：AI 快捷中枢底部抽屉（语音默认 + 意图自动分发）
         AiQuickHubSheet(
             visible = showAiHub,
-            onDismiss = { showAiHub = false }
+            // 抽屉内部已统一收口（清焦点 → 收键盘 → 关闭），这里只收状态
+            onDismiss = { showAiHub = false },
+            // 未配置 AI 接口时可直接跳设置页（跳转前同样清焦点收键盘）
+            onConfigure = {
+                showAiHub = false
+                runCatching { focusManager.clearFocus() }
+                runCatching { keyboardController?.hide() }
+                onNavigate("settings")
+            }
         )
 
         // 时间轴：添加自定义里程碑

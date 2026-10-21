@@ -127,7 +127,11 @@ class AchievementViewModel @Inject constructor(
                 settings.eggBlankTitle,
                 // v1.0.3：新彩蛋数据源（历年今日查看次数 / 记忆相册照片数）
                 settings.eggThrowback,
-                settings.memoryPhotosJson
+                settings.memoryPhotosJson,
+                // v1.0.6：新功能成就数据源（AI 中枢归档次数 / 卡片·壁纸不透明度是否被调过）
+                activityRepo.observeRecent(),
+                settings.cardOpacity,
+                settings.wallpaperAlpha
             )
             combine(flows) { arr ->
                 @Suppress("UNCHECKED_CAST")
@@ -141,6 +145,10 @@ class AchievementViewModel @Inject constructor(
                 val blankTitleTries = arr[7] as? Int ?: 0
                 val throwbackSeen = arr[8] as? Int ?: 0
                 val photosJson = arr[9] as? String ?: ""
+                @Suppress("UNCHECKED_CAST")
+                val activities = arr[10] as? List<ActivityEntity> ?: emptyList()
+                val cardOpacity = arr[11] as? Float ?: 0.74f
+                val wallpaperAlpha = arr[12] as? Float ?: 0.35f
 
                 val life = lifeStatsOf(profile?.birthDate)
                 val stats = AchStats(
@@ -177,7 +185,12 @@ class AchievementViewModel @Inject constructor(
                     newYearBirth = if (profile?.birthDate?.endsWith("-01-01") == true) 1 else 0,
                     // —— v1.0.3 新增彩蛋字段 ——
                     throwbackSeen = throwbackSeen,
-                    memoryPhotos = parsePhotoCount(photosJson)
+                    memoryPhotos = parsePhotoCount(photosJson),
+                    // —— v1.0.6 新功能成就字段 ——
+                    aiHubCount = activities.count { it.title.startsWith("AI 快捷") },
+                    longMemos = memos.count { it.text.length >= 300 },
+                    // 卡片默认 0.74 / 壁纸默认 0.35：任一被改动即视为「调校过手感」
+                    appearanceTuned = if (cardOpacity != 0.74f || wallpaperAlpha != 0.35f) 1 else 0
                 )
                 val sources = EventSources(
                     doneAtList = tasks.mapNotNull { it.doneAt }.sorted(),

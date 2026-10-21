@@ -18,11 +18,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,7 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +49,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -73,31 +78,40 @@ import com.example.earthonline.util.nowIso
 import com.example.earthonline.util.todayStr
 import com.example.earthonline.util.uid
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import java.text.SimpleDateFormat
+import retrofit2.HttpException
 import java.util.Calendar
 import java.util.Locale
 import javax.inject.Inject
 
 /* ============================================================
  * v1.0.19：主页「AI 快捷中枢」—— 一句话自动归档。
- * v1.0.20：语音输入方案重构（死命令）—— 放弃系统 SpeechRecognizer
- * （国产机/模拟器经常没有识别服务），改为「键盘为主」：
- *   - 抽屉弹出即让输入框拿焦点并唤起软键盘；
- *   - 用户需要语音时，用**输入法键盘自带的麦克风**（各大输入法都有）；
- *   - 界面上不再出现麦克风按钮，也不再申请录音权限。
- * 解析与分发逻辑（本地规则 + 可选 LLM 增强）保持不变。
+ * v1.0.20：语音输入方案重构 —— 放弃系统 SpeechRecognizer，
+ *          改为「弹抽屉即聚焦 + 唤起软键盘」，语音用输入法键盘上的麦克风。
+ * v1.0.21：意图识别「去伪存真」（死命令）——
+ *   - 【废弃】v1.0.19/20 的本地正则 / 关键词猜测（QuickCaptureParser）已整段删除，
+ *     它本质上是「关键词匹配」而不是 AI；
+ *   - 【真实 AI】唯一识别路径改为调用「设置 → 通用 → AI 对话」里用户自己填的
+ *     Base URL + API Key + 模型名，走标准 OpenAI 兼容 chat/completions；
+ *   - 【Prompt → JSON】要求模型只回一行严格 JSON：
+ *     {"type":"task|item|note|ledger","title":"...","time":"yyyy-MM-dd","amount":数字或null,"note":"..."}
+ *     本地只做 JSON 解析与字段清洗，不再猜意图；
+ *   - 【兜底】未配置 / 网络失败 / 超时 / 返回非法 → 原文追加为笔记（标签 AI）
+ *     并提示「请先在设置中配置 AI 接口以解锁智能分类」，绝不丢用户输入。
  * ============================================================ */
 
 /** 意图种类（与 App 内四大落点一一对应） */
@@ -108,200 +122,99 @@ enum class QuickKind(val label: String, val icon: ImageVector, val tint: Color) 
     LEDGER("记账", Icons.Rounded.BarChart, ModuleTints.Accounting)
 }
 
-/** 解析结果：清洗后的标题 / 截止日（yyyy-MM-dd）/ 金额 / 解析来源 */
+/** 解析结果：清洗后的标题 / 截止日（yyyy-MM-dd）/ 金额 */
 data class QuickIntent(
     val kind: QuickKind,
     val title: String,
     val dueDate: String? = null,
-    val timeHint: String? = null,
-    val amount: Double? = null,
-    val source: String = "rules"
+    val amount: Double? = null
 )
 
 /**
- * 本地规则解析器（零网络、零依赖，永远可用；LLM 只是锦上添花）。
- * 判定顺序：记账 → 背包 → 任务 → 笔记（先识别强特征，再落回兜底）。
+ * 大模型返回结果的解码器。
+ * 职责边界：只做「JSON 提取 + 字段清洗 + 合法性校验」，不做任何关键词/正则意图猜测。
+ * 解析不出来就返回 null，由调用方走兜底 —— 不猜、不编、不伪装 AI。
  */
-object QuickCaptureParser {
+object QuickIntentDecoder {
 
-    /** 相对日词 → 偏移天数 */
-    private val DAY_OFFSET = mapOf(
-        "大后天" to 3, "后天" to 2, "明早" to 1, "明晚" to 1, "明天" to 1,
-        "今早" to 0, "今晚" to 0, "今日" to 0, "今天" to 0
-    )
-
-    /** 时间词（用于探测任务意图 + 从标题里剥掉） */
-    private val TIME_HINT = Regex(
-        "(大后天|后天|明天|今天|今晚|明晚|今早|明早|今日|" +
-            "[零一二两三四五六七八九十]+\\s*[点时][半零一二两三四五六七八九十]*分?|" +
-            "\\d{1,2}\\s*[点:：]\\s*\\d{0,2}分?|" +
-            "(?:下{1,2})?(?:周|星期|礼拜)[一二三四五六日天末]?)"
-    )
-
-    /** 时刻（区分上下午）：中文/数字小时 + 可选分钟 */
-    private val CLOCK = Regex(
-        "(凌晨|早上|清晨|上午|中午|下午|傍晚|晚上|夜里)?\\s*" +
-            "([0-9零一二两三四五六七八九十]{1,3})\\s*[点时]\\s*" +
-            "(半|[0-9零一二两三四五六七八九十]{1,3})?\\s*分?"
-    )
-
-    /** 记账特征 */
-    private val LEDGER_HINT = Regex("(花了|支出|消费|付了|缴费|充值|房租|水电|油费|话费|[¥￥]\\s*[0-9])")
-    private val LEDGER_AMOUNT =
-        Regex("(?:[¥￥]\\s*([0-9]+(?:\\.[0-9]+)?))|(?:(?:花了|支出|消费|付了|缴费)\\s*([0-9]+(?:\\.[0-9]+)?))|(?:([0-9]+(?:\\.[0-9]+)?)\\s*(?:元|块))")
-
-    /** 背包特征（已完成的「买了」） */
-    private val ITEM_HINT = Regex("(买了|购入|入手|新买|收了|囤了|添置|到货|开箱)")
-    /** 未来购买 / 待办式购买 → 任务 */
-    private val TASK_BUY = Regex("(要买|想买|打算买|计划买|去买|代购)")
-
-    /** 任务特征（安排 / 提醒类动词） */
-    private val TASK_HINT = Regex(
-        "(记得|提醒|别忘|要去|得去|需要去|开会|提交|完成|预约|归还|还钱|打卡|" +
-            "取快递|寄件|面试|体检|交作业|还款|上课|值班|出差|接机|接站)"
-    )
-
-    private val CN_NUM = mapOf(
-        '零' to 0, '一' to 1, '二' to 2, '两' to 2, '三' to 3, '四' to 4, '五' to 5,
-        '六' to 6, '七' to 7, '八' to 8, '九' to 9, '十' to 10
-    )
-
-    private fun cnToInt(s: String): Int? {
-        if (s.isBlank()) return null
-        s.toIntOrNull()?.let { return it }
-        // 简易中文数字：十/十一/二十三 级别足够（口语时刻不会超过两位数）
-        if (s.length == 1) return CN_NUM[s[0]]
-        return when {
-            s.startsWith("十") -> 10 + (CN_NUM[s[1]] ?: 0)
-            s.contains("十") -> {
-                val parts = s.split("十")
-                val tens = CN_NUM[parts[0].firstOrNull()] ?: return null
-                val ones = if (parts[1].isBlank()) 0 else CN_NUM[parts[1].firstOrNull()] ?: return null
-                tens * 10 + ones
-            }
-            else -> null
-        }
-    }
-
-    /** 解析主入口：一句话 → 意图 */
-    fun parse(raw0: String): QuickIntent {
-        val raw = raw0.trim()
-        if (raw.isBlank()) return QuickIntent(QuickKind.MEMO, "")
-
-        /* —— 1) 记账：有花钱特征就优先按账目处理 —— */
-        LEDGER_HINT.find(raw)?.let {
-            val m = LEDGER_AMOUNT.find(raw)
-            val amount = m?.groupValues?.let { g ->
-                g.drop(1).firstOrNull { it.isNotBlank() }?.toDoubleOrNull()
-            }
-            return QuickIntent(QuickKind.LEDGER, raw, amount = amount)
-        }
-
-        /* —— 2) 背包：已经买到的物品 —— */
-        if (ITEM_HINT.containsMatchIn(raw) && !TASK_BUY.containsMatchIn(raw)) {
-            return QuickIntent(QuickKind.ITEM, cleanItemName(raw))
-        }
-
-        /* —— 3) 任务：时间词或安排类动词 —— */
-        val hasTime = TIME_HINT.containsMatchIn(raw)
-        val hasVerb = TASK_HINT.containsMatchIn(raw) || TASK_BUY.containsMatchIn(raw)
-        if (hasTime || hasVerb) {
-            val (day, clock) = parseWhen(raw)
-            var title = raw
-                .replace(TIME_HINT, "")
-                .replace(Regex("^我(们|们大家)?"), "")
-                .trim(' ', '，', '。', '！', '？', ',', '.', '!', '?')
-            if (title.isBlank()) title = raw
-            if (!clock.isNullOrBlank()) title = "$title（$clock）"
-            return QuickIntent(QuickKind.TASK, title, dueDate = day, timeHint = clock)
-        }
-
-        /* —— 4) 兜底：笔记 —— */
-        return QuickIntent(QuickKind.MEMO, raw)
-    }
-
-    /** 意图预览标签（输入框下方实时提示用） */
-    fun previewLabel(intent: QuickIntent): String = when (intent.kind) {
-        QuickKind.TASK -> buildString {
-            append("将创建任务")
-            intent.dueDate?.let { append(" · 截止 ").append(it) }
-        }
-        QuickKind.ITEM -> "将加入背包"
-        QuickKind.LEDGER -> "将记一笔账"
-        QuickKind.MEMO -> "将存为笔记"
-    }
-
-    /** 物品名清洗：剥掉动词 / 量词 / 时间，只留名字 */
-    private fun cleanItemName(raw: String): String {
-        var name = raw
-            .replace(TIME_HINT, "")
-            .replace(ITEM_HINT, "")
-            .replace(Regex("^我(们)?"), "")
-            .replace(Regex("^[0-9一二两三四五六七八九十]+\\s*[个只台件辆支张把部本轮双盒包罐枚架套]"), "")
-            .trim(' ', '，', '。', '！', '？', ',', '.', '!', '?', '了')
-        if (name.isBlank()) name = raw
-        return name.take(40)
-    }
+    private val DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
 
     /**
-     * 解析日期与时刻。返回 (yyyy-MM-dd 或 null, "HH:MM" 或 null)。
-     * 相对日：今天/明天/后天/大后天/周X（取未来最近的一个）。
+     * 系统提示词：把「分类 + 抽取」这件事完整交给大模型，并要求严格 JSON 输出。
+     * 带上今天日期与星期，模型才能正确换算「明天 / 下周三」这类相对时间。
      */
-    private fun parseWhen(raw: String): Pair<String?, String?> {
-        val cal = Calendar.getInstance()
-        var daySet = false
+    fun systemPrompt(today: String, weekday: String): String =
+        "你是「地球Online」这个个人事务 App 的输入解析器。用户会随手说一句话，你要判断它属于哪一类并抽取字段。\n" +
+            "今天的日期是 $today（$weekday）。\n" +
+            "只输出一行 JSON，不要解释、不要 Markdown 代码块、不要多余文字：\n" +
+            "{\"type\":\"task|item|note|ledger\",\"title\":\"\",\"time\":\"\",\"amount\":null,\"note\":\"\"}\n" +
+            "type 判定规则：\n" +
+            "- task：需要去做的事、有时间点或截止的安排（开会、记得交作业、明天要去体检、三点给妈妈打电话…）；只是「想买/要买/打算买」也属于 task。\n" +
+            "- item：已经买到或已经拥有的物品（买了一个耳机、入手相机、到货了机械键盘…）。\n" +
+            "- ledger：发生了金额的收入或支出（中午吃饭花了30、充了50话费、工资到账8000…）。\n" +
+            "- note：想法、感受、备忘，以及以上都不属于的其他一切。\n" +
+            "字段要求：\n" +
+            "- title：去掉口语前缀、去掉时间词之后的简短标题，中文尽量不超过 20 字，保留核心名词/动词。\n" +
+            "- time：能推断出日期时填 yyyy-MM-dd；推断不出就填空字符串。\n" +
+            "- amount：金额（元，纯数字）；ledger 必填，其余填 null。\n" +
+            "- note：补充说明，没有就填空字符串。"
 
-        DAY_OFFSET.forEach { (word, off) ->
-            if (!daySet && raw.contains(word)) {
-                cal.add(Calendar.DAY_OF_YEAR, off)
-                daySet = true
-            }
-        }
-        if (!daySet) {
-            Regex("(?:下{1,2})?(?:周|星期|礼拜)([一二三四五六日天])").find(raw)?.let { m ->
-                val cn = m.groupValues[1]
-                val target = when (cn) {
-                    "一" -> Calendar.MONDAY; "二" -> Calendar.TUESDAY; "三" -> Calendar.WEDNESDAY
-                    "四" -> Calendar.THURSDAY; "五" -> Calendar.FRIDAY; "六" -> Calendar.SATURDAY
-                    else -> Calendar.SUNDAY
-                }
-                var diff = (target - cal.get(Calendar.DAY_OF_WEEK) + 7) % 7
-                if (diff == 0) diff = 7
-                if (raw.contains("下周") || raw.contains("下星期") || raw.contains("下礼拜")) diff += 7
-                cal.add(Calendar.DAY_OF_YEAR, diff)
-                daySet = true
-            }
-        }
+    /** 从模型返回的文本里还原结构化意图；失败返回 null */
+    fun decode(text: String, fallbackTitle: String): QuickIntent? {
+        val trimmed = text.trim()
+        val start = trimmed.indexOf('{')
+        val end = trimmed.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
 
-        var clock: String? = null
-        CLOCK.find(raw)?.let { m ->
-            val period = m.groupValues[1]
-            val h = cnToInt(m.groupValues[2]) ?: return@let
-            if (h !in 0..23) return@let
-            var hour = h
-            when (period) {
-                "下午", "傍晚", "晚上", "夜里" -> if (hour < 12) hour += 12
-                "中午" -> if (hour < 11) hour += 12
-            }
-            val minute = when {
-                m.groupValues[3] == "半" -> 30
-                m.groupValues[3].isNotBlank() -> cnToInt(m.groupValues[3]) ?: 0
-                else -> 0
-            }
-            clock = String.format(Locale.US, "%02d:%02d", hour, minute)
+        val obverse = runCatching {
+            Json.parseToJsonElement(trimmed.substring(start, end + 1)) as JsonObject
+        }.getOrNull() ?: return null
+
+        val type = (obverse["type"] as? JsonPrimitive)?.content?.trim()?.lowercase(Locale.US)
+            ?: return null
+        val kind = when (type) {
+            "task" -> QuickKind.TASK
+            "item" -> QuickKind.ITEM
+            "ledger" -> QuickKind.LEDGER
+            "note", "memo" -> QuickKind.MEMO
+            else -> return null
         }
 
-        val day = if (daySet || clock != null) {
-            SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
-        } else null
-        return day to clock
+        val title = (obverse["title"] as? JsonPrimitive)?.content
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackTitle
+
+        val due = (obverse["time"] as? JsonPrimitive)?.content
+            ?.trim()
+            ?.takeIf { DATE.matches(it) }
+
+        val amount = (obverse["amount"] as? JsonPrimitive)?.content
+            ?.trim()
+            ?.toDoubleOrNull()
+
+        return QuickIntent(
+            kind = kind,
+            title = if (kind == QuickKind.MEMO) fallbackTitle else title,
+            dueDate = due.takeIf { kind == QuickKind.TASK },
+            amount = amount.takeIf { kind == QuickKind.LEDGER }
+        )
     }
 }
 
+/** AI 接口就绪状态（抽屉顶部展示用） */
+data class AiHubStatus(
+    val configured: Boolean = false,
+    val model: String = "",
+    val host: String = ""
+)
+
 /**
- * AI 快捷中枢 ViewModel：
- * 本地规则永远兜底；用户配置了 AI（baseUrl/apiKey/model 齐全）时先走 LLM 分类，
- * 失败 / 超时 / 未配置一律静默回落本地规则 —— 快捷入口绝不能因为网络而卡住。
+ * AI 快捷中枢 ViewModel。
+ * 识别链路（v1.0.21 起）：
+ *   用户输入 → 读取「设置 → 通用 → AI 对话」配置 → 真实大模型 chat/completions
+ *   → 模型返回结构化 JSON → 本地落库（任务 / 背包 / 笔记 / 记账标签笔记）
+ * 未配置 Key、网络失败、超时、返回无法解析 → 一律原文追加为笔记并给出可操作提示。
  */
 @HiltViewModel
 class AiQuickHubViewModel @Inject constructor(
@@ -317,17 +230,43 @@ class AiQuickHubViewModel @Inject constructor(
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
-    /** AI 配置是否可用（LLM 增强路径） */
-    private suspend fun aiConfigOrNull(): AiConfig? {
-        val raw = settings.aiConfig.first()
+    /** AI 配置是否齐全（三项都填了才算可用） */
+    val aiStatus: StateFlow<AiHubStatus> = settings.aiConfig
+        .map { raw ->
+            val cfg = parseConfig(raw)
+            AiHubStatus(
+                configured = cfg != null,
+                model = cfg?.model.orEmpty(),
+                host = cfg?.baseUrl
+                    ?.trim()
+                    ?.removePrefix("https://")
+                    ?.removePrefix("http://")
+                    ?.substringBefore("/")
+                    .orEmpty()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiHubStatus())
+
+    private fun parseConfig(raw: String): AiConfig? {
         if (raw.isBlank()) return null
-        return runCatching { json.decodeFromString<AiConfig>(raw) }.getOrNull()
-            ?.takeIf { it.baseUrl.isNotBlank() && it.apiKey.isNotBlank() && it.model.isNotBlank() }
+        val cfg = runCatching { json.decodeFromString<AiConfig>(raw) }.getOrNull() ?: return null
+        return cfg.takeIf {
+            it.baseUrl.isNotBlank() && it.apiKey.isNotBlank() && it.model.isNotBlank()
+        }
+    }
+
+    /** 缺哪一项就提示哪一项，别让用户猜 */
+    private fun missingHint(cfg: AiConfig?): String? = when {
+        cfg == null -> "请先在「设置 → 通用 → AI 对话」中配置 Base URL 与 API Key"
+        cfg.baseUrl.isBlank() -> "缺少 Base URL，请在「设置 → 通用 → AI 对话」中填写"
+        cfg.apiKey.isBlank() -> "缺少 API Key，请在「设置 → 通用 → AI 对话」中填写"
+        cfg.model.isBlank() -> "缺少模型名，请在「设置 → 通用 → AI 对话」中按服务商文档填写"
+        else -> null
     }
 
     /**
      * 解析 + 落库。结果通过 [onDone] 回传可直接 Toast 的中文文案。
-     * 任何异常都不抛出 —— 快捷入口是「顺手」功能，失败也要安静地兜底。
+     * 任何异常都不抛出 —— 快捷入口是「顺手」功能，失败也要安静地把内容留住。
      */
     fun dispatch(raw0: String, onDone: (String) -> Unit) {
         val raw = raw0.trim()
@@ -335,60 +274,90 @@ class AiQuickHubViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                val rules = withContext(Dispatchers.Default) { QuickCaptureParser.parse(raw) }
-                val intent = enhanceWithLlm(raw, rules)
-                val message = save(intent, raw)
+                val cfg = parseConfig(settings.aiConfig.first())
+                val missing = missingHint(cfg)
+                val intent = if (missing != null) null else recognize(raw, cfg!!)
+                val message = if (intent == null && missing != null) {
+                    fallbackNote(raw, missing)
+                } else if (intent == null) {
+                    fallbackNote(raw, "AI 返回无法解析")
+                } else {
+                    save(intent, raw)
+                }
                 onDone(message)
             } catch (t: Throwable) {
-                // 最后防线：连落库都异常时，至少告诉用户没存上
-                onDone("快捷记录失败：${t.message ?: "未知错误"}")
+                onDone(fallbackNote(raw, friendlyError(t)))
             } finally {
                 _busy.value = false
             }
         }
     }
 
-    /** LLM 增强：未配置 / 超时 / 返回不合规格 → 静默用本地规则结果 */
-    private suspend fun enhanceWithLlm(raw: String, rules: QuickIntent): QuickIntent {
-        val config = aiConfigOrNull() ?: return rules
+    /** 唯一识别路径：真实大模型 API。返回 null 表示这条路走不通。 */
+    private suspend fun recognize(raw: String, cfg: AiConfig): QuickIntent? {
+        val today = todayStr()
+        val weekday = weekdayCn()
         return try {
-            val sys = "你是个人事务解析器。把用户这句话分类并输出严格 JSON（不要多余文字）：" +
-                "{\"kind\":\"task|item|note|ledger\",\"title\":\"清洗后的简短标题\",\"due\":\"yyyy-MM-dd或空\",\"amount\":数字或null}。" +
-                "规则：花钱=ledger；已买到的物品=item；有安排/时间/待办=task；其余=note。"
-            val resp = withTimeout(12_000) {
-                aiRepo.chat(config, listOf(ChatMessage("system", sys), ChatMessage("user", raw)))
+            val resp = withTimeout(15_000) {
+                aiRepo.chat(
+                    cfg,
+                    listOf(
+                        ChatMessage("system", QuickIntentDecoder.systemPrompt(today, weekday)),
+                        ChatMessage("user", raw)
+                    )
+                )
             }
-            val text = resp.choices.firstOrNull()?.message?.content ?: return rules
-            val cleaned = text
-                .replace("```json", "")
-                .replace("```", "")
-                .trim()
-            val obj = runCatching { json.parseToJsonElement(cleaned) as JsonObject }.getOrNull()
-                ?: return rules
-            val kindStr = (obj["kind"] as? JsonPrimitive)?.content ?: return rules
-            val kind = when (kindStr.lowercase()) {
-                "task" -> QuickKind.TASK
-                "item" -> QuickKind.ITEM
-                "ledger" -> QuickKind.LEDGER
-                else -> QuickKind.MEMO
-            }
-            val title = (obj["title"] as? JsonPrimitive)?.content
-                ?.trim()?.takeIf { it.isNotBlank() } ?: rules.title
-            val due = (obj["due"] as? JsonPrimitive)?.content
-                ?.takeIf { Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(it) }
-            val amount = (obj["amount"] as? JsonPrimitive)?.content
-                ?.toDoubleOrNull() ?: rules.amount
-            QuickIntent(
-                kind = kind,
-                title = if (kind == QuickKind.MEMO) raw else title,
-                dueDate = due ?: if (kind == QuickKind.TASK) rules.dueDate else null,
-                timeHint = rules.timeHint.takeIf { kind == QuickKind.TASK },
-                amount = amount.takeIf { kind == QuickKind.LEDGER },
-                source = "llm"
-            )
+            val serverError = resp.error?.message?.takeIf { it.isNotBlank() }
+            if (serverError != null) return null
+            val content = resp.choices.firstOrNull()?.message?.content
+            if (content.isNullOrBlank()) return null
+            QuickIntentDecoder.decode(content, raw)
         } catch (t: Throwable) {
-            rules
+            null
         }
+    }
+
+    /** 兜底：原文追加为笔记，保证用户输入一条不丢 */
+    private suspend fun fallbackNote(raw: String, reason: String): String =
+        withContext(NonCancellable) {
+            try {
+                memoRepo.insert(
+                    MemoEntity(
+                        id = uid("memo"),
+                        text = raw,
+                        markdown = raw,
+                        type = "AI",
+                        createdAt = nowIso()
+                    )
+                )
+                activityRepo.add(
+                    ActivityEntity(
+                        id = uid("act"),
+                        time = nowIso(),
+                        kind = "memo",
+                        title = "AI 快捷记录（未分类）：$raw"
+                    )
+                )
+                "未启用智能分类（$reason），已原文存为笔记"
+            } catch (t: Throwable) {
+                "快捷记录失败：${t.message ?: "未知错误"}"
+            }
+        }
+
+    /** 异常 → 可操作的中文提示，不把英文堆栈怼给用户 */
+    private fun friendlyError(t: Throwable): String = when (t) {
+        is java.net.UnknownHostException, is java.net.ConnectException -> "无网络连接"
+        is java.net.SocketTimeoutException -> "请求超时"
+        is kotlinx.coroutines.TimeoutCancellationException -> "AI 响应超时"
+        is HttpException -> when (t.code()) {
+            401, 403 -> "API Key 无效或无权限（${t.code()}）"
+            404 -> "接口地址或模型名不存在（404）"
+            429 -> "请求过于频繁（429）"
+            in 500..599 -> "AI 服务端错误（${t.code()}）"
+            else -> "AI 接口返回 ${t.code()}"
+        }
+        is java.io.IOException -> "网络异常"
+        else -> t.message?.takeIf { it.isNotBlank() } ?: "未知错误"
     }
 
     /** 按意图落库 + 写动态流，返回用户可读的结果文案 */
@@ -463,26 +432,41 @@ class AiQuickHubViewModel @Inject constructor(
 }
 
 /**
- * AI 快捷中枢底部抽屉：半透明液态玻璃面板 + 自动聚焦输入框 + 实时意图预览。
- * 语音输入统一走输入法键盘上的麦克风（placeholder 与提示文案已说明），
- * 录音权限 / SpeechRecognizer 全部移除，任何机型都不会「点了没反应」。
+ * AI 快捷中枢底部抽屉：半透明液态玻璃面板 + 自动聚焦输入框 + 接口状态提示。
+ * 识别由用户在「设置 → 通用 → AI 对话」里配置的真实大模型完成；
+ * 未配置或请求失败时，原文追加为笔记，不会静默丢失。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun AiQuickHubSheet(
     visible: Boolean,
     onDismiss: () -> Unit,
+    onConfigure: () -> Unit = {},
     vm: AiQuickHubViewModel = hiltViewModel()
 ) {
     if (!visible) return
     val context = LocalContext.current
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val status by vm.aiStatus.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     var input by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+
+    /**
+     * 统一收口「关闭抽屉」：先清焦点再显式收起键盘，最后才回调 onDismiss。
+     * 顺序不能反 —— 若先隐藏抽屉再清焦点，输入框在动画期间仍持有焦点，
+     * 系统会在抽屉消失后重新拉起输入法（就是那个「莫名又弹键盘」的 Bug）。
+     */
+    fun close() {
+        runCatching { focusRequester.freeFocus() }
+        runCatching { focusManager.clearFocus() }
+        runCatching { keyboard?.hide() }
+        onDismiss()
+    }
 
     fun submit() {
         val text = input.trim()
@@ -497,7 +481,8 @@ fun AiQuickHubSheet(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        // v1.0.6 封板：下滑手势 / 返回键 / 点击外部，统一走 close() 收口
+        onDismissRequest = { close() },
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
         // inset 自理（面板自带 navigationBarsPadding + imePadding），防双重垫高
@@ -518,7 +503,7 @@ fun AiQuickHubSheet(
                     .padding(horizontal = 20.dp)
                     .padding(top = 18.dp, bottom = 18.dp)
             ) {
-                /* —— 标题行：图标芯片 + 标题 —— */
+                /* —— 标题行：图标芯片 + 标题 + 接口状态 —— */
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -533,14 +518,45 @@ fun AiQuickHubSheet(
                     Column(Modifier.weight(1f)) {
                         Text("AI 快捷中枢", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            "说一句话，自动归档到任务 / 背包 / 笔记",
+                            "说一句话，AI 自动归档到任务 / 背包 / 笔记",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(12.dp))
+
+                /* —— 接口状态条：未配置可直接跳设置 —— */
+                val statusTint = if (status.configured) ModuleTints.Ai else MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(statusTint.copy(alpha = 0.12f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (status.configured) Icons.Rounded.AutoAwesome else Icons.Rounded.SmartToy,
+                        contentDescription = null,
+                        tint = statusTint,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        if (status.configured) "智能识别已启用 · ${status.model}" else "未配置 AI 接口，将原文存为笔记",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusTint,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!status.configured) {
+                        TextButton(onClick = onConfigure) { Text("去配置") }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
 
                 /* —— 输入框：弹出即聚焦 + 唤起软键盘；语音走输入法麦克风 —— */
                 OutlinedTextField(
@@ -557,11 +573,21 @@ fun AiQuickHubSheet(
                         Icon(Icons.Rounded.SmartToy, contentDescription = null, tint = ModuleTints.Ai)
                     },
                     trailingIcon = {
-                        IconButton(
-                            onClick = { submit() },
-                            enabled = input.isNotBlank() && !busy
-                        ) {
-                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "发送")
+                        if (busy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .padding(2.dp),
+                                strokeWidth = 2.dp,
+                                color = ModuleTints.Ai
+                            )
+                        } else {
+                            IconButton(
+                                onClick = { submit() },
+                                enabled = input.isNotBlank()
+                            ) {
+                                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "发送")
+                            }
                         }
                     },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -573,28 +599,17 @@ fun AiQuickHubSheet(
 
                 Spacer(Modifier.height(10.dp))
 
-                /* —— 实时意图预览：当前文本将被归档到哪 —— */
-                val draft = input.trim()
-                if (draft.isNotBlank()) {
-                    val preview = QuickCaptureParser.parse(draft)
-                    Row(
-                        Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(preview.kind.tint.copy(alpha = 0.12f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(preview.kind.icon, contentDescription = null, tint = preview.kind.tint, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.size(6.dp))
-                        Text(
-                            QuickCaptureParser.previewLabel(preview) +
-                                if (preview.source == "llm") " · AI" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = preview.kind.tint,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
+                /* —— 归档去向提示（识别由大模型完成，本地不再猜测） —— */
+                if (input.trim().isNotBlank()) {
+                    Text(
+                        if (status.configured) "AI 将自动判断并归档到 任务 / 背包 / 笔记 / 记账"
+                        else "未配置 AI 接口，提交后将原文存为笔记",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (status.configured) ModuleTints.Ai else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
                 }
 
                 Text(
@@ -602,6 +617,13 @@ fun AiQuickHubSheet(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "识别由你在「设置 → 通用 → AI 对话」里配置的大模型完成；未配置或请求失败时，内容会原文存为笔记（标签 AI）。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(6.dp))
@@ -627,5 +649,30 @@ fun AiQuickHubSheet(
         delay(250)
         runCatching { focusRequester.requestFocus() }
         keyboard?.show()
+    }
+
+    /**
+     * 兜底清理：抽屉真正从组合里移出时（关闭动画结束后）再清一次焦点并收起键盘。
+     * 覆盖「动画期间焦点被系统交还给底层输入框」导致的二次唤起。
+     */
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { focusManager.clearFocus() }
+            runCatching { keyboard?.hide() }
+        }
+    }
+}
+
+/** 今天是星期几（中文），供大模型换算相对时间 */
+private fun weekdayCn(): String {
+    val w = Calendar.getInstance(Locale.CHINA).get(Calendar.DAY_OF_WEEK)
+    return when (w) {
+        Calendar.SUNDAY -> "星期日"
+        Calendar.MONDAY -> "星期一"
+        Calendar.TUESDAY -> "星期二"
+        Calendar.WEDNESDAY -> "星期三"
+        Calendar.THURSDAY -> "星期四"
+        Calendar.FRIDAY -> "星期五"
+        else -> "星期六"
     }
 }

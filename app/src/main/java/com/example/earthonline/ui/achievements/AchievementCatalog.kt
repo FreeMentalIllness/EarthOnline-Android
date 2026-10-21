@@ -90,7 +90,11 @@ data class AchStats(
     val newYearBirth: Int = 0,      // 生日是 1 月 1 日
     // —— v1.0.3 新增彩蛋 ——
     val throwbackSeen: Int = 0,     // 查看「历年今日」回忆卡次数（需持久化计数）
-    val memoryPhotos: Int = 0       // 记忆相册已导入照片数
+    val memoryPhotos: Int = 0,      // 记忆相册已导入照片数
+    // —— v1.0.6：本轮新功能成就用 ——
+    val aiHubCount: Int = 0,        // AI 快捷中枢归档条数（动态流里 title 以「AI 快捷」开头的条数，仅 Android）
+    val longMemos: Int = 0,         // 正文 ≥300 字的「长文」笔记条数（笔记系统重构）
+    val appearanceTuned: Int = 0    // 卡片 / 壁纸不透明度是否被调过（0 / 1）
 )
 
 /**
@@ -249,6 +253,18 @@ val AUTO_RULES: List<AutoRule> = listOf(
         "grand_slam", "大满贯", "任务 / 物品 / 收藏 / 日志 / 足迹各达到 20", "general", 5,
         test = { multiCount(it, 20) == 5 }
     ) { multiCount(it, 20) },
+
+    // ————— v1.0.6：新功能成就（笔记系统重构 / 外观自定义；跨端 canonical） —————
+    AutoRule("notes_hundred", "百篇成册", "累计写下 100 条笔记", "memo", 100) { it.memos },
+    AutoRule("memo_long", "长文作者", "写下第一条正文 ≥300 字的笔记", "memo", 1) { it.longMemos },
+    AutoRule(
+        "glass_tuner", "手感调校师", "第一次调整卡片或壁纸不透明度", "general", 1,
+        test = { it.appearanceTuned > 0 }
+    ) { it.appearanceTuned },
+
+    // ————— v1.0.6：AI 快捷中枢成就（Android 端专属功能，不进跨端 canonical） —————
+    AutoRule("ai_hub_first", "一句话的事", "用 AI 快捷中枢完成第一次自动归档", "general", 1) { it.aiHubCount },
+    AutoRule("ai_hub_ten", "AI 得力助手", "累计用 AI 快捷中枢归档 10 条记录", "general", 10) { it.aiHubCount },
 
     // ————— v1.2.0：彩蛋（隐藏成就，未解锁时 UI 打码） —————
     AutoRule(
