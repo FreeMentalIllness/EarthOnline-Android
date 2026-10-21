@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Search
@@ -31,6 +33,7 @@ import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.GlassSurface
 import kotlinx.coroutines.launch
+import com.example.earthonline.ui.theme.AmberPrimary
 
 /**
  * 笔记主页（v1.0.6 重写：极简卡片流）。
@@ -142,7 +145,7 @@ fun NotesScreen(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("📝", style = MaterialTheme.typography.displaySmall)
+                        Icon(Icons.Rounded.EditNote, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(56.dp))
                         Spacer(Modifier.height(8.dp))
                         Text(
                             if (query.isBlank() && activeTag == NotesViewModel.ALL_TAGS)
@@ -217,7 +220,7 @@ private fun NewNoteEntry(onClick: () -> Unit) {
                     .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
-            ) { Text("✏️", style = MaterialTheme.typography.bodyLarge) }
+            ) { Icon(Icons.Rounded.Edit, contentDescription = "编辑", tint = AmberPrimary, modifier = Modifier.size(18.dp)) }
             Column(Modifier.weight(1f)) {
                 Text(
                     "新建笔记",

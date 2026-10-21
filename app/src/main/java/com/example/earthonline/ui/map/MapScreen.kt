@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.map
 
+import com.example.earthonline.ui.theme.GlassCard
 import android.Manifest
 import android.content.Intent
 import android.provider.Settings
@@ -299,9 +300,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                     Modifier.fillMaxSize().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Card(
-                        Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = AmberPrimary.copy(alpha = 0.12f))
+                    GlassCard(
+                        Modifier.fillMaxWidth()
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("地图组件加载失败", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -419,7 +419,7 @@ private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEnt
             key = { it.id },
             contentType = { "locationRow" }
         ) { loc ->
-            Card(Modifier.fillMaxWidth().animateItem()) {
+            GlassCard(Modifier.fillMaxWidth().animateItem()) {
                 Row(
                     Modifier.fillMaxWidth().padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,

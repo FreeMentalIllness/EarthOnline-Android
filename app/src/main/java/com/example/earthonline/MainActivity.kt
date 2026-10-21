@@ -197,7 +197,7 @@ private fun InspireDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("💡 跨端灵感接力") },
+        title = { Text("跨端灵感接力") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(

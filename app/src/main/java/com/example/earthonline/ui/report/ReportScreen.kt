@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.report
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -42,6 +42,10 @@ import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.XpRules
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 
 @Composable
 fun ReportRoute(
@@ -77,7 +81,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
             item { KindSwitcher(current = state.kind, onSelect = vm::selectKind) }
 
             item {
-                Card(
+                GlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(UiDimens.CardRadius)
                 ) {
@@ -87,7 +91,8 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             SectionHeader(
-                                "${state.kind.emoji} ${state.kind.label}",
+                                state.kind.label,
+                                icon = state.kind.icon,
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
@@ -142,7 +147,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
             }
 
             item {
-                Card(
+                GlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(UiDimens.CardRadius)
                 ) {
@@ -183,7 +188,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
             }
 
             item {
-                Card(
+                GlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(UiDimens.CardRadius)
                 ) {
@@ -203,7 +208,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
 
             if (state.highlights.isNotEmpty()) {
                 item {
-                    Card(
+                    GlassCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(UiDimens.CardRadius)
                     ) {
@@ -235,7 +240,13 @@ private fun KindSwitcher(current: ReportKind, onSelect: (ReportKind) -> Unit) {
             FilterChip(
                 selected = kind == current,
                 onClick = { onSelect(kind) },
-                label = { Text("${kind.emoji} ${kind.label}") },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(kind.icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(kind.label)
+                    }
+                },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(50),
                 colors = FilterChipDefaults.filterChipColors(

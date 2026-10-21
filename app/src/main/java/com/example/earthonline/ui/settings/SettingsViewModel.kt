@@ -64,6 +64,9 @@ class SettingsViewModel @Inject constructor(
     val wallpaperAlpha: Flow<Float> = settings.wallpaperAlpha
     /** v1.0.11：壁纸模糊度（0~24dp，用户自平衡美观与性能） */
     val wallpaperBlur: Flow<Float> = settings.wallpaperBlur
+
+    /** v1.0.18：卡片背景不透明度（设置→外观滑块，DataStore 持久化） */
+    val cardOpacity: Flow<Float> = settings.cardOpacity
     val notify: Flow<Boolean> = settings.notify
     val aiConfigJson: Flow<String> = settings.aiConfig
     val webdavConfigJson: Flow<String> = settings.webdavConfig
@@ -134,6 +137,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private var blurJob: Job? = null
+    private var cardOpacityJob: Job? = null
 
     /**
      * v1.0.11：壁纸模糊度滑块 —— 与不透明度同样 120ms 防抖落盘，实时预览走 Flow 重组。
@@ -144,6 +148,16 @@ class SettingsViewModel @Inject constructor(
         blurJob = viewModelScope.launch {
             delay(120)
             settings.setWallpaperBlur(c)
+        }
+    }
+
+    /** v1.0.18：卡片背景不透明度滑块 —— 120ms 防抖落盘，拖动即时经 Flow 重组预览 */
+    fun setCardOpacity(v: Float) {
+        val c = v.coerceIn(0.40f, 0.95f)
+        cardOpacityJob?.cancel()
+        cardOpacityJob = viewModelScope.launch {
+            delay(120)
+            settings.setCardOpacity(c)
         }
     }
 

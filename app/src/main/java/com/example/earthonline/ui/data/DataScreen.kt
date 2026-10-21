@@ -1,5 +1,14 @@
 package com.example.earthonline.ui.data
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.ViewWeek
+import androidx.compose.ui.graphics.vector.ImageVector
+
+import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.components.BarItem
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,25 +83,25 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
             // 放在最上面而不是埋在底部：看板本身是「总览」，报告是「按周期复盘」，
             // 两者的心智模型连着，从看板直接进报告最顺。
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(
                         Modifier.fillMaxWidth().padding(UiDimens.CardPad),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        SectionHeader("📈 周期报告")
+                        SectionHeader("周期报告", icon = Icons.Rounded.QueryStats)
                         Text(
                             "按天 / 周 / 年回看这段时间的产出：完成任务、新增灵感、解锁成就与经验值，并配一张趋势图。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ReportEntry("📅", "日报", Modifier.weight(1f)) {
+                            ReportEntry(Icons.Rounded.Today, "日报", Modifier.weight(1f)) {
                                 moreActions.onNavigate(Screen.Report.route + "?kind=day")
                             }
-                            ReportEntry("🗓️", "周报", Modifier.weight(1f)) {
+                            ReportEntry(Icons.Rounded.ViewWeek, "周报", Modifier.weight(1f)) {
                                 moreActions.onNavigate(Screen.Report.route + "?kind=week")
                             }
-                            ReportEntry("📆", "年报", Modifier.weight(1f)) {
+                            ReportEntry(Icons.Rounded.CalendarToday, "年报", Modifier.weight(1f)) {
                                 moreActions.onNavigate(Screen.Report.route + "?kind=year")
                             }
                         }
@@ -111,7 +120,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
             // 「全部动态」入口：与首页最近动态的完整列表页（AllActivitiesRoute）同一目的地。
             // v1.0.7：移除「记忆相册」入口 —— 相册已有主页速览直达，看板不再重复摆放。
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     TextButton(
                         onClick = { moreActions.onNavigate(Screen.AllActivities.route) },
                         modifier = Modifier
@@ -120,7 +129,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                         colors = ButtonDefaults.textButtonColors(contentColor = AmberPrimary)
                     ) {
                         Text(
-                            "📜 查看全部动态 ›",
+                            "查看全部动态 ›",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -128,7 +137,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                 }
             }
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(
                         Modifier.fillMaxWidth().padding(UiDimens.CardPad),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -138,7 +147,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                         if (total == 0) {
                             // v1.2.3：无数据时不再画一个空荡荡的圆环，改为引导 + 跳转
                             EmptyState(
-                                emoji = "📊",
+                                icon = Icons.Rounded.Insights,
                                 title = "还没有任务",
                                 message = "添加并完成任务后，这里会显示完成度圆环。",
                                 actionLabel = "去添加任务"
@@ -162,7 +171,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                 }
             }
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SectionHeader("近 14 天活跃度")
                         val avgActive = if (byDay.isNotEmpty()) byDay.sumOf { it.count } / byDay.size else 0
@@ -179,7 +188,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                 }
             }
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SectionHeader("任务分类分布")
                         BarChart(
@@ -192,7 +201,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                 }
             }
             item {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
+                GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SectionHeader("活跃日历")
                         CalendarSection(activities, tasks)
@@ -207,7 +216,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
         val dayTasks = tasks.filter { it.status == "done" && it.doneAt?.let { iso -> localDayOf(iso) } == day }
         AnimatedAlertDialog(
             onDismissRequest = { detailDay = null },
-            title = { Text("📅 ${day} 的明细") },
+            title = { Text("${day} 的明细") },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (dayActs.isEmpty() && dayTasks.isEmpty()) {
@@ -222,7 +231,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                         }
                         items(dayTasks.size) { i ->
                             val t = dayTasks[i]
-                            Text("✅ ${t.title.ifBlank { "任务" }}", style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                            Text(t.title.ifBlank { "任务" }, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
                         }
                         items(dayActs.size) { i ->
                             val a = dayActs[i]
@@ -239,7 +248,7 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
 /** 周期报告的三个入口块（日报 / 周报 / 年报） */
 @Composable
 private fun ReportEntry(
-    emoji: String,
+    icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
@@ -255,7 +264,7 @@ private fun ReportEntry(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(emoji, style = MaterialTheme.typography.titleMedium)
+            Icon(icon, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(24.dp))
             Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }

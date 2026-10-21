@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Delete
@@ -243,7 +244,11 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                         CircularProgressIndicator(Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text("🎴 生成分享卡片")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("生成分享卡片")
+        }
                 }
                 Text(
                     "把当前等级、成就数量、个性签名和头像渲染成一张图，可以分享给朋友或存进相册。",
@@ -293,7 +298,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
     cardFile?.let { file ->
         AnimatedAlertDialog(
             onDismissRequest = { cardFile = null },
-            title = { Text("🎴 人生分享卡片") },
+            title = { Text("人生分享卡片") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     coil.compose.AsyncImage(
@@ -348,7 +353,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
     if (showTemplatePicker) {
         AnimatedAlertDialog(
             onDismissRequest = { showTemplatePicker = false },
-            title = { Text("🎴 选择卡片模板") },
+            title = { Text("选择卡片模板") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(

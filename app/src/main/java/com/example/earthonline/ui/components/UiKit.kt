@@ -85,7 +85,7 @@ fun SectionHeader(
 fun EmptyHint(
     text: String,
     modifier: Modifier = Modifier,
-    emoji: String = "✧",
+    emoji: String = "",
     icon: ImageVector? = null
 ) {
     Box(
@@ -105,18 +105,12 @@ fun EmptyHint(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )
-                Text(
-                    text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Text(
-                    "$emoji $text",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
+            Text(
+                if (emoji.isBlank()) text else "$emoji $text",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -134,7 +128,7 @@ fun EmptyHint(
  */
 @Composable
 fun EmptyState(
-    emoji: String,
+    emoji: String = "",
     title: String,
     message: String,
     modifier: Modifier = Modifier,
@@ -164,7 +158,7 @@ fun EmptyState(
                     tint = AmberPrimary,
                     modifier = Modifier.size(40.dp)
                 )
-            } else {
+            } else if (emoji.isNotBlank()) {
                 Text(emoji, style = MaterialTheme.typography.displayMedium)
             }
         }

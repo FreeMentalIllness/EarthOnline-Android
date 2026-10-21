@@ -31,6 +31,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Celebration
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Bolt
@@ -177,10 +179,28 @@ fun HomeScreen(
     var showQuickEdit by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
+        // v1.0.18（死命令 3）：顶部整块全幅出血 —— Column 包裹「实心顶块 + 内容列表」。
+        Column(Modifier.fillMaxSize()) {
+        // 状态栏 + 「地球Online」标题行合成一个不透明实心块：
+        // fillMaxWidth + statusBarsPadding 让背景色延伸到屏幕顶部与左右边缘；
+        // 标题内容自己的水平 padding 移到块内部，不再被 LazyColumn 的 contentPadding 内缩 —— 两侧绝不留缝。
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
+        ) {
+            Box(Modifier.padding(horizontal = UiDimens.ScreenPad, vertical = 8.dp)) {
+                HomeTitleBar(
+                    actions = moreActions,
+                    greeting = state.greeting
+                )
+            }
+        }
     LazyColumn(
         // v1.2.1：世界日志输入框在页面中部，键盘弹起时若不收缩可视高度，
         // 输入框会被键盘整个盖住（用户看不到自己在打什么）。imePadding 让列表底部腾出键盘高度。
-        modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding(),
+        modifier = Modifier.fillMaxSize().imePadding(),
         contentPadding = PaddingValues(
             start = UiDimens.ScreenPad,
             end = UiDimens.ScreenPad,
@@ -189,22 +209,6 @@ fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(UiDimens.Gap)
     ) {
-        item(key = "titlebar", contentType = "titlebar") {
-            // v1.0.15：顶部硬色块 —— 标题栏区域用主题背景色实心填充，与状态栏（MainScaffold 已填充）同色，
-            // 视觉上合成一个不透明块，壁纸绝不透出「地球Online」标题区
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(horizontal = UiDimens.ScreenPad, vertical = 4.dp)
-            ) {
-                HomeTitleBar(
-                    actions = moreActions,
-                    greeting = state.greeting
-                )
-            }
-        }
-
         item(key = "search", contentType = "search") {
             HomeSearchBox(
                 query = query,
@@ -282,6 +286,7 @@ fun HomeScreen(
             )
         }
     }
+        } // v1.0.18：Column（实心顶块 + 内容列表）闭合
 
         // 时间轴：添加自定义里程碑
         if (showAddTimeline) {
@@ -365,7 +370,7 @@ private fun LevelUpOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🎉", style = MaterialTheme.typography.displayMedium)
+                Icon(Icons.Rounded.Celebration, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(64.dp))
                 Text(
                     "Level Up!",
                     style = MaterialTheme.typography.titleMedium,
@@ -550,12 +555,14 @@ private fun HomeTitleBar(actions: MoreMenuActions, greeting: String) {
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
                 ) {
-                    Text(
-                        "${season.emoji} ${season.label}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = season.accent,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                    ) {
+                        Icon(season.icon, contentDescription = null, tint = season.accent, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(season.label, style = MaterialTheme.typography.labelSmall, color = season.accent)
+                    }
                 }
             }
             // v1.0.3：动态问候语（时间段 + 最近心情关怀 + 连续天数认可）
@@ -618,13 +625,13 @@ private fun HeroBanner(state: HomeUiState, onAvatarClick: () -> Unit) {
                 // v1.0.3：连续记录成长徽标（≥3 天即出现，界面随投入生长）
                 if (state.streakDays >= 3) {
                     Text(
-                        "🔥 连续记录 ${state.streakDays} 天 · ${com.example.earthonline.util.GrowthStreak.stageLabel(state.streakStage)}",
+                        "连续记录 ${state.streakDays} 天 · ${com.example.earthonline.util.GrowthStreak.stageLabel(state.streakStage)}",
                         style = MaterialTheme.typography.labelMedium,
                         color = AmberPrimary
                     )
                 }
                 Text(
-                    if (state.birthDate.isBlank()) "🎂 未设置生日" else "🎂 ${state.birthDate}",
+                    if (state.birthDate.isBlank()) "未设置生日" else "生日 ${state.birthDate}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -721,7 +728,7 @@ private fun AvatarWithBadge(
             modifier = Modifier.align(Alignment.BottomEnd).size(22.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text("✎", style = MaterialTheme.typography.labelSmall, color = AmberPrimary)
+                Icon(Icons.Rounded.Edit, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(12.dp))
             }
         }
     }
@@ -1172,7 +1179,7 @@ private fun ActsCard(
                     }
                 }
                 Text(
-                    "「全部」标签只显示勾选的分类；⭐ 自定义动态始终显示。",
+                    "「全部」标签只显示勾选的分类；自定义动态（星标）始终显示。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1251,7 +1258,7 @@ private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    "自定义动态会显示在主页「最近动态」中（⭐ 标记），不受分类筛选影响。",
+                    "自定义动态会显示在主页「最近动态」中（星标条目），不受分类筛选影响。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1542,7 +1549,7 @@ private fun LifeCard(
     // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionHeader("🌍 地球Online · 人生卡片")
+            SectionHeader("地球Online · 人生卡片", icon = Icons.Rounded.Public)
             // 昵称加前缀，避免纯数字昵称（如「1」）看起来像渲染残留
             Text(
                 if (name.isBlank()) "未命名旅行者" else "昵称：$name",

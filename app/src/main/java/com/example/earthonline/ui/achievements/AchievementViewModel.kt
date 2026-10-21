@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.achievements
 
+import androidx.compose.ui.graphics.vector.ImageVector
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.earthonline.data.local.datastore.SettingsDataStore
@@ -69,7 +71,7 @@ class AchievementViewModel @Inject constructor(
     data class CategorySummary(
         val id: String,
         val label: String,
-        val emoji: String,
+        val icon: ImageVector,
         val unlocked: Int,
         val total: Int
     )
@@ -83,7 +85,7 @@ class AchievementViewModel @Inject constructor(
         uiState.map { ui ->
             ACH_CATEGORIES.map { c ->
                 val sub = ui.filter { it.categoryId == c.id }
-                CategorySummary(c.id, c.label, c.emoji, sub.count { it.entity.unlocked }, sub.size)
+                CategorySummary(c.id, c.label, c.icon, sub.count { it.entity.unlocked }, sub.size)
             }.filter { it.total > 0 }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -296,7 +298,7 @@ class AchievementViewModel @Inject constructor(
             appContext,
             com.example.earthonline.reminder.AppNotifier.CHANNEL_ACH,
             com.example.earthonline.reminder.AppNotifier.ID_ACH,
-            "🏆 解锁成就：${a.title}",
+            "解锁成就：${a.title}",
             a.desc.ifBlank { "又迈过一道里程碑，继续加油！" }
         )
     }

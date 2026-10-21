@@ -51,6 +51,13 @@ import java.io.File
 val LocalWallpaperPath = compositionLocalOf<String?> { null }
 
 /**
+ * v1.0.18：卡片背景不透明度（设置 → 外观滑块，DataStore 持久化）。
+ * 仅作用于 [GlassCard]（全局统一卡片容器），速览瓦片/底栏等其它 GlassSurface 用途不受影响。
+ * 取值 0.40 ~ 0.95：低 = 通透感优先，高 = 可读性优先；默认 0.74（历史视觉基线）。
+ */
+val LocalCardOpacity = compositionLocalOf { 0.74f }
+
+/**
  * 液态玻璃特效全局开关（对应「设置 → 外观 → 液态玻璃特效」）。
  * - true（默认）：启用毛玻璃背景模糊 + 高光描边 + 半透明折射观感；
  * - false（性能模式）：[GlassSurface] 强制走 [GlassTier.FLAT] 分支 ——
@@ -90,6 +97,10 @@ fun GlassSurface(
     onClick: (() -> Unit)? = null,
     contentAlignment: Alignment = Alignment.Center,
     showBorder: Boolean = true,
+    /** v1.0.18：着色不透明度覆写（卡片不透明度滑块），null = 用内置档位 */
+    tintOverride: Float? = null,
+    /** v1.0.18：可读性遮罩覆写（随不透明度滑块联动），null = 用内置 0.28 */
+    scrimOverride: Float? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val deviceTier = rememberGlassTier()
@@ -107,6 +118,8 @@ fun GlassSurface(
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
         tier == GlassTier.FLAT -> 0.94f to 0.94f
+        // v1.0.18：卡片不透明度滑块覆写（上深下浅的梯度差收窄为 0.08）
+        tintOverride != null -> tintOverride to (tintOverride - 0.08f).coerceAtLeast(0.30f)
         // v1.0.17：底部着色下限 0.62→0.66 —— 用户反馈可读性优先，Alpha 收敛进 60%~80% 区间上沿
         else -> 0.74f to 0.66f
     }
@@ -178,7 +191,12 @@ fun GlassSurface(
         //      同时仍保留壁纸的色相与模糊层次，不会退化成死灰面板。
         //    - FLAT 档（低端机 / 性能降级）：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
         // v1.0.17：同色系可读性遮罩 0.24→0.28 —— 任何壁纸下正文都保持稳定对比度
-        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.28f
+        // v1.0.18：随「卡片背景不透明度」滑块联动（滑得越透，遮罩越轻；默认 0.74 → 0.28）
+        val scrimAlpha = when {
+            tier == GlassTier.FLAT -> 0f
+            scrimOverride != null -> scrimOverride
+            else -> 0.28f
+        }
         if (scrimAlpha > 0f) {
             Box(
                 Modifier
@@ -239,9 +257,21 @@ fun GlassSurface(
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(16.dp),
+    onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    GlassSurface(modifier = modifier, shape = shape, showBorder = true) {
+    // v1.0.18：接入「卡片背景不透明度」滑块 —— tint 直读用户值，
+    // scrim 按比例联动（默认 0.74 → 0.28，滑到 0.40 → 0.15 更通透，滑到 0.95 → 0.36 更稳）。
+    // 整卡视觉参数与速览瓦片完全同源（同一 GlassSurface 渲染管线），绝无默认 Card 的黑色 elevation。
+    val userAlpha = LocalCardOpacity.current
+    GlassSurface(
+        modifier = modifier,
+        shape = shape,
+        showBorder = true,
+        onClick = onClick,
+        tintOverride = userAlpha,
+        scrimOverride = (0.28f * (userAlpha / 0.74f)).coerceIn(0f, 0.4f)
+    ) {
         Box(
             Modifier
                 .matchParentSize()

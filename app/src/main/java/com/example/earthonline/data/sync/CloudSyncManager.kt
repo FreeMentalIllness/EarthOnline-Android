@@ -177,7 +177,7 @@ class CloudSyncManager @Inject constructor(
             }
             N.post(
                 appContext, N.CHANNEL_SYNC, N.ID_INSPIRE_BASE,
-                "💡 跨端灵感接力（${newMemos.size} 条）",
+                "跨端灵感接力（${newMemos.size} 条）",
                 first + if (newMemos.size > 1) " 等 ${newMemos.size} 条新灵感已同步，点击转为待办" else " 已同步，点击转为待办",
                 intent
             )

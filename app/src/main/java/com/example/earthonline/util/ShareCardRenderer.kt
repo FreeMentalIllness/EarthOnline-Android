@@ -163,15 +163,15 @@ object ShareCardRenderer {
         // 四个数据块：成就 / 完成任务 / 连续记录 / 本月关键词
         val statTop = barTop + 86f
         val gap = W / 4f
-        drawStat(c, "🏆 成就", "${data.achievements}/${data.totalAchievements}", gap * 0.5f, statTop, P)
-        drawStat(c, "✅ 任务", "${data.tasksDone}", gap * 1.5f, statTop, P)
+        drawStat(c, "成就", "${data.achievements}/${data.totalAchievements}", gap * 0.5f, statTop, P)
+        drawStat(c, "任务", "${data.tasksDone}", gap * 1.5f, statTop, P)
         if (data.streakDays > 0) {
-            drawStat(c, "🔥 连续", "${data.streakDays} 天", gap * 2.5f, statTop, P)
+            drawStat(c, "连续", "${data.streakDays} 天", gap * 2.5f, statTop, P)
         } else {
             drawStat(c, "🔥 连续", "—", gap * 2.5f, statTop, P)
         }
         if (data.monthKeyword.isNotBlank()) {
-            drawStat(c, "📅 本月", data.monthKeyword.take(6), gap * 3.5f, statTop, P)
+            drawStat(c, "本月", data.monthKeyword.take(6), gap * 3.5f, statTop, P)
         } else {
             drawStat(c, "📅 本月", "—", gap * 3.5f, statTop, P)
         }
@@ -234,7 +234,7 @@ object ShareCardRenderer {
         } else {
             // 没有上传头像时画默认地球 emoji
             val p = textPaint(110f, P.accent)
-            drawCenter(c, "🌍", cx, top + r + 40f, p)
+            drawCenter(c, "地", cx, top + r + 40f, p)
         }
         // 描边
         c.drawCircle(

@@ -217,12 +217,12 @@ fun NoteEditorScreen(
     }
 
     val pickImage = rememberImagePicker(onPicked = { uri ->
-        importIntoNoteMedia(uri, "image.jpg") { path -> rich.addLink("🖼 图片", "file://$path") }
+        importIntoNoteMedia(uri, "image.jpg") { path -> rich.addLink("图片", "file://$path") }
     })
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             importIntoNoteMedia(uri, "file") { path ->
-                rich.addLink("📎 ${path.substringAfterLast('_')}", "file://$path")
+                rich.addLink("${path.substringAfterLast('_')}", "file://$path")
             }
         }
     }
@@ -261,62 +261,63 @@ fun NoteEditorScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
-        // v1.0.14：本页 inset 清零 —— 键盘/导航栏避让全部交给 bottomBar 的 safeDrawing 处理，
-        // 消除「内容 ime padding + 工具栏 ime/navigation padding」双重叠加造成的空白与间隙
+        // v1.0.14：本页 inset 清零 —— 键盘/导航栏避让由内容自理，杜绝双重叠加
         contentWindowInsets = WindowInsets(0),
+        /* v1.0.18（死命令 5）：放弃「贴键盘」方案 —— 格式化工具栏直接挂在标题栏正下方，
+           固定在屏幕顶部。无论键盘怎么弹，工具栏恒在顶端，中间绝无空白。
+           （topBar 整体被 windowInsetsTopHeight 之外的状态栏避让覆盖，键盘永远够不到这里。） */
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
-                navigationIcon = {
-                    IconButton(onClick = { save() }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "返回并保存")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { save() }, enabled = loaded) { Text("保存") }
-                    if (id.isNotBlank()) {
-                        IconButton(onClick = { showDelete = true }) {
-                            Icon(
-                                Icons.Rounded.Delete,
-                                contentDescription = "删除",
-                                tint = MaterialTheme.colorScheme.error
-                            )
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
+                    navigationIcon = {
+                        IconButton(onClick = { save() }) {
+                            Icon(Icons.Rounded.ArrowBack, contentDescription = "返回并保存")
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = { save() }, enabled = loaded) { Text("保存") }
+                        if (id.isNotBlank()) {
+                            IconButton(onClick = { showDelete = true }) {
+                                Icon(
+                                    Icons.Rounded.Delete,
+                                    contentDescription = "删除",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
-                }
-            )
-        },
-        /* 工具栏挂在 bottomBar：imePadding 让它在键盘弹出时贴在键盘上沿，永不被遮挡 */
-        bottomBar = {
-            /* v1.0.14：currentSpanStyle 是快照态 —— 点 B 后立即重组，按钮高亮 + 正文即时变粗 */
-            val curSpanStyle = rich.currentSpanStyle
-            EditorFormatBar(
-                modifier = Modifier,
-                canUndo = histIndex > 0,
-                canRedo = histIndex >= 0 && histIndex < history.lastIndex,
-                boldActive = curSpanStyle.fontWeight == FontWeight.Bold,
-                italicActive = curSpanStyle.fontStyle == FontStyle.Italic,
-                underlineActive = curSpanStyle.textDecoration == TextDecoration.Underline,
-                onUndo = { undo() },
-                onRedo = { redo() },
-                onBold = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-                onItalic = { applySpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-                onUnderline = { applySpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                onHeading = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                onTodo = { toggleTodo() },
-                onBullet = { rich.toggleUnorderedList() },
-                onOrdered = { rich.toggleOrderedList() },
-                onImage = { pickImage() },
-                onFile = { pickFile.launch("*/*") },
-                onFontSize = {
-                    bodyScale = when (bodyScale) {
-                        1f -> 1.15f
-                        1.15f -> 1.3f
-                        else -> 1f
+                )
+                /* v1.0.14：currentSpanStyle 是快照态 —— 点 B 后立即重组，按钮高亮 + 正文即时变粗 */
+                val curSpanStyle = rich.currentSpanStyle
+                EditorFormatBar(
+                    modifier = Modifier,
+                    canUndo = histIndex > 0,
+                    canRedo = histIndex >= 0 && histIndex < history.lastIndex,
+                    boldActive = curSpanStyle.fontWeight == FontWeight.Bold,
+                    italicActive = curSpanStyle.fontStyle == FontStyle.Italic,
+                    underlineActive = curSpanStyle.textDecoration == TextDecoration.Underline,
+                    onUndo = { undo() },
+                    onRedo = { redo() },
+                    onBold = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                    onItalic = { applySpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                    onUnderline = { applySpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                    onHeading = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
+                    onTodo = { toggleTodo() },
+                    onBullet = { rich.toggleUnorderedList() },
+                    onOrdered = { rich.toggleOrderedList() },
+                    onImage = { pickImage() },
+                    onFile = { pickFile.launch("*/*") },
+                    onFontSize = {
+                        bodyScale = when (bodyScale) {
+                            1f -> 1.15f
+                            1.15f -> 1.3f
+                            else -> 1f
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     ) { padding ->
         if (!loaded) {
@@ -529,16 +530,11 @@ private fun EditorFormatBar(
 ) {
     // v1.0.15：键盘贴合 —— 取消纯色填充（改用毛玻璃语言），imePadding() 让工具栏紧贴输入法上沿，
     // 无突兀色块、无巨大间隙；顶部圆角成面板感，底部圆角融入屏底
-    // v1.0.17：键盘贴合根因修复 —— imePadding() 此前误挂在内部 Row 上，导致键盘弹出时
-    // 玻璃面板被「内容 + ime padding」整体撑高：图标留在面板顶部，下方拖出一大块空玻璃
-    // （用户截图红圈处）。现改挂到 GlassSurface 本体：整个面板浮在键盘上沿，图标紧贴键盘。
-    // navigationBarsPadding 兜底键盘收起时的手势条避让（ime 展开时其 inset 已被 imePadding 消费，不叠加）。
+    // v1.0.18（死命令 5）：工具栏固定屏幕顶部（标题栏正下方），不再参与任何键盘避让 ——
+    // 去 imePadding/navigationBarsPadding；下缘圆角成面板收口，上缘与标题栏无缝相接。
     GlassSurface(
-        modifier = modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .imePadding(),
-        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
         showBorder = true
     ) {
         Row(

@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.achievements
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -7,6 +8,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Egg
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Lock
@@ -74,7 +78,7 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
             // 总览
-            Card(
+            GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = UiDimens.ListPad, vertical = 8.dp),
@@ -101,7 +105,7 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
                     )
                     // v1.2.0：彩蛋提示（否则用户看到一排「？？？」会以为出了 bug）
                     Text(
-                        "🥚 彩蛋为隐藏成就，解锁前不显示标题与条件 —— 触发一次就自己现身",
+                        "彩蛋为隐藏成就，解锁前不显示标题与条件 —— 触发一次就自己现身",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -125,9 +129,12 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
                         FilterChip(
                             selected = filter == s.id,
                             onClick = { filter = if (filter == s.id) null else s.id },
+                            leadingIcon = {
+                                Icon(s.icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                            },
                             label = {
                                 Text(
-                                    "${s.emoji} ${s.label} ${s.unlocked}/${s.total}",
+                                    "${s.label} ${s.unlocked}/${s.total}",
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             }
@@ -138,7 +145,7 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
             }
 
             if (visible.isEmpty()) {
-                EmptyHint("还没有成就，点右下角 + 添加一条自定义成就", emoji = "🏆")
+                EmptyHint("还没有成就，点右下角 + 添加一条自定义成就", icon = Icons.Rounded.EmojiEvents)
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
@@ -148,7 +155,8 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
                     groups.forEach { (cat, sub) ->
                         item(key = "hdr_${cat.id}") {
                             SectionHeader(
-                                text = "${cat.emoji} ${cat.label}",
+                                text = cat.label,
+                                icon = cat.icon,
                                 modifier = Modifier.padding(top = 4.dp)
                             ) {
                                 Text(
@@ -205,9 +213,12 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
                                 FilterChip(
                                     selected = editCategory == c.id,
                                     onClick = { editCategory = if (editCategory == c.id) null else c.id },
+                                    leadingIcon = {
+                                        Icon(c.icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    },
                                     label = {
                                         Text(
-                                            "${c.emoji}${c.label}",
+                                            c.label,
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     }
@@ -247,24 +258,26 @@ private fun AchievementCard(
     val masked = locked && ui.categoryId == ACH_CAT_EGG
     val showMeter = isAuto && locked && ui.goal > 1 && !masked
 
-    Card(
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (!isAuto) Modifier.clickable { onToggle() } else Modifier),
-        shape = RoundedCornerShape(UiDimens.ItemRadius),
-        colors = CardDefaults.cardColors(
-            containerColor = if (locked) MaterialTheme.colorScheme.surface
-            else AmberPrimary.copy(alpha = 0.12f)
-        )
+        shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
         Row(
             Modifier.padding(12.dp).fillMaxWidth(),
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                if (masked) "❔" else if (locked) "🔒" else "🏆",
-                style = MaterialTheme.typography.titleMedium
+            Icon(
+                when {
+                    masked -> Icons.Rounded.Egg
+                    locked -> Icons.Rounded.Lock
+                    else -> Icons.Rounded.EmojiEvents
+                },
+                contentDescription = null,
+                tint = if (locked) MaterialTheme.colorScheme.onSurfaceVariant else AmberPrimary,
+                modifier = Modifier.size(22.dp)
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -312,7 +325,7 @@ private fun AchievementCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    Text("✓", color = AmberPrimary, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Rounded.Check, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(16.dp))
                 }
                 if (!isAuto) {
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {

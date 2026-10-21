@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.onboarding
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -7,6 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.RocketLaunch
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Delete
@@ -85,7 +88,7 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
             // ---- 品牌区 ----
             Surface(color = AmberPrimary.copy(alpha = 0.14f), shape = CircleShape) {
                 Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
-                    Text("🌍", style = MaterialTheme.typography.displaySmall)
+                    Icon(Icons.Rounded.Public, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(64.dp))
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -105,7 +108,7 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
             Spacer(Modifier.height(24.dp))
 
             // ---- 角色信息卡 ----
-            Card(
+            GlassCard(
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -253,7 +256,11 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Text("🚀 开始人生", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.RocketLaunch, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("开始人生", style = MaterialTheme.typography.titleMedium)
+            }
             }
             Spacer(Modifier.height(8.dp))
             Text(

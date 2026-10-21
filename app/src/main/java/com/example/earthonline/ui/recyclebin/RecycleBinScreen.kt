@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.recyclebin
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,10 +15,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backpack
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Restore
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +47,7 @@ import com.example.earthonline.data.repository.RecycleBinRepository.Entry
 import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.theme.AmberPrimary
 
 /**
  * v1.0.5 回收站页：任务 / 灵感 / 物品 / 收藏 的软删行统一列表。
@@ -129,12 +135,11 @@ private fun kindLabel(kind: String): String = when (kind) {
     else -> "收藏"
 }
 
-@Composable
-private fun kindEmoji(kind: String): String = when (kind) {
-    "task" -> "🎯"
-    "memo" -> "💡"
-    "item" -> "🎒"
-    else -> "⭐"
+private fun kindIcon(kind: String): ImageVector = when (kind) {
+    "task" -> Icons.Rounded.TaskAlt
+    "memo" -> Icons.Rounded.Lightbulb
+    "item" -> Icons.Rounded.Backpack
+    else -> Icons.Rounded.Star
 }
 
 @Composable
@@ -143,7 +148,7 @@ private fun RecycleCard(
     onRestore: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
+    GlassCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(UiDimens.ItemRadius)
     ) {
@@ -153,7 +158,12 @@ private fun RecycleCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(kindEmoji(entry.kind), style = MaterialTheme.typography.titleMedium)
+            Icon(
+                kindIcon(entry.kind),
+                contentDescription = null,
+                tint = AmberPrimary,
+                modifier = Modifier.size(22.dp)
+            )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(

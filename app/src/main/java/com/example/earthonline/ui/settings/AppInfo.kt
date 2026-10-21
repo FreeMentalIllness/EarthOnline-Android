@@ -20,7 +20,7 @@ object AppInfo {
      * （对应下面的 0.9.x 条目）。改版本号时**两端 + build.gradle 三处一起改**，
      * 否则用户导出备份再导入时会对不上「这到底是哪一版」。
      */
-    const val version = "1.0.17"
+    const val version = "1.0.18"
     const val buildDate = "2026-10-21"
     const val license = "MIT"
 
@@ -72,6 +72,15 @@ object AppInfo {
      * 这样「正式版从 1.0.0 开始」这条线是连续的，历史又不丢。
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
+        Triple(
+            "1.0.18", "2026-10-21", listOf(
+                "底层 UI 组件重构：全局 30 处 Material 默认 Card（含 6dp 黑色 elevation 相册卡与全部列表卡）全部替换为统一 GlassCard 玻璃容器，与速览卡片同一渲染管线，黑框/黑边彻底清零",
+                "全站 Emoji 清零换装：季节徽章/成就分类与图标/报告周期/回收站/相册/笔记/引导页/数据页等 40+ 处 Emoji 全部替换为圆角矢量图标（Icons.Rounded），色贴暖棕主题",
+                "主页顶部全幅出血：状态栏 + 「地球Online」标题栏实心块 fillMaxWidth 延伸到屏幕左右边缘与顶部，两侧绝无缝隙",
+                "新增「卡片背景不透明度」滑块（设置 → 外观）：0.40~0.95 拖动实时预览，DataStore 持久化，全局玻璃卡片即时生效——通透感与可读性自己定",
+                "笔记格式化工具栏改为固定在「编辑笔记」标题栏正下方，不再贴键盘：无论键盘怎么弹工具栏恒在顶端，中间绝无空白"
+            )
+        ),
         Triple(
             "1.0.17", "2026-10-21", listOf(
                 "全局图标换装（第二轮）：主页 Logo 地球、速览 9 大入口、最近动态、今日一签、历年今日、人生时间轴、任务页与背包页空状态/视图切换/日期芯片的 Emoji 全部替换为圆角矢量图标（Icons.Rounded），色贴琥珀暖色主题",

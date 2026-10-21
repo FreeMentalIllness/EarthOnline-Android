@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.settings
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -86,6 +87,8 @@ fun AppearanceRoute(
     val wallpaperAlpha by vm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
     // v1.0.11：壁纸模糊度滑块数据源
     val wallpaperBlur by vm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
+    // v1.0.18：卡片背景不透明度滑块数据源
+    val cardOpacity by vm.cardOpacity.collectAsStateWithLifecycle(initialValue = 0.74f)
     // v1.0.4：字号档位设置已移除 —— 应用内不再额外缩放文字，直接跟随系统字体大小，
     // 由系统无障碍设置统一控制（对应需求「删除字号大小设置，自动适配」）。
     // v1.0.3：壁纸从记忆相册随机轮换
@@ -115,7 +118,7 @@ fun AppearanceRoute(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("主题", style = MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -185,6 +188,24 @@ fun AppearanceRoute(
                                 vm.setWallpaperBlur(it)
                             },
                             valueRange = 0f..24f
+                        )
+                        // v1.0.18：卡片背景不透明度滑块（实时预览；低=通透感，高=可读性）
+                        var cardOpacityDraft by remember { mutableFloatStateOf(cardOpacity) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("卡片背景不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                            Text(
+                                "${(cardOpacityDraft * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Slider(
+                            value = cardOpacityDraft,
+                            onValueChange = {
+                                cardOpacityDraft = it
+                                vm.setCardOpacity(it)
+                            },
+                            valueRange = 0.40f..0.95f
                         )
                     }
                     // v1.0.3：动态主页背景 —— 从记忆相册随机轮换（每天一张，确定性挑选）
@@ -354,7 +375,7 @@ fun GeneralRoute(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
@@ -564,7 +585,7 @@ fun BackupSyncRoute(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("WebDAV 配置", style = MaterialTheme.typography.labelMedium)
                     val cfg = vm.parseWebdavConfig(webdavConfigJson)
@@ -581,7 +602,7 @@ fun BackupSyncRoute(
                     )
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("手动同步", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     val cfg = vm.parseWebdavConfig(webdavConfigJson)
@@ -646,7 +667,7 @@ fun BackupSyncRoute(
                     )
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 val fmt = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault()) }
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("本地自动备份", style = MaterialTheme.typography.labelMedium)
@@ -699,7 +720,7 @@ fun BackupSyncRoute(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("导出 / 导入备份", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -793,12 +814,12 @@ fun AboutRoute(
     if (showSponsor) {
         AnimatedAlertDialog(
             onDismissRequest = { showSponsor = false },
-            title = { Text("❤️ 赞助开发者") },
+            title = { Text("赞助开发者") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "地球Online 完全免费、无广告、无服务器成本。如果它陪你走过了一段路，" +
-                            "欢迎扫码请开发者喝一杯 ☕（金额随意）。",
+                            "欢迎扫码请开发者喝一杯（金额随意）。",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Image(
@@ -823,7 +844,7 @@ fun AboutRoute(
     if (showChangelog) {
         AnimatedAlertDialog(
             onDismissRequest = { showChangelog = false },
-            title = { Text("📝 更新说明") },
+            title = { Text("更新说明") },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -912,7 +933,7 @@ fun AboutRoute(
             val dlProgress by installer.progress.collectAsStateWithLifecycle()
             dlProgress?.let { p ->
                 if (p.phase != DownloadPhase.Idle) {
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                    GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                         Column(
                             Modifier.fillMaxWidth().padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -920,10 +941,10 @@ fun AboutRoute(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     when (p.phase) {
-                                        DownloadPhase.Downloading -> "⬇️ 正在下载更新"
-                                        DownloadPhase.Retrying -> "🔁 正在切换下载线路"
-                                        DownloadPhase.Success -> "✅ 下载完成"
-                                        else -> "⚠️ 下载失败"
+                                        DownloadPhase.Downloading -> "正在下载更新"
+                                        DownloadPhase.Retrying -> "正在切换下载线路"
+                                        DownloadPhase.Success -> "下载完成"
+                                        else -> "下载失败"
                                     },
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.Bold,
@@ -969,7 +990,7 @@ fun AboutRoute(
                     }
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Image(
@@ -1002,11 +1023,11 @@ fun AboutRoute(
                     )
                 }
             }
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { showSponsor = true }, modifier = Modifier.weight(1f)) { Text("❤️ 赞助我") }
-                        OutlinedButton(onClick = { showChangelog = true }, modifier = Modifier.weight(1f)) { Text("📝 更新说明") }
+                        Button(onClick = { showSponsor = true }, modifier = Modifier.weight(1f)) { Text("赞助我") }
+                        OutlinedButton(onClick = { showChangelog = true }, modifier = Modifier.weight(1f)) { Text("更新说明") }
                     }
                     OutlinedButton(
                         onClick = {

@@ -25,7 +25,7 @@ object Greeting {
             else -> "夜深了，今天辛苦了"
         }
         val moodLine = moodCareLine(latestMoodText)
-        val streakLine = if (streakDays >= 3) "已连续记录 $streakDays 天 🔥" else null
+        val streakLine = if (streakDays >= 3) "已连续记录 $streakDays 天" else null
         return listOf(base, moodLine, streakLine).filterNotNull().joinToString(" · ")
     }
 

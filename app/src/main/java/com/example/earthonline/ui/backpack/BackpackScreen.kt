@@ -274,7 +274,6 @@ private fun ItemsPane(
         if (filtered.isEmpty()) {
             if (items.isEmpty()) {
                 EmptyState(
-                    emoji = "🎒",
                     icon = Icons.Rounded.Backpack,
                     title = "背包还是空的",
                     message = "把你拥有的、想留下的东西登记进来：一台相机、一本读到一半的书、一张还没用的券。" +
@@ -484,7 +483,6 @@ private fun CollectionsPane(
         if (filtered.isEmpty()) {
             if (collections.isEmpty()) {
                 EmptyState(
-                    emoji = "📚",
                     icon = Icons.Rounded.LocalLibrary,
                     title = "收藏夹空着呢",
                     message = "值得回看的东西都往这儿放：一篇好文章、一段聊天记录、一张截图，还能附上原文件。",

@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.home
 
+import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -135,7 +136,7 @@ fun AllActivitiesRoute(
             Spacer(Modifier.height(4.dp))
 
             // 首页显示条数设置
-            Card(Modifier.fillMaxWidth()) {
+            GlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "首页「最近动态」显示条数",
@@ -177,7 +178,7 @@ fun AllActivitiesRoute(
                             "custom" -> "自定义事件"
                             else -> "记录"
                         }
-                        Card(Modifier.fillMaxWidth().animateItem()) {
+                        GlassCard(Modifier.fillMaxWidth().animateItem()) {
                             Row(
                                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),

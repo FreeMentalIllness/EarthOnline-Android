@@ -39,10 +39,10 @@ object GrowthStreak {
 
     /** 阶段名（主页时间轴卡展示） */
     fun stageLabel(stage: Int): String = when (stage) {
-        4 -> "参天 🌳"
-        3 -> "繁茂 🌿"
-        2 -> "抽枝 ✨"
-        1 -> "萌芽 🌱"
+        4 -> "参天"
+        3 -> "繁茂"
+        2 -> "抽枝"
+        1 -> "萌芽"
         else -> ""
     }
 

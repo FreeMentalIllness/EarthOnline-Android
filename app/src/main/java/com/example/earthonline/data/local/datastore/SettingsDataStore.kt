@@ -44,6 +44,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val WALLPAPER_ALPHA = floatPreferencesKey("earth_wallpaper_alpha")
         /** v1.0.11：壁纸模糊度（dp，0~24） */
         val WALLPAPER_BLUR = floatPreferencesKey("earth_wallpaper_blur")
+        /** v1.0.18：卡片背景不透明度（0.40~0.95，仅作用于全局 GlassCard） */
+        val CARD_OPACITY = floatPreferencesKey("earth_card_opacity")
         val NOTIFY = booleanPreferencesKey("earth_notify")
         val AI_CONFIG = stringPreferencesKey("ai_config")
         val WEBDAV_CONFIG = stringPreferencesKey("webdav_config")
@@ -110,6 +112,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
     /** v1.0.11：壁纸模糊度 0~24dp（0 = 清晰，越大越毛玻璃；用户自平衡美观与性能） */
     val wallpaperBlur: Flow<Float> = ds.data.map { (it[WALLPAPER_BLUR] ?: 0f).coerceIn(0f, 24f) }
+
+    /** v1.0.18：卡片背景不透明度（0.40~0.95，默认 0.74 视觉基线；低=通透感，高=可读性） */
+    val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 0.74f).coerceIn(0.40f, 0.95f) }
     val notify: Flow<Boolean> = ds.data.map { it[NOTIFY] ?: false }
     val aiConfig: Flow<String> = ds.data.map { it[AI_CONFIG] ?: "" }
     val webdavConfig: Flow<String> = ds.data.map { it[WEBDAV_CONFIG] ?: "" }
@@ -130,6 +135,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         ds.edit { it[WALLPAPER_ALPHA] = v.coerceIn(0.05f, 0.9f) }
     suspend fun setWallpaperBlur(v: Float) =
         ds.edit { it[WALLPAPER_BLUR] = v.coerceIn(0f, 24f) }
+    /** v1.0.18：卡片背景不透明度落盘 */
+    suspend fun setCardOpacity(v: Float) =
+        ds.edit { it[CARD_OPACITY] = v.coerceIn(0.40f, 0.95f) }
     suspend fun setNotify(v: Boolean) = ds.edit { it[NOTIFY] = v }
     suspend fun setAiConfig(v: String) = ds.edit { it[AI_CONFIG] = v }
     suspend fun setWebdavConfig(v: String) = ds.edit { it[WEBDAV_CONFIG] = v }

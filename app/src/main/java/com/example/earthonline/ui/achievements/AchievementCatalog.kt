@@ -1,5 +1,16 @@
 package com.example.earthonline.ui.achievements
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backpack
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Eco
+import androidx.compose.material.icons.rounded.Egg
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.LocalLibrary
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.MilitaryTech
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.earthonline.util.birthPlusDaysIso
 import com.example.earthonline.util.birthPlusIso
 import com.example.earthonline.util.dayToIso
@@ -12,21 +23,22 @@ import java.util.Locale
 data class AchCategory(
     val id: String,
     val label: String,
-    val emoji: String
+    /** v1.0.18：emoji → 圆角矢量图标 */
+    val icon: ImageVector
 )
 
 /** 顺序即 UI 展示顺序；custom 放最后 */
 val ACH_CATEGORIES: List<AchCategory> = listOf(
-    AchCategory("task", "任务", "📋"),
-    AchCategory("bag", "背包", "🎒"),
-    AchCategory("collection", "收藏", "📚"),
-    AchCategory("map", "足迹", "🗺️"),
-    AchCategory("memo", "日志", "📝"),
-    AchCategory("growth", "成长", "🌱"),
-    AchCategory("general", "综合", "🏅"),
+    AchCategory("task", "任务", Icons.Rounded.Checklist),
+    AchCategory("bag", "背包", Icons.Rounded.Backpack),
+    AchCategory("collection", "收藏", Icons.Rounded.LocalLibrary),
+    AchCategory("map", "足迹", Icons.Rounded.Map),
+    AchCategory("memo", "日志", Icons.Rounded.EditNote),
+    AchCategory("growth", "成长", Icons.Rounded.Eco),
+    AchCategory("general", "综合", Icons.Rounded.MilitaryTech),
     // v1.2.0：彩蛋（隐藏成就）。未解锁时 UI 打码显示，解锁后才现身。
-    AchCategory("egg", "彩蛋", "🥚"),
-    AchCategory("custom", "自定义", "✍️")
+    AchCategory("egg", "彩蛋", Icons.Rounded.Egg),
+    AchCategory("custom", "自定义", Icons.Rounded.Edit)
 )
 
 /** 未分类（v2 旧行）统一落到 custom */
@@ -44,8 +56,8 @@ const val ACH_EGG_MASK_DESC = "隐藏成就 · 达成条件保密。触发一次
 fun achCategoryLabel(id: String?): String =
     ACH_CATEGORIES.firstOrNull { it.id == id }?.label ?: "自定义"
 
-fun achCategoryEmoji(id: String?): String =
-    ACH_CATEGORIES.firstOrNull { it.id == id }?.emoji ?: "✍️"
+fun achCategoryIcon(id: String?): ImageVector =
+    ACH_CATEGORIES.firstOrNull { it.id == id }?.icon ?: Icons.Rounded.Edit
 
 /**
  * 成就引擎的实时计数快照。

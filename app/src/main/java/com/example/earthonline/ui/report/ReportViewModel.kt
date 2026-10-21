@@ -29,13 +29,18 @@ import kotlinx.coroutines.flow.stateIn
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.ViewWeek
+import androidx.compose.ui.graphics.vector.ImageVector
 import javax.inject.Inject
 
 /** 报告周期 */
-enum class ReportKind(val label: String, val emoji: String) {
-    DAY("日报", "📅"),
-    WEEK("周报", "🗓️"),
-    YEAR("年报", "📆")
+enum class ReportKind(val label: String, val icon: ImageVector) {
+    DAY("日报", Icons.Rounded.Today),
+    WEEK("周报", Icons.Rounded.ViewWeek),
+    YEAR("年报", Icons.Rounded.CalendarToday)
 }
 
 /** 图表形态：柱状 / 折线 */
@@ -248,11 +253,11 @@ class ReportViewModel @Inject constructor(
 
     private fun highlightsOf(raw: Raw): List<String> {
         val out = ArrayList<String>(6)
-        raw.achList.take(3).forEach { out += "🏆 解锁「${it.title.ifBlank { "成就" }}」" }
-        raw.doneList.take(3).forEach { out += "✅ 完成「${it.title.ifBlank { "任务" }}」" }
+        raw.achList.take(3).forEach { out += "解锁「${it.title.ifBlank { "成就" }}」" }
+        raw.doneList.take(3).forEach { out += "完成「${it.title.ifBlank { "任务" }}」" }
         raw.memoList.take(2).forEach {
             val t = it.text.trim().replace('\n', ' ')
-            out += "💭 ${if (t.length > 18) t.take(18) + "…" else t}"
+            out += "${if (t.length > 18) t.take(18) + "…" else t}"
         }
         return out
     }

@@ -53,6 +53,7 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.launch
 import java.io.File
+import com.example.earthonline.ui.theme.GlassCard
 
 /**
  * 记忆相册（v1.0.6 大改）：
@@ -506,7 +507,7 @@ private fun FlipCard(
     onClick: () -> Unit = {},
     onLongClick: (() -> Unit)? = null
 ) {
-    Card(
+    GlassCard(
         modifier = modifier
             .clip(RoundedCornerShape(20.dp))
             .combinedClickable(
@@ -515,8 +516,7 @@ private fun FlipCard(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
@@ -555,7 +555,7 @@ private fun ThumbnailStrip(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(photos, key = { it.id }) { p ->
-            Card(
+            GlassCard(
                 modifier = Modifier.size(64.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onPick(photos.indexOf(p)) },

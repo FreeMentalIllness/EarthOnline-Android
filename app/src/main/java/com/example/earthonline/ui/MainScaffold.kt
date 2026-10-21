@@ -138,6 +138,8 @@ fun MainScaffold(
     val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
     // v1.0.11：壁纸模糊度（设置→外观 滑块，0=清晰，24=重度毛玻璃）
     val wallpaperBlur by settingsVm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
+    // v1.0.18：卡片背景不透明度（设置→外观 滑块，全局 GlassCard 生效）
+    val cardOpacity by settingsVm.cardOpacity.collectAsStateWithLifecycle(initialValue = 0.74f)
     val achSound by settingsVm.achSound.collectAsStateWithLifecycle(initialValue = true)
     // v1.0.6：当日轮换壁纸（含相册筛选）由 ViewModel 统一计算，避免组合层做 JSON 解析
     val effectiveWallpaper by settingsVm.effectiveWallpaper.collectAsStateWithLifecycle(initialValue = "")
@@ -307,6 +309,9 @@ fun MainScaffold(
             // 大屏/折叠屏适配：内容区限宽居中，避免展开态单列拉满全宽
             // 注入全局壁纸路径，供各处 GlassSurface 就地采样毛玻璃背景
             ProvideWallpaper(if (effectiveWallpaper.isBlank()) null else effectiveWallpaper) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.example.earthonline.ui.theme.LocalCardOpacity provides cardOpacity
+                ) {
                 AppNavHost(
                 navController = navController,
                 startDestination = startRoute,
@@ -321,6 +326,7 @@ fun MainScaffold(
                     onAccounting = { showAccounting = true }
                 )
                 )
+                } // v1.0.18：CompositionLocalProvider(LocalCardOpacity) 闭合
             }
             // 全局离线横幅：覆盖所有 Tab 与二级页（含地图 / WebDAV / AI 页）
             if (!isOnline) {
