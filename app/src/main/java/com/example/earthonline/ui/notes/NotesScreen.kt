@@ -11,9 +11,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.draw.clip
@@ -80,7 +80,7 @@ fun NotesScreen(
                         if (!searchOpen) vm.setQuery("")
                     }) {
                         Icon(
-                            imageVector = if (searchOpen) Icons.Default.Close else Icons.Default.Search,
+                            imageVector = if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
                             contentDescription = "搜索"
                         )
                     }
@@ -312,7 +312,7 @@ private fun NoteCard(
                 )
                 IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(
-                        Icons.Default.Delete,
+                        Icons.Rounded.Delete,
                         contentDescription = "删除",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(18.dp)

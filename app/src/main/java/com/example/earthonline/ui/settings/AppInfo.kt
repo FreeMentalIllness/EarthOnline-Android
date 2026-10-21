@@ -20,7 +20,7 @@ object AppInfo {
      * （对应下面的 0.9.x 条目）。改版本号时**两端 + build.gradle 三处一起改**，
      * 否则用户导出备份再导入时会对不上「这到底是哪一版」。
      */
-    const val version = "1.0.15"
+    const val version = "1.0.16"
     const val buildDate = "2026-10-21"
     const val license = "MIT"
 
@@ -72,6 +72,11 @@ object AppInfo {
      * 这样「正式版从 1.0.0 开始」这条线是连续的，历史又不丢。
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
+        Triple(
+            "1.0.16", "2026-10-21", listOf(
+                "全局图标现代化升级：笔记工具栏（B/I/U/字号/待办/列表/插图/附件等）与主页、任务、背包、相册、地图、回收站、成就、AI、个人资料等各页操作图标统一改用圆角风格 Icons.Rounded.*，视觉更现代统一；底部导航自绘矢量图标与设置页图标保持不变"
+            )
+        ),
         Triple(
             "1.0.15", "2026-10-21", listOf(
                 "全局顶部硬色块遮挡（强制修复）：主页标题栏与所有页面 TopAppBar 改用主题基础背景色实心填充，与状态栏（MainScaffold 已填充）同色合成一个不透明块，壁纸绝不透出标题区",

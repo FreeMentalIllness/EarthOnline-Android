@@ -8,10 +8,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -130,7 +130,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                         TextButton(onClick = { vm.save(); editing = false }) { Text("保存") }
                     } else {
                         IconButton(onClick = { editing = true }) {
-                            Icon(Icons.Filled.Edit, contentDescription = "编辑")
+                            Icon(Icons.Rounded.Edit, contentDescription = "编辑")
                         }
                     }
                 }
@@ -189,7 +189,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 OutlinedTextField(vm.birthDate, {}, readOnly = true, label = { Text("出生日期") },
-                    trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Filled.DateRange, null) } },
+                    trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(vm.signature, { vm.signature = it }, label = { Text("个性签名") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -206,13 +206,13 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
                         OutlinedTextField(cf.value, { vm.updateCustomField(idx, cf.label, it) }, label = { Text("字段值") },
                             singleLine = true, modifier = Modifier.weight(1f))
                         IconButton(onClick = { vm.removeCustomField(idx) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "删除")
+                            Icon(Icons.Rounded.Delete, contentDescription = "删除")
                         }
                     }
                 }
                 if (vm.customFields.size < 20) {
                     OutlinedButton(onClick = vm::addCustomField, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("添加自定义字段")
+                        Icon(Icons.Rounded.Add, null); Spacer(Modifier.width(8.dp)); Text("添加自定义字段")
                     }
                 }
             } else {

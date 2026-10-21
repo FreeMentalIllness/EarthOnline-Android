@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.automirrored.rounded.ListAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -95,7 +95,7 @@ private fun DownloadOption(title: String, subtitle: String, onClick: () -> Unit)
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.AutoMirrored.Filled.ListAlt,
+                Icons.AutoMirrored.Rounded.ListAlt,
                 contentDescription = null,
                 tint = AmberPrimary,
                 modifier = Modifier.size(18.dp)

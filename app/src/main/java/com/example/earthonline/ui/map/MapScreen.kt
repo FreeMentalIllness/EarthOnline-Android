@@ -12,14 +12,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.List
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.*
@@ -212,7 +212,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 actions = {
                     // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）
                     IconButton(onClick = { showList = true }) {
-                        Icon(Icons.Filled.List, contentDescription = "足迹列表")
+                        Icon(Icons.Rounded.List, contentDescription = "足迹列表")
                     }
                 }
             )
@@ -233,13 +233,13 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     } else {
-                        Icon(Icons.Filled.MyLocation, contentDescription = "定位到我的位置")
+                        Icon(Icons.Rounded.MyLocation, contentDescription = "定位到我的位置")
                     }
                 }
                 FloatingActionButton(onClick = {
                     pendingLatLng = mapRef.aMap?.cameraPosition?.target ?: currentLatLng
                     showAdd = true
-                }) { Icon(Icons.Filled.Add, null) }
+                }) { Icon(Icons.Rounded.Add, null) }
             }
         }
     ) { padding ->
@@ -333,11 +333,11 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         onValueChange = { query = it },
                         placeholder = { Text("搜索足迹名称 / 备注 / 标签 / 日期") },
                         singleLine = true,
-                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                         trailingIcon = {
                             if (query.isNotEmpty()) {
                                 IconButton(onClick = { query = "" }) {
-                                    Icon(Icons.Filled.Close, contentDescription = "清空")
+                                    Icon(Icons.Rounded.Close, contentDescription = "清空")
                                 }
                             }
                         },
@@ -425,7 +425,7 @@ private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEnt
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Filled.Place, null, tint = AmberPrimary)
+                    Icon(Icons.Rounded.Place, null, tint = AmberPrimary)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(loc.name.ifBlank { "未命名足迹" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         if (loc.date.isNotBlank()) {
@@ -436,7 +436,7 @@ private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEnt
                         }
                         Text("%.4f, %.4f".format(loc.lat, loc.lng), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = { onDelete(loc) }) { Icon(Icons.Filled.Delete, null) }
+                    IconButton(onClick = { onDelete(loc) }) { Icon(Icons.Rounded.Delete, null) }
                 }
             }
         }
@@ -464,7 +464,7 @@ private fun AddLocationDialog(
                 OutlinedTextField(name, { name = it.take(60) }, label = { Text("名称") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(date, {}, readOnly = true, label = { Text("日期") },
-                    trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Filled.DateRange, null) } },
+                    trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(note, { note = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(tagsText, { tagsText = it }, label = { Text("标签（逗号分隔）") },

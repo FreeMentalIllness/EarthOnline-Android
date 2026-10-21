@@ -20,13 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.OpenInNew
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
@@ -116,7 +116,7 @@ fun BackpackScreen(
                 actions = {
                     // v1.2.3：分类管理入口移到右上角，与筛选条解耦，避免「筛选」与「管理」入口重叠
                     IconButton(onClick = { showCategoryManager = true }) {
-                        Icon(Icons.Filled.Tune, contentDescription = "分类管理")
+                        Icon(Icons.Rounded.Tune, contentDescription = "分类管理")
                     }
                 }
             )
@@ -125,7 +125,7 @@ fun BackpackScreen(
             FloatingActionButton(
                 onClick = { if (tab == 0) showItem = true else showCollection = true },
                 containerColor = AmberPrimary
-            ) { Icon(Icons.Filled.Add, contentDescription = "新增") }
+            ) { Icon(Icons.Rounded.Add, contentDescription = "新增") }
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -252,7 +252,7 @@ private fun ItemsPane(
         OutlinedTextField(
             value = query, onValueChange = { query = it },
             placeholder = { Text("搜索名称 / 描述 / 分类") },
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true,
             shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
@@ -328,7 +328,7 @@ private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> U
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        Icons.Filled.Delete,
+                        Icons.Rounded.Delete,
                         contentDescription = "删除",
                         modifier = Modifier.size(16.dp)
                     )
@@ -406,7 +406,7 @@ private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () ->
                     }
                 }
             }
-            IconButton(onClick = { onDelete(item.id) }) { Icon(Icons.Filled.Delete, contentDescription = "删除") }
+            IconButton(onClick = { onDelete(item.id) }) { Icon(Icons.Rounded.Delete, contentDescription = "删除") }
         }
     }
 }
@@ -444,7 +444,7 @@ private fun CollectionsPane(
         OutlinedTextField(
             value = query, onValueChange = { query = it },
             placeholder = { Text("搜索标题 / 备注") },
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
                 .padding(UiDimens.ListPad, UiDimens.ListPad, UiDimens.ListPad, 0.dp)
@@ -550,7 +550,7 @@ private fun CollectionGridTile(
                     else -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Filled.Description,
+                                Icons.Rounded.Description,
                                 null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -688,7 +688,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
                         }
                         else -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Rounded.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -697,7 +697,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(c.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = { vm.deleteCollection(c.id) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "删除")
+                    Icon(Icons.Rounded.Delete, contentDescription = "删除")
                 }
             }
             c.category?.takeIf { it.isNotBlank() }?.let {
@@ -713,7 +713,7 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Filled.Description, null, Modifier.size(18.dp),
+                    Icon(Icons.Rounded.Description, null, Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(meta.name, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     Text(formatSize(meta.size), style = MaterialTheme.typography.labelSmall,
@@ -834,7 +834,7 @@ private fun CollectionDialog(
                 // 新增与编辑都允许选择 / 替换文件附件：选了新文件即替换，不选则保留原附件。
                 // v1.0.8：编辑态必须提供「上传/替换文件」入口。
                 OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.AttachFile, null)
+                    Icon(Icons.Rounded.AttachFile, null)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         when {
@@ -900,7 +900,7 @@ private fun CollectionPreviewDialog(
                                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                             )
                             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Rounded.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -917,7 +917,7 @@ private fun CollectionPreviewDialog(
                 }
                 if (file != null) {
                     OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Filled.OpenInNew, null)
+                        Icon(Icons.Rounded.OpenInNew, null)
                         Spacer(Modifier.width(8.dp))
                         Text("打开文件")
                     }

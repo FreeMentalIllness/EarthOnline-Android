@@ -7,9 +7,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -147,7 +147,7 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                         } else null,
                         trailingIcon = {
                             IconButton({ showDatePicker = true }) {
-                                Icon(Icons.Filled.DateRange, contentDescription = "选择日期")
+                                Icon(Icons.Rounded.DateRange, contentDescription = "选择日期")
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -222,13 +222,13 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { vm.removeCustomField(idx) }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "删除字段")
+                                Icon(Icons.Rounded.Delete, contentDescription = "删除字段")
                             }
                         }
                     }
                     if (vm.customFields.size < 20) {
                         OutlinedButton(onClick = vm::addCustomField, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
+                            Icon(Icons.Rounded.Add, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text("添加自定义字段")
                         }

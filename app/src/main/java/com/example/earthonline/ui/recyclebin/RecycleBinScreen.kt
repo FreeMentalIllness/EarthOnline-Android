@@ -14,9 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -65,7 +65,7 @@ fun RecycleBinRoute(
                 title = { Text("回收站") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "返回")
                     }
                 }
             )
@@ -168,11 +168,11 @@ private fun RecycleCard(
                 )
             }
             IconButton(onClick = onRestore) {
-                Icon(Icons.Filled.Restore, contentDescription = "恢复", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Rounded.Restore, contentDescription = "恢复", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = onDelete) {
                 Icon(
-                    Icons.Filled.DeleteForever,
+                    Icons.Rounded.DeleteForever,
                     contentDescription = "彻底删除",
                     tint = MaterialTheme.colorScheme.error
                 )

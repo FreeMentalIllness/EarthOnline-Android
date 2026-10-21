@@ -6,8 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -57,7 +57,7 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
                 title = { Text("系统") },
                 actions = {
                     IconButton(onClick = { showConfig = true }) {
-                        Icon(Icons.Filled.Settings, contentDescription = "AI 配置")
+                        Icon(Icons.Rounded.Settings, contentDescription = "AI 配置")
                     }
                 }
             )
@@ -95,7 +95,7 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
                             vm.send()
                         }
                     }, enabled = !loading) {
-                        Icon(Icons.Filled.Send, contentDescription = "发送")
+                        Icon(Icons.Rounded.Send, contentDescription = "发送")
                     }
                 }
             }

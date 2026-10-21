@@ -13,20 +13,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.FormatUnderlined
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Title
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.CheckBox
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FormatBold
+import androidx.compose.material.icons.rounded.FormatItalic
+import androidx.compose.material.icons.rounded.FormatListBulleted
+import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.FormatUnderlined
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Redo
+import androidx.compose.material.icons.rounded.Title
+import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -270,7 +270,7 @@ fun NoteEditorScreen(
                 title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
                 navigationIcon = {
                     IconButton(onClick = { save() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回并保存")
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "返回并保存")
                     }
                 },
                 actions = {
@@ -278,7 +278,7 @@ fun NoteEditorScreen(
                     if (id.isNotBlank()) {
                         IconButton(onClick = { showDelete = true }) {
                             Icon(
-                                Icons.Default.Delete,
+                                Icons.Rounded.Delete,
                                 contentDescription = "删除",
                                 tint = MaterialTheme.colorScheme.error
                             )
@@ -358,7 +358,7 @@ fun NoteEditorScreen(
                         label = { Text("#$t", style = MaterialTheme.typography.labelSmall) },
                         trailingIcon = {
                             Icon(
-                                Icons.Default.Close,
+                                Icons.Rounded.Close,
                                 contentDescription = "移除标签",
                                 modifier = Modifier.size(13.dp)
                             )
@@ -543,20 +543,20 @@ private fun EditorFormatBar(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ToolIcon(Icons.Default.Undo, "撤销", canUndo, onClick = onUndo)
-            ToolIcon(Icons.Default.Redo, "重做", canRedo, onClick = onRedo)
+            ToolIcon(Icons.Rounded.Undo, "撤销", canUndo, onClick = onUndo)
+            ToolIcon(Icons.Rounded.Redo, "重做", canRedo, onClick = onRedo)
             ToolDivider()
-            ToolIcon(Icons.Default.FormatBold, "加粗", true, boldActive, onBold)
-            ToolIcon(Icons.Default.FormatItalic, "斜体", true, italicActive, onItalic)
-            ToolIcon(Icons.Default.FormatUnderlined, "下划线", true, underlineActive, onUnderline)
-            ToolIcon(Icons.Default.Title, "标题", true, onClick = onHeading)
+            ToolIcon(Icons.Rounded.FormatBold, "加粗", true, boldActive, onBold)
+            ToolIcon(Icons.Rounded.FormatItalic, "斜体", true, italicActive, onItalic)
+            ToolIcon(Icons.Rounded.FormatUnderlined, "下划线", true, underlineActive, onUnderline)
+            ToolIcon(Icons.Rounded.Title, "标题", true, onClick = onHeading)
             ToolDivider()
-            ToolIcon(Icons.Default.CheckBox, "待办", true, onClick = onTodo)
-            ToolIcon(Icons.Default.FormatListBulleted, "无序列表", true, onClick = onBullet)
-            ToolIcon(Icons.Default.FormatListNumbered, "有序列表", true, onClick = onOrdered)
+            ToolIcon(Icons.Rounded.CheckBox, "待办", true, onClick = onTodo)
+            ToolIcon(Icons.Rounded.FormatListBulleted, "无序列表", true, onClick = onBullet)
+            ToolIcon(Icons.Rounded.FormatListNumbered, "有序列表", true, onClick = onOrdered)
             ToolDivider()
-            ToolIcon(Icons.Default.Image, "插入图片", true, onClick = onImage)
-            ToolIcon(Icons.Default.AttachFile, "插入附件", true, onClick = onFile)
+            ToolIcon(Icons.Rounded.Image, "插入图片", true, onClick = onImage)
+            ToolIcon(Icons.Rounded.AttachFile, "插入附件", true, onClick = onFile)
             ToolDivider()
             ToolText("A±", onFontSize)
         }

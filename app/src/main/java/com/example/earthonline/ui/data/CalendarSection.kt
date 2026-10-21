@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -99,12 +99,12 @@ fun CalendarSection(activities: List<ActivityEntity>, tasks: List<TaskEntity>) {
             IconButton(onClick = {
                 yearMonth = shiftMonth(yearMonth, -1)
                 selectedDay = todayDayOfMonth(yearMonth).coerceAtLeast(1)
-            }) { Icon(Icons.Filled.ChevronLeft, "上个月") }
+            }) { Icon(Icons.Rounded.ChevronLeft, "上个月") }
             Text(yearMonth, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = {
                 yearMonth = shiftMonth(yearMonth, 1)
                 selectedDay = todayDayOfMonth(yearMonth).coerceAtLeast(1)
-            }) { Icon(Icons.Filled.ChevronRight, "下个月") }
+            }) { Icon(Icons.Rounded.ChevronRight, "下个月") }
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {

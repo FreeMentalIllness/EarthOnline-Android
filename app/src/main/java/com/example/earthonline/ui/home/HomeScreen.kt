@@ -30,14 +30,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -435,11 +435,11 @@ private fun HomeSearchBox(
             onValueChange = onQueryChange,
             placeholder = { Text("搜索任务 / 物品 / 收藏…") },
             singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "搜索") },
+            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "搜索") },
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Filled.Close, contentDescription = "清空")
+                        Icon(Icons.Rounded.Close, contentDescription = "清空")
                     }
                 }
             },
@@ -1024,7 +1024,7 @@ private fun ActsCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
-                            Icons.Filled.Settings,
+                            Icons.Rounded.Settings,
                             contentDescription = null,
                             tint = OnAmber,
                             modifier = Modifier.size(14.dp)
@@ -1150,7 +1150,7 @@ private fun ActsCard(
                         ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("添加自定义动态", fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
@@ -1353,7 +1353,7 @@ private fun TimelineCard(
                     }
                 }
                 IconButton(onClick = onAdd, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Filled.Add, contentDescription = "添加里程碑", tint = AmberPrimary)
+                    Icon(Icons.Rounded.Add, contentDescription = "添加里程碑", tint = AmberPrimary)
                 }
             }
             if (items.isEmpty()) {
@@ -1386,7 +1386,7 @@ private fun TimelineCard(
                         )
                         if (isCustom) {
                             IconButton(onClick = { onDelete(item.key) }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Filled.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp),
+                                Icon(Icons.Rounded.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -1415,7 +1415,7 @@ private fun AddTimelineDialog(
                 OutlinedTextField(title, { title = it.take(40) }, label = { Text("标题") },
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(day, {}, readOnly = true, label = { Text("日期") },
-                    trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Filled.DateRange, null) } },
+                    trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(note, { note = it.take(200) }, label = { Text("备注（可选）") },
                     modifier = Modifier.fillMaxWidth())
@@ -1577,7 +1577,7 @@ private fun MemoRow(text: String, type: String, time: String, onDelete: () -> Un
                 overflow = TextOverflow.Ellipsis
             )
             IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Filled.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp))
             }
         }
     }

@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -110,12 +110,12 @@ fun AllActivitiesRoute(
                 title = { Text("全部动态（${filtered.size}）") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Rounded.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showAdd = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "添加自定义动态", tint = AmberPrimary)
+                        Icon(Icons.Rounded.Add, contentDescription = "添加自定义动态", tint = AmberPrimary)
                     }
                 }
             )
@@ -191,7 +191,7 @@ fun AllActivitiesRoute(
                                     vm.deleteActivity(act.id)
                                     scope.launch { snackbar.showSnackbar("已删除该条动态") }
                                 }, modifier = Modifier.size(30.dp)) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "删除",
+                                    Icon(Icons.Rounded.Delete, contentDescription = "删除",
                                         modifier = Modifier.size(16.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }

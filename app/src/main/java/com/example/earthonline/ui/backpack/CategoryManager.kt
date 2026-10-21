@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -107,7 +107,7 @@ fun CategoryManagerDialog(
                         },
                         enabled = newName.isNotBlank()
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("添加")
                     }
@@ -139,11 +139,11 @@ fun CategoryManagerDialog(
                                 Text(c.name, modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.bodyMedium)
                                 IconButton(onClick = { renaming = c }) {
-                                    Icon(Icons.Filled.Edit, contentDescription = "重命名",
+                                    Icon(Icons.Rounded.Edit, contentDescription = "重命名",
                                         modifier = Modifier.size(20.dp))
                                 }
                                 IconButton(onClick = { deleteTarget = c }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "删除",
+                                    Icon(Icons.Rounded.Delete, contentDescription = "删除",
                                         modifier = Modifier.size(20.dp))
                                 }
                             }
@@ -235,7 +235,7 @@ fun CategoryPicker(
             AssistChip(
                 onClick = { creating = true },
                 label = { Text("新建") },
-                leadingIcon = { Icon(Icons.Filled.Add, null, Modifier.size(16.dp)) }
+                leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) }
             )
         }
     }

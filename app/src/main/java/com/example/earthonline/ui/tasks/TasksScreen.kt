@@ -18,15 +18,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.SubdirectoryArrowRight
-import androidx.compose.material.icons.filled.UnfoldLess
-import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DateRange
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
+import androidx.compose.material.icons.rounded.UnfoldLess
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.*
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
@@ -197,7 +197,7 @@ fun TasksScreen(
             FloatingActionButton(
                 onClick = { addParentId = null; showAdd = true },
                 containerColor = AmberPrimary
-            ) { Icon(Icons.Filled.Add, contentDescription = "新增任务") }
+            ) { Icon(Icons.Rounded.Add, contentDescription = "新增任务") }
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
@@ -226,7 +226,7 @@ fun TasksScreen(
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { collapsed.value = emptySet() }) {
-                        Icon(Icons.Filled.UnfoldMore, contentDescription = "全部展开")
+                        Icon(Icons.Rounded.UnfoldMore, contentDescription = "全部展开")
                     }
                     IconButton(onClick = {
                         collapsed.value = tree
@@ -234,7 +234,7 @@ fun TasksScreen(
                             .map { it.task.id }
                             .toSet()
                     }) {
-                        Icon(Icons.Filled.UnfoldLess, contentDescription = "全部折叠")
+                        Icon(Icons.Rounded.UnfoldLess, contentDescription = "全部折叠")
                     }
                 }
             }
@@ -736,7 +736,7 @@ private fun TaskRow(
                     if (hasChildren) {
                         IconButton(onClick = onToggleCollapse, modifier = Modifier.size(28.dp)) {
                             Icon(
-                                Icons.Filled.ChevronRight,
+                                Icons.Rounded.ChevronRight,
                                 contentDescription = if (collapsed) "展开子任务" else "折叠子任务",
                                 modifier = Modifier.rotate(if (collapsed) 0f else 90f)
                             )
@@ -777,10 +777,10 @@ private fun TaskRow(
                         )
                     }
                     IconButton(onClick = onAddChild, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.SubdirectoryArrowRight, contentDescription = "添加子任务")
+                        Icon(Icons.Rounded.SubdirectoryArrowRight, contentDescription = "添加子任务")
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除")
+                        Icon(Icons.Rounded.Delete, contentDescription = "删除")
                     }
                 }
 
@@ -926,7 +926,7 @@ private fun TaskEditDialog(
                                 )
                                 Text(parentLabel, style = MaterialTheme.typography.bodyLarge)
                             }
-                            Icon(Icons.Filled.ArrowDropDown, contentDescription = "选择父任务")
+                            Icon(Icons.Rounded.ArrowDropDown, contentDescription = "选择父任务")
                         }
                     }
                 }
@@ -966,7 +966,7 @@ private fun TaskEditDialog(
                 OutlinedTextField(
                     value = due ?: "", onValueChange = {}, readOnly = true,
                     label = { Text("到期日（可选）") },
-                    trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Filled.DateRange, null) } },
+                    trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (due != null) {

@@ -20,14 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -131,7 +131,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
                         }
                     }
                     IconButton(onClick = { showAlbumManage = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "管理相册")
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "管理相册")
                     }
                 }
             )
@@ -139,7 +139,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
         floatingActionButton = {
             FloatingActionButton(onClick = { pickPhotos() }, containerColor = AmberPrimary) {
                 if (importing) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-                else Icon(Icons.Filled.Add, contentDescription = "批量导入照片")
+                else Icon(Icons.Rounded.Add, contentDescription = "批量导入照片")
             }
         }
     ) { padding ->
@@ -348,7 +348,7 @@ private fun AlbumChipRow(
             AssistChip(
                 onClick = { showCreate = true },
                 label = { Text("＋ 新建相册") },
-                leadingIcon = { Icon(Icons.Filled.Add, null, modifier = Modifier.size(16.dp)) }
+                leadingIcon = { Icon(Icons.Rounded.Add, null, modifier = Modifier.size(16.dp)) }
             )
         }
     }
@@ -471,12 +471,12 @@ private fun PhotoFlipDeck(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 IconButton(onClick = { go(-1) }) {
-                    Icon(Icons.Filled.ChevronLeft, null, tint = MaterialTheme.colorScheme.onSurface,
+                    Icon(Icons.Rounded.ChevronLeft, null, tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(36.dp)
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), CircleShape))
                 }
                 IconButton(onClick = { go(1) }) {
-                    Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurface,
+                    Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(36.dp)
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), CircleShape))
                 }
@@ -657,7 +657,7 @@ private fun LazyRowOrColumn(
         item {
             ListItem(
                 headlineContent = { Text("未分类") },
-                leadingContent = { Icon(Icons.Filled.Close, null) },
+                leadingContent = { Icon(Icons.Rounded.Close, null) },
                 modifier = Modifier.clickable {
                     onAssign(null); onDismiss()
                 }
@@ -667,8 +667,8 @@ private fun LazyRowOrColumn(
             ListItem(
                 headlineContent = { Text(album.name) },
                 leadingContent = {
-                    if (album.id == currentAlbumId) Icon(Icons.Filled.Check, null, tint = AmberPrimary)
-                    else Icon(Icons.Filled.Edit, null)
+                    if (album.id == currentAlbumId) Icon(Icons.Rounded.Check, null, tint = AmberPrimary)
+                    else Icon(Icons.Rounded.Edit, null)
                 },
                 modifier = Modifier.clickable {
                     onAssign(album.id); onDismiss()
@@ -806,7 +806,7 @@ private fun PhotoGrid(
                 if (batchMode) {
                     if (sel) Box(Modifier.fillMaxSize().background(AmberPrimary.copy(alpha = 0.28f)))
                     Icon(
-                        Icons.Filled.Check,
+                        Icons.Rounded.Check,
                         contentDescription = null,
                         tint = if (sel) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
