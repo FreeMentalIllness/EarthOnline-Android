@@ -206,9 +206,9 @@ fun HomeScreen(
             }
         }
     LazyColumn(
-        // v1.2.1：世界日志输入框在页面中部，键盘弹起时若不收缩可视高度，
-        // 输入框会被键盘整个盖住（用户看不到自己在打什么）。imePadding 让列表底部腾出键盘高度。
-        modifier = Modifier.fillMaxSize().imePadding(),
+        // v1.0.20：键盘让位已上收到 MainScaffold（bottomBar 高度与 IME 取大者）——
+        // 这里不再叠 imePadding，消除「键盘上方巨大空白断层」。
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = UiDimens.ScreenPad,
             end = UiDimens.ScreenPad,
@@ -297,12 +297,12 @@ fun HomeScreen(
         } // v1.0.18：Column（实心顶块 + 内容列表）闭合
 
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
-        // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp），键盘弹起时随之上移。
+        // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp）；
+        // v1.0.20：键盘让位由 MainScaffold 统一处理，这里不再自带 imePadding。
         Box(
             Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 18.dp, bottom = 96.dp)
-                .imePadding()
         ) {
             Box(
                 Modifier

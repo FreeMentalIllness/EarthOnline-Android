@@ -1,22 +1,8 @@
 package com.example.earthonline.ui.home
 
-import android.Manifest
-import android.content.Context
-import android.content.pm.PackageManager
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,17 +13,14 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.EditNote
-import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,28 +31,29 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import com.example.earthonline.data.local.datastore.SettingsDataStore
 import com.example.earthonline.data.local.entity.ActivityEntity
 import com.example.earthonline.data.local.entity.ItemEntity
@@ -84,14 +68,13 @@ import com.example.earthonline.data.repository.MemoRepository
 import com.example.earthonline.data.repository.TaskRepository
 import com.example.earthonline.ui.components.IconChip
 import com.example.earthonline.ui.components.ModuleTints
-import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassSurface
-import com.example.earthonline.ui.theme.OnAmber
 import com.example.earthonline.util.nowIso
 import com.example.earthonline.util.todayStr
 import com.example.earthonline.util.uid
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -100,6 +83,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -107,8 +92,12 @@ import javax.inject.Inject
 
 /* ============================================================
  * v1.0.19：主页「AI 快捷中枢」—— 一句话自动归档。
- * 语音/文字输入一句话 → 意图解析（本地规则 + 可选 LLM 增强）→
- * 自动分发到 任务 / 背包 / 笔记 / 记账（兜底）→ Toast 反馈，不打断当前页面。
+ * v1.0.20：语音输入方案重构（死命令）—— 放弃系统 SpeechRecognizer
+ * （国产机/模拟器经常没有识别服务），改为「键盘为主」：
+ *   - 抽屉弹出即让输入框拿焦点并唤起软键盘；
+ *   - 用户需要语音时，用**输入法键盘自带的麦克风**（各大输入法都有）；
+ *   - 界面上不再出现麦克风按钮，也不再申请录音权限。
+ * 解析与分发逻辑（本地规则 + 可选 LLM 增强）保持不变。
  * ============================================================ */
 
 /** 意图种类（与 App 内四大落点一一对应） */
@@ -169,7 +158,7 @@ object QuickCaptureParser {
     /** 任务特征（安排 / 提醒类动词） */
     private val TASK_HINT = Regex(
         "(记得|提醒|别忘|要去|得去|需要去|开会|提交|完成|预约|归还|还钱|打卡|" +
-            "取快递|寄件|面试|体检|交作业|还款|开会|上课|值班|出差|接机|接站)"
+            "取快递|寄件|面试|体检|交作业|还款|上课|值班|出差|接机|接站)"
     )
 
     private val CN_NUM = mapOf(
@@ -248,7 +237,7 @@ object QuickCaptureParser {
             .replace(TIME_HINT, "")
             .replace(ITEM_HINT, "")
             .replace(Regex("^我(们)?"), "")
-            .replace(Regex("^[0-9一二两三四五六七八九十]+\\s*[个只台件辆支张把部本轮双盒包罐枚架台套]"), "")
+            .replace(Regex("^[0-9一二两三四五六七八九十]+\\s*[个只台件辆支张把部本轮双盒包罐枚架套]"), "")
             .trim(' ', '，', '。', '！', '？', ',', '.', '!', '?', '了')
         if (name.isBlank()) name = raw
         return name.take(40)
@@ -374,20 +363,20 @@ class AiQuickHubViewModel @Inject constructor(
                 .replace("```json", "")
                 .replace("```", "")
                 .trim()
-            val obj = json.parseToJsonElement(cleaned).let { it as kotlinx.serialization.json.JsonObject }
-            val kindStr = (obj["kind"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val obj = runCatching { json.parseToJsonElement(cleaned) as JsonObject }.getOrNull()
                 ?: return rules
+            val kindStr = (obj["kind"] as? JsonPrimitive)?.content ?: return rules
             val kind = when (kindStr.lowercase()) {
                 "task" -> QuickKind.TASK
                 "item" -> QuickKind.ITEM
                 "ledger" -> QuickKind.LEDGER
                 else -> QuickKind.MEMO
             }
-            val title = ((obj["title"] as? kotlinx.serialization.json.JsonPrimitive)?.content)
+            val title = (obj["title"] as? JsonPrimitive)?.content
                 ?.trim()?.takeIf { it.isNotBlank() } ?: rules.title
-            val due = ((obj["due"] as? kotlinx.serialization.json.JsonPrimitive)?.content)
+            val due = (obj["due"] as? JsonPrimitive)?.content
                 ?.takeIf { Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(it) }
-            val amount = (obj["amount"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val amount = (obj["amount"] as? JsonPrimitive)?.content
                 ?.toDoubleOrNull() ?: rules.amount
             QuickIntent(
                 kind = kind,
@@ -474,11 +463,11 @@ class AiQuickHubViewModel @Inject constructor(
 }
 
 /**
- * AI 快捷中枢底部抽屉：半透明液态玻璃面板 + 语音（默认）/键盘双输入 + 实时意图预览。
- * 语音走系统 SpeechRecognizer（RECORD_AUDIO 运行时授权），
- * 不可用 / 未授权 / 失败一律自动降级键盘输入并提示，绝不无声失败。
+ * AI 快捷中枢底部抽屉：半透明液态玻璃面板 + 自动聚焦输入框 + 实时意图预览。
+ * 语音输入统一走输入法键盘上的麦克风（placeholder 与提示文案已说明），
+ * 录音权限 / SpeechRecognizer 全部移除，任何机型都不会「点了没反应」。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun AiQuickHubSheet(
     visible: Boolean,
@@ -488,82 +477,27 @@ fun AiQuickHubSheet(
     if (!visible) return
     val context = LocalContext.current
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val keyboard = LocalSoftwareKeyboardController.current
 
-    // true = 语音输入（默认），false = 键盘输入
-    var voiceMode by remember { mutableStateOf(true) }
     var input by remember { mutableStateOf("") }
-    var partial by remember { mutableStateOf("") }
-    var listening by remember { mutableStateOf(false) }
-    var autoStartDone by remember { mutableStateOf(false) }
-
-    val speech = remember { SpeechInputController(context) }
-    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+    val focusRequester = remember { FocusRequester() }
 
     fun toast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
-    fun startVoice() {
-        if (!speechAvailable(context)) {
-            voiceMode = false
-            toast("当前设备无语音识别服务，已切换键盘输入")
-            return
-        }
-        speech.start(
-            onFinal = { text ->
-                partial = ""
-                input = (input + " " + text).trim()
-            },
-            onError = { msg -> partial = ""; toast(msg) }
-        )
-    }
-
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            startVoice()
-        } else {
-            voiceMode = false
-            toast("未授予麦克风权限，已切换为键盘输入")
-        }
-    }
-
-    fun beginVoice() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
-            startVoice()
-        } else {
-            runCatching { permLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-        }
-    }
-
-    // 弹窗打开：默认拉起语音输入（死命令）。无服务 → 键盘；无权限 → 现场申请
-    LaunchedEffect(visible) {
-        if (visible && !autoStartDone) {
-            autoStartDone = true
-            if (voiceMode) beginVoice()
-        }
-        if (!visible) autoStartDone = false
-    }
-
     fun submit() {
-        val text = (if (voiceMode) input else input).trim()
+        val text = input.trim()
         if (text.isBlank()) {
-            toast("先说点什么或输入点什么")
+            toast("先说点什么吧")
             return
         }
         vm.dispatch(text) { msg ->
             toast(msg)
             input = ""
-            partial = ""
         }
     }
 
     ModalBottomSheet(
-        onDismissRequest = {
-            if (listening) speech.stop()
-            onDismiss()
-        },
+        onDismissRequest = onDismiss,
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
         // inset 自理（面板自带 navigationBarsPadding + imePadding），防双重垫高
@@ -581,12 +515,10 @@ fun AiQuickHubSheet(
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
-                    .padding(top = 18.dp, bottom = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(top = 18.dp, bottom = 18.dp)
             ) {
-                /* —— 标题行：图标芯片 + 标题 + 输入模式开关 —— */
+                /* —— 标题行：图标芯片 + 标题 —— */
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -606,107 +538,43 @@ fun AiQuickHubSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            if (listening) speech.stop()
-                            voiceMode = !voiceMode
-                            if (voiceMode) beginVoice()
-                        }
-                    ) {
-                        Icon(
-                            if (voiceMode) Icons.Rounded.Keyboard else Icons.Filled.Mic,
-                            contentDescription = if (voiceMode) "切换键盘输入" else "切换语音输入"
-                        )
-                    }
                 }
 
                 Spacer(Modifier.height(14.dp))
 
-                if (voiceMode) {
-                    /* —— 语音输入：大麦克风按钮 + 呼吸光环 + 实时识别文字 —— */
-                    val pulse = rememberInfiniteTransition(label = "micPulse")
-                    val halo by pulse.animateFloat(
-                        initialValue = 0.85f,
-                        targetValue = 1.12f,
-                        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-                        label = "haloScale"
-                    )
-                    val haloAlpha by pulse.animateFloat(
-                        initialValue = 0.28f,
-                        targetValue = 0.08f,
-                        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-                        label = "haloAlpha"
-                    )
-                    Box(contentAlignment = Alignment.Center) {
-                        // 呼吸光环（收音中显示）
-                        if (listening) {
-                            Box(
-                                Modifier
-                                    .size(96.dp)
-                                    .scale(halo)
-                                    .clip(CircleShape)
-                                    .background(AmberPrimary.copy(alpha = haloAlpha))
-                            )
-                        }
-                        Box(
-                            Modifier
-                                .size(76.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(listOf(AmberPrimary, AmberPrimary.copy(alpha = 0.82f)))
-                                )
-                                .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    if (listening) speech.stop() else beginVoice()
-                                },
-                            contentAlignment = Alignment.Center
+                /* —— 输入框：弹出即聚焦 + 唤起软键盘；语音走输入法麦克风 —— */
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it.take(200) },
+                    placeholder = {
+                        Text("说点什么…（语音请用输入法键盘上的麦克风）")
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    shape = RoundedCornerShape(18.dp),
+                    leadingIcon = {
+                        Icon(Icons.Rounded.SmartToy, contentDescription = null, tint = ModuleTints.Ai)
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { submit() },
+                            enabled = input.isNotBlank() && !busy
                         ) {
-                            Icon(
-                                Icons.Filled.Mic,
-                                contentDescription = if (listening) "停止收音" else "开始说话",
-                                tint = OnAmber,
-                                modifier = Modifier.size(34.dp)
-                            )
+                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "发送")
                         }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        when {
-                            listening -> "正在听你说…（点击结束）"
-                            partial.isNotBlank() -> partial
-                            input.isNotBlank() -> input
-                            else -> "点一下麦克风开始说话"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    /* —— 键盘输入：胶囊输入框 + 发送 —— */
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it.take(200) },
-                        placeholder = { Text("例如：明天下午三点开会") },
-                        shape = RoundedCornerShape(50),
-                        leadingIcon = { Icon(Icons.Rounded.SmartToy, contentDescription = null) },
-                        trailingIcon = {
-                            IconButton(onClick = { submit() }, enabled = input.isNotBlank() && !busy) {
-                                Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "发送")
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { submit() }),
+                    minLines = 1,
+                    maxLines = 4,
+                    singleLine = false
+                )
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
 
                 /* —— 实时意图预览：当前文本将被归档到哪 —— */
-                val draft = (partial.ifBlank { input }).trim()
+                val draft = input.trim()
                 if (draft.isNotBlank()) {
                     val preview = QuickCaptureParser.parse(draft)
                     Row(
@@ -714,10 +582,10 @@ fun AiQuickHubSheet(
                             .clip(RoundedCornerShape(50))
                             .background(preview.kind.tint.copy(alpha = 0.12f))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(preview.kind.icon, contentDescription = null, tint = preview.kind.tint, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.size(6.dp))
                         Text(
                             QuickCaptureParser.previewLabel(preview) +
                                 if (preview.source == "llm") " · AI" else "",
@@ -730,21 +598,34 @@ fun AiQuickHubSheet(
                 }
 
                 Text(
+                    "语音输入：弹出键盘后点键盘上的「麦克风」说话，识别文字会直接进入输入框。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
                     "试试：明天下午三点开会 · 买了一个新耳机 · 今天天气真好 · 中午吃饭花了30",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     "记账由独立应用 Verifin 提供，账目类内容会先存为带「记账」标签的笔记",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
         }
+    }
+
+    // 死命令：抽屉弹出即让输入框拿焦点并唤起软键盘（等抽屉入场动画到位再拉起，更稳）
+    LaunchedEffect(Unit) {
+        delay(250)
+        runCatching { focusRequester.requestFocus() }
+        keyboard?.show()
     }
 }

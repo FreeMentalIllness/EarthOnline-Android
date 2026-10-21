@@ -142,13 +142,18 @@ fun GlassSurface(
     )
 
     Box(
-        modifier = modifier.then(
-            if (onClick != null) Modifier.clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
-            ) else Modifier
-        )
+        modifier = modifier
+            // v1.0.20（死命令 3）：强制圆弧裁剪 —— 整个玻璃容器（背景、高光描边、
+            // 可读性遮罩、内容层）都被限制在统一圆角内，内容再怎么溢出也不会出现
+            // 方形直角，液态玻璃质感全局一致。
+            .clip(shape)
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = onClick
+                ) else Modifier
+            )
     ) {
         /* ⚠️ 装饰层一律用 matchParentSize()，绝不能用 fillMaxSize()。
            fillMaxSize() 会向父级索取「最大可用高度」——当 GlassSurface 被放进
@@ -275,6 +280,8 @@ fun GlassCard(
     // scrim 按比例联动（默认 0.74 → 0.28，滑到 0.40 → 0.15 更通透，滑到 0.95 → 0.36 更稳）。
     // v1.0.19：范围放宽 0~1 —— 100% 档纯色不透明（scrim 归零），0% 档完全通透（含内层暗化一起归零）；
     // 整卡视觉参数与速览瓦片完全同源（同一 GlassSurface 渲染管线），绝无默认 Card 的黑色 elevation。
+    // v1.0.20：圆角全局统一 16dp（UiDimens.CardRadius 同值），且 GlassSurface 内部强制
+    // clip(shape) —— 背景与内容都锁进圆弧，任何调用点都不可能再出现方形直角。
     val userAlpha = LocalCardOpacity.current
     val opaque = userAlpha >= CARD_OPAQUE_THRESHOLD
     // 内层暗化（v1.0.12 可读性层）跟随滑块线性缩放：0.74 = 历史基线值，0% 完全消失

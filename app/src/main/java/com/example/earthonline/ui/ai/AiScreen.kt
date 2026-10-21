@@ -65,15 +65,13 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             Surface(tonalElevation = 2.dp) {
-                /* v1.2.1：键盘弹起时把输入框顶上去。
-                   顺序有讲究：imePadding() 必须在 navigationBarsPadding() 之后 ——
-                   先让开系统手势条，再让开键盘，否则键盘压上来时输入框仍被手势条盖住一截。
-                   前提是 Activity 设了 adjustResize（见 AndroidManifest）。 */
+                /* v1.0.20：键盘让位已上收到 MainScaffold（bottomBar 高度与 IME 取大者）。
+                   此前这里的 navigationBarsPadding + imePadding 与外层叠加，
+                   键盘弹出时输入框被双重抬高（导航条高度再垫一层）—— 现删除，
+                   外层已保证：键盘弹出时紧贴键盘、收起时让开导航胶囊。 */
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding()
                         .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

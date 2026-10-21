@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -272,6 +273,17 @@ fun MainScaffold(
     ) { innerPadding ->
         val darkTheme = isSystemInDarkTheme()
         val isOnline by rememberIsOnline()
+        /* v1.0.20：底部让位统一收敛（主页搜索键盘空白断层的根因修复）——
+           此前 innerPadding.bottom（导航胶囊排除高度 ≈96dp，普通 padding 不消费 inset）
+           与页面自己的 imePadding() 叠加，键盘弹出时内容被双重抬高，
+           键盘上方拖出一截空白断层。
+           现在内容区底部让位 = max(bottomBar 高度, IME 高度)：
+           键盘弹出 → 内容紧贴键盘上沿（胶囊已被键盘盖住，无需再让）；
+           键盘收起 → 照常让开悬浮胶囊。各页不再自行叠加 imePadding。 */
+        val contentBottomPad = maxOf(
+            innerPadding.calculateBottomPadding(),
+            with(density) { WindowInsets.ime.getBottom(this).toDp() }
+        )
         Box(Modifier.fillMaxSize()) {
             if (wallpaperRequest != null) {
                 AsyncImage(
@@ -324,7 +336,7 @@ fun MainScaffold(
                     .fillMaxSize()
                     .widthIn(max = 560.dp)
                     .align(Alignment.TopCenter)
-                    .padding(innerPadding),
+                    .padding(bottom = contentBottomPad),
                 achVm = achVm,
                 moreActions = MoreMenuActions(
                     onNavigate = { route -> navController.navigate(route) { launchSingleTop = true } },
