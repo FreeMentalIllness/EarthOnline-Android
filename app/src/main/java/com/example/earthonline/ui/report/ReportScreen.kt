@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.AnimatedBarChart
 import com.example.earthonline.ui.components.AnimatedLineChart
 import com.example.earthonline.ui.components.MetricTile
+import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.UiDimens
@@ -45,6 +46,9 @@ import com.example.earthonline.util.XpRules
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material3.Icon
 
 @Composable
@@ -196,7 +200,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
                         Modifier.fillMaxWidth().padding(UiDimens.CardPad),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SectionHeader("📝 一句话总结")
+                        SectionHeader("一句话总结", icon = Icons.Rounded.Lightbulb, chipColor = ModuleTints.Notes)
                         Text(
                             state.summary,
                             style = MaterialTheme.typography.bodyMedium,
@@ -216,7 +220,7 @@ fun ReportScreen(vm: ReportViewModel, moreActions: MoreMenuActions) {
                             Modifier.fillMaxWidth().padding(UiDimens.CardPad),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            SectionHeader("✨ 本周期亮点")
+                            SectionHeader("本周期亮点", icon = Icons.Rounded.AutoAwesome, chipColor = ModuleTints.Achievements)
                             state.highlights.forEach { h ->
                                 Text(
                                     h,

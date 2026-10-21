@@ -107,14 +107,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     val theme: Flow<String> = ds.data.map { it[THEME] ?: "system" }
     val wallpaper: Flow<String> = ds.data.map { it[WALLPAPER] ?: "" }
 
-    /** 壁纸不透明度 0.05 ~ 0.90（0 = 完全看不见，1 = 完全遮挡内容，故上限收紧） */
-    val wallpaperAlpha: Flow<Float> = ds.data.map { (it[WALLPAPER_ALPHA] ?: 0.35f).coerceIn(0.05f, 0.9f) }
+    /** 壁纸不透明度（v1.0.19 放宽 0.0 ~ 1.0 全域：0 = 壁纸完全隐藏显示纯背景色，1 = 完全透出） */
+    val wallpaperAlpha: Flow<Float> = ds.data.map { (it[WALLPAPER_ALPHA] ?: 0.35f).coerceIn(0f, 1f) }
 
     /** v1.0.11：壁纸模糊度 0~24dp（0 = 清晰，越大越毛玻璃；用户自平衡美观与性能） */
     val wallpaperBlur: Flow<Float> = ds.data.map { (it[WALLPAPER_BLUR] ?: 0f).coerceIn(0f, 24f) }
 
-    /** v1.0.18：卡片背景不透明度（0.40~0.95，默认 0.74 视觉基线；低=通透感，高=可读性） */
-    val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 0.74f).coerceIn(0.40f, 0.95f) }
+    /** v1.0.18/v1.0.19：卡片背景不透明度（0.0~1.0，默认 0.74 视觉基线；低=通透感，高=可读性，1.0=纯色底） */
+    val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 0.74f).coerceIn(0f, 1f) }
     val notify: Flow<Boolean> = ds.data.map { it[NOTIFY] ?: false }
     val aiConfig: Flow<String> = ds.data.map { it[AI_CONFIG] ?: "" }
     val webdavConfig: Flow<String> = ds.data.map { it[WEBDAV_CONFIG] ?: "" }
@@ -132,12 +132,12 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     suspend fun setTheme(v: String) = ds.edit { it[THEME] = v }
     suspend fun setWallpaper(v: String) = ds.edit { it[WALLPAPER] = v }
     suspend fun setWallpaperAlpha(v: Float) =
-        ds.edit { it[WALLPAPER_ALPHA] = v.coerceIn(0.05f, 0.9f) }
+        ds.edit { it[WALLPAPER_ALPHA] = v.coerceIn(0f, 1f) }
     suspend fun setWallpaperBlur(v: Float) =
         ds.edit { it[WALLPAPER_BLUR] = v.coerceIn(0f, 24f) }
-    /** v1.0.18：卡片背景不透明度落盘 */
+    /** v1.0.18/v1.0.19：卡片背景不透明度落盘（0.0~1.0，1.0=纯色不透明） */
     suspend fun setCardOpacity(v: Float) =
-        ds.edit { it[CARD_OPACITY] = v.coerceIn(0.40f, 0.95f) }
+        ds.edit { it[CARD_OPACITY] = v.coerceIn(0f, 1f) }
     suspend fun setNotify(v: Boolean) = ds.edit { it[NOTIFY] = v }
     suspend fun setAiConfig(v: String) = ds.edit { it[AI_CONFIG] = v }
     suspend fun setWebdavConfig(v: String) = ds.edit { it[WEBDAV_CONFIG] = v }

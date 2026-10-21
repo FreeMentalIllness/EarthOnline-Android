@@ -154,6 +154,7 @@ fun AppearanceRoute(
                         ) { Text("重置为默认") }
                     }
                     if (wallpaper.isNotBlank()) {
+                        // v1.0.19：壁纸不透明度全域 0~100% —— 0% 壁纸完全隐藏（显示纯背景色），100% 完全透出
                         var alphaDraft by remember(wallpaper) { mutableFloatStateOf(wallpaperAlpha) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("壁纸不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
@@ -169,7 +170,7 @@ fun AppearanceRoute(
                                 alphaDraft = it
                                 vm.setWallpaperAlpha(it)
                             },
-                            valueRange = 0.05f..0.9f
+                            valueRange = 0f..1f
                         )
                         // v1.0.11：壁纸模糊度滑块（实时预览，拖动即时生效；0 = 清晰）
                         var blurDraft by remember(wallpaper) { mutableFloatStateOf(wallpaperBlur) }
@@ -189,25 +190,26 @@ fun AppearanceRoute(
                             },
                             valueRange = 0f..24f
                         )
-                        // v1.0.18：卡片背景不透明度滑块（实时预览；低=通透感，高=可读性）
-                        var cardOpacityDraft by remember { mutableFloatStateOf(cardOpacity) }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("卡片背景不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                            Text(
-                                "${(cardOpacityDraft * 100).roundToInt()}%",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Slider(
-                            value = cardOpacityDraft,
-                            onValueChange = {
-                                cardOpacityDraft = it
-                                vm.setCardOpacity(it)
-                            },
-                            valueRange = 0.40f..0.95f
+                    }
+                    // v1.0.18/v1.0.19：卡片不透明度滑块（实时预览；不依赖壁纸设置，始终可见。
+                    // v1.0.19 起全域 0~100%：0% 完全通透，100% surface 纯色底）
+                    var cardOpacityDraft by remember { mutableFloatStateOf(cardOpacity) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("卡片不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                        Text(
+                            "${(cardOpacityDraft * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Slider(
+                        value = cardOpacityDraft,
+                        onValueChange = {
+                            cardOpacityDraft = it
+                            vm.setCardOpacity(it)
+                        },
+                        valueRange = 0f..1f
+                    )
                     // v1.0.3：动态主页背景 —— 从记忆相册随机轮换（每天一张，确定性挑选）
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {

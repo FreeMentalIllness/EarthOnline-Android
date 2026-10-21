@@ -53,9 +53,15 @@ val LocalWallpaperPath = compositionLocalOf<String?> { null }
 /**
  * v1.0.18：卡片背景不透明度（设置 → 外观滑块，DataStore 持久化）。
  * 仅作用于 [GlassCard]（全局统一卡片容器），速览瓦片/底栏等其它 GlassSurface 用途不受影响。
- * 取值 0.40 ~ 0.95：低 = 通透感优先，高 = 可读性优先；默认 0.74（历史视觉基线）。
+ * v1.0.19：取值放宽为 0.0 ~ 1.0 全域 ——
+ *  - 1.0：卡片完全不透明（surface 纯色底，跳过壁纸模糊采样，纯色性能档）；
+ *  - 0.0：卡片完全通透（仅剩高光描边轮廓）；
+ *  - 默认 0.74（历史视觉基线）。
  */
 val LocalCardOpacity = compositionLocalOf { 0.74f }
+
+/** v1.0.19：卡片不透明度被视为「纯色不透明」的阈值（≥ 该值 = 100% 档） */
+const val CARD_OPAQUE_THRESHOLD = 0.995f
 
 /**
  * 液态玻璃特效全局开关（对应「设置 → 外观 → 液态玻璃特效」）。
@@ -110,7 +116,10 @@ fun GlassSurface(
     val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
-    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
+    // v1.0.19：卡片不透明度拉满（100% 纯色档）时跳过壁纸模糊采样 ——
+    // 纯色底下采样结果完全被盖住，纯属 GPU 浪费；跳过后卡片走零采样纯色渲染。
+    val cardOpaque = (tintOverride ?: 0f) >= CARD_OPAQUE_THRESHOLD
+    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque
 
     /* 着色层改用「上深下浅」的竖向渐变。
        - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
@@ -118,6 +127,8 @@ fun GlassSurface(
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
         tier == GlassTier.FLAT -> 0.94f to 0.94f
+        // v1.0.19：100% 档 = 上下都拉满 1.0，卡片成为真正的 surface 纯色底
+        tintOverride != null && tintOverride >= CARD_OPAQUE_THRESHOLD -> 1f to 1f
         // v1.0.18：卡片不透明度滑块覆写（上深下浅的梯度差收窄为 0.08）
         tintOverride != null -> tintOverride to (tintOverride - 0.08f).coerceAtLeast(0.30f)
         // v1.0.17：底部着色下限 0.62→0.66 —— 用户反馈可读性优先，Alpha 收敛进 60%~80% 区间上沿
@@ -262,20 +273,24 @@ fun GlassCard(
 ) {
     // v1.0.18：接入「卡片背景不透明度」滑块 —— tint 直读用户值，
     // scrim 按比例联动（默认 0.74 → 0.28，滑到 0.40 → 0.15 更通透，滑到 0.95 → 0.36 更稳）。
+    // v1.0.19：范围放宽 0~1 —— 100% 档纯色不透明（scrim 归零），0% 档完全通透（含内层暗化一起归零）；
     // 整卡视觉参数与速览瓦片完全同源（同一 GlassSurface 渲染管线），绝无默认 Card 的黑色 elevation。
     val userAlpha = LocalCardOpacity.current
+    val opaque = userAlpha >= CARD_OPAQUE_THRESHOLD
+    // 内层暗化（v1.0.12 可读性层）跟随滑块线性缩放：0.74 = 历史基线值，0% 完全消失
+    val darkK = (userAlpha / 0.74f).coerceIn(0f, 1f)
     GlassSurface(
         modifier = modifier,
         shape = shape,
         showBorder = true,
         onClick = onClick,
         tintOverride = userAlpha,
-        scrimOverride = (0.28f * (userAlpha / 0.74f)).coerceIn(0f, 0.4f)
+        scrimOverride = if (opaque) 0f else (0.28f * (userAlpha / 0.74f)).coerceIn(0f, 0.4f)
     ) {
         Box(
             Modifier
                 .matchParentSize()
-                .background(Color.Black.copy(alpha = if (isSystemInDarkTheme()) 0.06f else 0.10f))
+                .background(Color.Black.copy(alpha = (if (isSystemInDarkTheme()) 0.06f else 0.10f) * darkK))
         )
         content()
     }

@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -86,6 +87,8 @@ import com.example.earthonline.ui.components.ConfettiBurst
 import com.example.earthonline.ui.components.EmptyHint
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
+import com.example.earthonline.ui.components.IconChip
+import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.TagChip
 import com.example.earthonline.ui.components.UiDimens
@@ -102,7 +105,8 @@ import com.example.earthonline.ui.theme.OnAmber
 
 /** 首页入口定义（对应 HTML renderHome 顶部功能入口）。
  *  仅保留：任务 / 背包 / 成就 / 地图 / 记账 / 系统，去除与下方卡片重复的「新建任务」「记心情」等入口。
- *  [id] 与 HomeViewModel.DEFAULT_QUICK_ENTRIES 对应，供「自定义速览入口」按 DataStore 开关显隐。 */
+ *  [id] 与 HomeViewModel.DEFAULT_QUICK_ENTRIES 对应，供「自定义速览入口」按 DataStore 开关显隐。
+ *  v1.0.19：[tint] 模块语义色 —— 速览瓦片图标升级为彩色圆角芯片（对标设置页图标语言）。 */
 private data class HomeEntry(
     val id: String,
     /** v1.0.17：emoji → Icons.Rounded 圆角矢量（全局图标现代化） */
@@ -110,7 +114,9 @@ private data class HomeEntry(
     val label: String,
     val sub: String,
     /** route 为空表示「记账」：不走页面导航，改为弹出下载渠道弹窗 */
-    val route: String?
+    val route: String?,
+    /** v1.0.19：模块语义色（ModuleTints） */
+    val tint: Color = AmberPrimary
 )
 
 @Composable
@@ -177,6 +183,8 @@ fun HomeScreen(
     var showAddTimeline by remember { mutableStateOf(false) }
     // 主页速览「自定义入口」配置面板（BottomSheet）
     var showQuickEdit by remember { mutableStateOf(false) }
+    // v1.0.19：AI 快捷中枢（右下角悬浮 + 按钮 → 液态玻璃底部抽屉）
+    var showAiHub by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         // v1.0.18（死命令 3）：顶部整块全幅出血 —— Column 包裹「实心顶块 + 内容列表」。
@@ -287,6 +295,44 @@ fun HomeScreen(
         }
     }
         } // v1.0.18：Column（实心顶块 + 内容列表）闭合
+
+        // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
+        // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp），键盘弹起时随之上移。
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = 96.dp)
+                .imePadding()
+        ) {
+            Box(
+                Modifier
+                    .size(58.dp)
+                    .shadow(elevation = 8.dp, shape = CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(listOf(AmberPrimary, AmberPrimary.copy(alpha = 0.86f)))
+                    )
+                    .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { showAiHub = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = "AI 快捷中枢",
+                    tint = OnAmber,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+        }
+
+        // v1.0.19：AI 快捷中枢底部抽屉（语音默认 + 意图自动分发）
+        AiQuickHubSheet(
+            visible = showAiHub,
+            onDismiss = { showAiHub = false }
+        )
 
         // 时间轴：添加自定义里程碑
         if (showAddTimeline) {
@@ -742,15 +788,15 @@ private fun OverviewGrid(
     onEditEntries: () -> Unit = {}
 ) {
     val allEntries = listOf(
-        HomeEntry("tasks", Icons.Rounded.Checklist, "任务", "完成率 ${state.doneRatio}%", "tasks"),
-        HomeEntry("backpack", Icons.Rounded.Backpack, "背包", "${state.itemCount} 件物品", "backpack"),
-        HomeEntry("notes", Icons.Rounded.EditNote, "笔记", "${state.noteCount} 篇笔记", "notes"),
-        HomeEntry("album", Icons.Rounded.PhotoLibrary, "相册", "${state.albumCount} 张照片", "album"),
-        HomeEntry("map", Icons.Rounded.Map, "地图", "${state.locationCount} 处足迹", "map"),
-        HomeEntry("accounting", Icons.Rounded.BarChart, "记账", "账本与导出", null),
-        HomeEntry("data", Icons.Rounded.QueryStats, "数据", "统计看板", "data"),
-        HomeEntry("achievements", Icons.Rounded.EmojiEvents, "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
-        HomeEntry("ai", Icons.Rounded.SmartToy, "系统", "AI 助手", "ai")
+        HomeEntry("tasks", Icons.Rounded.Checklist, "任务", "完成率 ${state.doneRatio}%", "tasks", ModuleTints.Tasks),
+        HomeEntry("backpack", Icons.Rounded.Backpack, "背包", "${state.itemCount} 件物品", "backpack", ModuleTints.Backpack),
+        HomeEntry("notes", Icons.Rounded.EditNote, "笔记", "${state.noteCount} 篇笔记", "notes", ModuleTints.Notes),
+        HomeEntry("album", Icons.Rounded.PhotoLibrary, "相册", "${state.albumCount} 张照片", "album", ModuleTints.Album),
+        HomeEntry("map", Icons.Rounded.Map, "地图", "${state.locationCount} 处足迹", "map", ModuleTints.Map),
+        HomeEntry("accounting", Icons.Rounded.BarChart, "记账", "账本与导出", null, ModuleTints.Accounting),
+        HomeEntry("data", Icons.Rounded.QueryStats, "数据", "统计看板", "data", ModuleTints.Data),
+        HomeEntry("achievements", Icons.Rounded.EmojiEvents, "成就", "${state.unlockedAch}/${state.totalAch}", "achievements", ModuleTints.Achievements),
+        HomeEntry("ai", Icons.Rounded.SmartToy, "系统", "AI 助手", "ai", ModuleTints.System)
     )
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
@@ -776,8 +822,7 @@ private fun OverviewGrid(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             // weight 让标题占据剩余宽度：大字号下标题换行也不会把右侧按钮挤出屏幕
-            SectionHeader("速览", Modifier.weight(1f), icon = Icons.Rounded.Explore)
-            // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
+            SectionHeader("速览", Modifier.weight(1f), icon = Icons.Rounded.Explore)            // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
             TextButton(
                 onClick = { expanded = !expanded },
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -803,6 +848,7 @@ private fun OverviewGrid(
                     WaffleTile(
                         icon = entry.icon,
                         label = entry.label,
+                        tint = entry.tint,
                         modifier = Modifier.weight(1f)
                     ) {
                         if (entry.route != null) onNavigate(entry.route) else onAccounting()
@@ -831,6 +877,7 @@ private fun OverviewGrid(
                             WaffleTile(
                                 icon = entry.icon,
                                 label = entry.label,
+                                tint = entry.tint,
                                 modifier = Modifier.weight(1f)
                             ) {
                                 if (entry.route != null) onNavigate(entry.route) else onAccounting()
@@ -860,16 +907,17 @@ private fun OverviewGrid(
 @Composable
 private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) -> Unit) {
     // 与 OverviewGrid 的 allEntries 保持同一份清单（含隐藏项，才能重新勾回来）
+    // v1.0.19：图标改用模块语义色，与速览瓦片芯片同源
     val quickAll = listOf(
-        Triple("tasks", Icons.Rounded.Checklist, "任务"),
-        Triple("backpack", Icons.Rounded.Backpack, "背包"),
-        Triple("notes", Icons.Rounded.EditNote, "笔记"),
-        Triple("album", Icons.Rounded.PhotoLibrary, "相册"),
-        Triple("map", Icons.Rounded.Map, "地图"),
-        Triple("accounting", Icons.Rounded.BarChart, "记账"),
-        Triple("data", Icons.Rounded.QueryStats, "数据"),
-        Triple("achievements", Icons.Rounded.EmojiEvents, "成就"),
-        Triple("ai", Icons.Rounded.SmartToy, "系统")
+        QuickEntryDef("tasks", Icons.Rounded.Checklist, "任务", ModuleTints.Tasks),
+        QuickEntryDef("backpack", Icons.Rounded.Backpack, "背包", ModuleTints.Backpack),
+        QuickEntryDef("notes", Icons.Rounded.EditNote, "笔记", ModuleTints.Notes),
+        QuickEntryDef("album", Icons.Rounded.PhotoLibrary, "相册", ModuleTints.Album),
+        QuickEntryDef("map", Icons.Rounded.Map, "地图", ModuleTints.Map),
+        QuickEntryDef("accounting", Icons.Rounded.BarChart, "记账", ModuleTints.Accounting),
+        QuickEntryDef("data", Icons.Rounded.QueryStats, "数据", ModuleTints.Data),
+        QuickEntryDef("achievements", Icons.Rounded.EmojiEvents, "成就", ModuleTints.Achievements),
+        QuickEntryDef("ai", Icons.Rounded.SmartToy, "系统", ModuleTints.System)
     )
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
@@ -881,27 +929,35 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        quickAll.forEach { (id, icon, label) ->
+        quickAll.forEach { def ->
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Checkbox(
-                    checked = id in enabled,
-                    onCheckedChange = { onToggle(id, it) }
+                    checked = def.id in enabled,
+                    onCheckedChange = { onToggle(def.id, it) }
                 )
                 Icon(
-                    icon,
+                    def.icon,
                     contentDescription = null,
-                    tint = AmberPrimary,
+                    tint = def.tint,
                     modifier = Modifier.size(18.dp)
                 )
-                Text(label, style = MaterialTheme.typography.bodyMedium)
+                Text(def.label, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
 }
+
+/** v1.0.19：速览自定义面板条目（图标 + 模块语义色） */
+private data class QuickEntryDef(
+    val id: String,
+    val icon: ImageVector,
+    val label: String,
+    val tint: Color
+)
 
 /**
  * v1.0.12：华夫菜单单格 —— 材质统一为 [GlassSurface]。
@@ -910,7 +966,14 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
  * 现在：同一套玻璃底 + 同一套色散高光描边 + 同一 16dp 圆角，只保留触点聚光灯与按压缩放。
  */
 @Composable
-private fun WaffleTile(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun WaffleTile(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    /** v1.0.19：模块语义色（图标芯片），默认品牌琥珀 */
+    tint: Color = AmberPrimary,
+    onClick: () -> Unit
+) {
     var spot by remember { mutableStateOf<Offset?>(null) }
     val shape = RoundedCornerShape(UiDimens.CardRadius)
     GlassSurface(
@@ -957,12 +1020,13 @@ private fun WaffleTile(icon: ImageVector, label: String, modifier: Modifier = Mo
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // v1.0.17：emoji → 圆角矢量图标，琥珀色贴暖色治愈系主题
-            Icon(
+            // v1.0.19：图标升级为彩色圆角芯片（模块语义色），与设置页设计语言统一
+            IconChip(
                 icon,
-                contentDescription = label,
-                tint = AmberPrimary,
-                modifier = Modifier.size(30.dp)
+                chipColor = tint,
+                chipSize = 40.dp,
+                iconSize = 22.dp,
+                contentDescription = label
             )
             Spacer(Modifier.height(6.dp))
             Text(
@@ -1054,7 +1118,7 @@ private fun ActsCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // weight 占满剩余宽度：大字号下标题换行也不会把右侧入口挤出屏幕
-                SectionHeader("最近动态", Modifier.weight(1f), icon = Icons.Rounded.Bolt)
+                SectionHeader("最近动态", Modifier.weight(1f), icon = Icons.Rounded.Bolt, chipColor = ModuleTints.Feed)
                 // 可见性修复（第二轮）：纯图标 32dp 方块在琥珀底上仍不够醒目，
                 // 改为「图标 + 文字」实心按钮，前景用 OnAmber（深棕），
                 // 浅深主题对琥珀底都有 ≥4.5:1 对比度，且文字入口更易发现、易点中。

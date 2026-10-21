@@ -471,6 +471,8 @@ private fun CollectionsPane(
             placeholder = { Text("搜索标题 / 备注") },
             leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true,
+            // v1.0.19（死命令 2）：收藏搜索框圆角与「物品」页统一为两端半圆胶囊形
+            shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
                 .padding(UiDimens.ListPad, UiDimens.ListPad, UiDimens.ListPad, 0.dp)
         )

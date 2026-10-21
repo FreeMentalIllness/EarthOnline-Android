@@ -47,27 +47,81 @@ object UiDimens {
     val OverviewCardHeight: Dp = 104.dp
 }
 
-/** 分区标题：emoji/矢量图标 + 标题 + 右侧可选操作，全页统一。
+/**
+ * v1.0.19：模块语义色板（全局图标翻新）。
+ * 对标设置页「彩色圆角图标芯片」的设计语言 —— 圆角小方块背景 + 现代矢量线条图标，
+ * 按模块区分色相（任务蓝 / 背包黄 / 笔记绿…），统一线性风格，告别单调纯色。
+ * 所有色值固定不随主题翻转（芯片背景走 14% 透明度，深浅色下对比度均达标）。
+ */
+object ModuleTints {
+    val Tasks = Color(0xFF5B8DEF)        // 任务 · 蓝
+    val Backpack = Color(0xFFF5A623)     // 背包 · 琥珀黄
+    val Notes = Color(0xFF58B87C)        // 笔记 · 绿
+    val Album = Color(0xFFA879F0)        // 相册 · 紫
+    val Map = Color(0xFF3FBFAD)          // 地图 · 青
+    val Accounting = Color(0xFFF08A5D)   // 记账 · 珊瑚橙
+    val Data = Color(0xFF6C7BFF)         // 数据 · 靛蓝
+    val Achievements = Color(0xFFF5B940) // 成就 · 金
+    val Ai = Color(0xFF9B7BEF)           // AI · 星紫
+    val System = Color(0xFF90A4AE)       // 系统 · 灰蓝
+    val Feed = Color(0xFF5B8DEF)         // 最近动态 · 蓝
+}
+
+/**
+ * v1.0.19：图标芯片 —— 圆角小方块背景 + 居中矢量图标（对标设置页图标语言）。
+ * @param chipColor 模块语义色（见 [ModuleTints]），同时决定背景（14% 透明度）与前景
+ * @param chipSize 方块边长（速览瓦片 38dp / 分区标题 26dp）
+ * @param iconSize 图标边长（约为方块的 55%）
+ */
+@Composable
+fun IconChip(
+    icon: ImageVector,
+    chipColor: Color,
+    modifier: Modifier = Modifier,
+    chipSize: Dp = 38.dp,
+    iconSize: Dp = 21.dp,
+    contentDescription: String? = null
+) {
+    Box(
+        modifier = modifier
+            .size(chipSize)
+            .clip(RoundedCornerShape(chipSize * 0.32f))
+            .background(chipColor.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = chipColor,
+            modifier = Modifier.size(iconSize)
+        )
+    }
+}
+
+/** 分区标题：图标芯片 + 标题 + 右侧可选操作，全页统一。
  *  v1.0.17：新增 [icon] 参数 —— 传入矢量图标时优先渲染 Icons.Rounded 圆角矢量，
- *  不再依赖 emoji 字符（全局图标现代化）。 */
+ *  不再依赖 emoji 字符（全局图标现代化）。
+ *  v1.0.19：图标升级为 [IconChip] 彩色圆角芯片（[chipColor] 指定模块色，默认品牌琥珀），
+ *  与设置页图标语言完全统一。 */
 @Composable
 fun SectionHeader(
     text: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    chipColor: Color = AmberPrimary,
     trailing: (@Composable () -> Unit)? = null
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (icon != null) {
-            Icon(
+            IconChip(
                 icon,
-                contentDescription = null,
-                tint = AmberPrimary,
-                modifier = Modifier.size(18.dp)
+                chipColor = chipColor,
+                chipSize = 26.dp,
+                iconSize = 15.dp
             )
         }
         Text(

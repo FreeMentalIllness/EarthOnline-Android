@@ -135,6 +135,7 @@ fun MainScaffold(
     }
 
     val wallpaper by settingsVm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
+    // v1.0.19：壁纸不透明度全域 0~100%（0% = 壁纸完全隐藏，显示纯背景色）
     val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
     // v1.0.11：壁纸模糊度（设置→外观 滑块，0=清晰，24=重度毛玻璃）
     val wallpaperBlur by settingsVm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
@@ -164,8 +165,10 @@ fun MainScaffold(
        会按原图解码（现在手机动辄 12MP，一张壁纸 ≈ 48MB 位图），既是内存尖峰也是掉帧源。 */
     val screenW = configuration.screenWidthDp
     val screenH = configuration.screenHeightDp
-    val wallpaperRequest = remember(effectiveWallpaper, screenW, screenH) {
-        if (effectiveWallpaper.isBlank()) {
+    // v1.0.19：壁纸不透明度 0% = 完全隐藏 —— 不解码、不渲染、不供玻璃采样，纯背景色接管
+    val wallpaperVisible = wallpaperAlpha > 0.01f && effectiveWallpaper.isNotBlank()
+    val wallpaperRequest = remember(effectiveWallpaper, screenW, screenH, wallpaperVisible) {
+        if (!wallpaperVisible) {
             null
         } else {
             val w = with(density) { screenW.dp.roundToPx() }
@@ -229,7 +232,8 @@ fun MainScaffold(
                蒙版用纯 background 色从透明渐变到不透明，在壁纸上会形成一条清晰的色带边界）。
                胶囊本身自带高光描边 + 16dp 环境投影，内容在底栏上方的过渡交给玻璃材质即可；
                navigationBarsPadding 继续负责手势条沉浸式避让。 */
-            ProvideWallpaper(effectiveWallpaper.ifBlank { null }) {
+            // v1.0.19：壁纸隐藏时玻璃容器同步断供采样路径（底栏玻璃走纯色档）
+            ProvideWallpaper(if (!wallpaperVisible) null else effectiveWallpaper) {
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -308,7 +312,8 @@ fun MainScaffold(
             )
             // 大屏/折叠屏适配：内容区限宽居中，避免展开态单列拉满全宽
             // 注入全局壁纸路径，供各处 GlassSurface 就地采样毛玻璃背景
-            ProvideWallpaper(if (effectiveWallpaper.isBlank()) null else effectiveWallpaper) {
+            // v1.0.19：壁纸隐藏（0%）时注入 null —— 卡片玻璃同步退化为纯色底，视觉与背景一致
+            ProvideWallpaper(if (!wallpaperVisible) null else effectiveWallpaper) {
                 androidx.compose.runtime.CompositionLocalProvider(
                     com.example.earthonline.ui.theme.LocalCardOpacity provides cardOpacity
                 ) {

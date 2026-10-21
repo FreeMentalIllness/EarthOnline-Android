@@ -267,6 +267,10 @@ fun NoteEditorScreen(
            固定在屏幕顶部。无论键盘怎么弹，工具栏恒在顶端，中间绝无空白。
            （topBar 整体被 windowInsetsTopHeight 之外的状态栏避让覆盖，键盘永远够不到这里。） */
         topBar = {
+            // v1.0.19（死命令 4）复核确认：「编辑笔记/保存/删除」标题栏本身就是纯色硬色块 ——
+            // TopAppBar containerColor = 不透明主题背景色（v1.0.15 落地），且 TopAppBar 自带
+            // statusBars inset，容器色向上延伸盖住状态栏，与 MainScaffold 状态栏实心块
+            // 同色无缝连体，壁纸绝不透出标题区。下方的毛玻璃格式化工具栏保持 v1.0.18 设计不动。
             Column {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
