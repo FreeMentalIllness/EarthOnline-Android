@@ -21,10 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Celebration
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.ListAlt
 import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
+import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.*
@@ -344,6 +348,7 @@ fun TasksScreen(
                     // v1.2.3：「已完成」视图为空时，给一句正向引导（不再重复「创建」按钮，添加走右下角 FAB）
                     EmptyState(
                         emoji = "✅",
+                        icon = Icons.Rounded.TaskAlt,
                         title = "还没有已完成的任务",
                         message = "完成一条任务就会出现在这里，方便你回顾一路走来的脚印。"
                     )
@@ -351,6 +356,7 @@ fun TasksScreen(
                     // v1.0.4：隐藏已完成模式下全部做完时的空状态（区别于「分类本身是空的」）
                     EmptyState(
                         emoji = "🎉",
+                        icon = Icons.Rounded.Celebration,
                         title = "这个分类下没有未完成的任务",
                         message = "都清空啦。想回看已完成的记录，可以打开「只看已完成」。"
                     )
@@ -367,6 +373,7 @@ fun TasksScreen(
                     // v1.2.3：去掉重复的「创建」按钮 —— 新建任务统一由右下角 FAB 负责，避免两个入口打架
                     EmptyState(
                         emoji = "📋",
+                        icon = Icons.Rounded.ListAlt,
                         title = label,
                         message = hint
                     )
@@ -761,11 +768,23 @@ private fun TaskRow(
                         ) {
                             StatusChip(t.status)
                             t.dueDate?.let {
-                                Text(
-                                    "📅 $it",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                // v1.0.17：📅 emoji → CalendarMonth 矢量
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.CalendarMonth,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

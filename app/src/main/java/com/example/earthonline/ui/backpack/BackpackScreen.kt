@@ -22,11 +22,17 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.LocalLibrary
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.ViewList
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
@@ -269,6 +275,7 @@ private fun ItemsPane(
             if (items.isEmpty()) {
                 EmptyState(
                     emoji = "🎒",
+                    icon = Icons.Rounded.Backpack,
                     title = "背包还是空的",
                     message = "把你拥有的、想留下的东西登记进来：一台相机、一本读到一半的书、一张还没用的券。" +
                         "以后翻背包就像翻自己的人生清单。",
@@ -276,7 +283,7 @@ private fun ItemsPane(
                     onAction = onAddItem
                 )
             } else {
-                EmptyHint(if (query.isBlank()) "该分类下暂无物品" else "没有匹配的物品", emoji = "🔍")
+                EmptyHint(if (query.isBlank()) "该分类下暂无物品" else "没有匹配的物品", icon = Icons.Rounded.Search)
             }
         } else if (grid) {
             LazyVerticalGrid(
@@ -338,7 +345,13 @@ private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> U
                 Modifier.fillMaxWidth().height(64.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("📦", style = MaterialTheme.typography.headlineMedium)
+                // v1.0.17：📦 emoji → Inventory2 圆角矢量
+                Icon(
+                    Icons.Rounded.Inventory2,
+                    contentDescription = null,
+                    tint = AmberPrimary,
+                    modifier = Modifier.size(32.dp)
+                )
             }
             Text(
                 item.name,
@@ -367,7 +380,14 @@ private fun ViewModeToggle(grid: Boolean, onToggle: () -> Unit) {
             onClick = onToggle,
             modifier = Modifier.padding(horizontal = 8.dp)
         ) {
-            Text(if (grid) "☰ 列表模式" else "⊞ 网格模式", style = MaterialTheme.typography.labelMedium)
+            // v1.0.17：☰/⊞ 字形 → ViewList / GridView 圆角矢量
+            Icon(
+                if (grid) Icons.Rounded.ViewList else Icons.Rounded.GridView,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(if (grid) "列表模式" else "网格模式", style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -395,7 +415,13 @@ private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () ->
                 if (!item.description.isNullOrBlank()) {
                     // v1.0.3：故事卡展示 —— 带书签图标，读起来像一句纪念
                     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("📖", style = MaterialTheme.typography.labelSmall)
+                        // v1.0.17：📖 emoji → MenuBook 圆角矢量
+                        Icon(
+                            Icons.Rounded.MenuBook,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Text(
                             item.description!!,
                             style = MaterialTheme.typography.bodySmall,
@@ -459,13 +485,14 @@ private fun CollectionsPane(
             if (collections.isEmpty()) {
                 EmptyState(
                     emoji = "📚",
+                    icon = Icons.Rounded.LocalLibrary,
                     title = "收藏夹空着呢",
                     message = "值得回看的东西都往这儿放：一篇好文章、一段聊天记录、一张截图，还能附上原文件。",
                     actionLabel = "添加第一条收藏",
                     onAction = onAddCollection
                 )
             } else {
-                EmptyHint("没有匹配的收藏", emoji = "🔍")
+                EmptyHint("没有匹配的收藏", icon = Icons.Rounded.Search)
             }
         } else if (grid) {
             LazyVerticalGrid(

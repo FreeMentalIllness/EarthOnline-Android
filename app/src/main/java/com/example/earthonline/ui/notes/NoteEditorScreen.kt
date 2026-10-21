@@ -529,15 +529,21 @@ private fun EditorFormatBar(
 ) {
     // v1.0.15：键盘贴合 —— 取消纯色填充（改用毛玻璃语言），imePadding() 让工具栏紧贴输入法上沿，
     // 无突兀色块、无巨大间隙；顶部圆角成面板感，底部圆角融入屏底
+    // v1.0.17：键盘贴合根因修复 —— imePadding() 此前误挂在内部 Row 上，导致键盘弹出时
+    // 玻璃面板被「内容 + ime padding」整体撑高：图标留在面板顶部，下方拖出一大块空玻璃
+    // （用户截图红圈处）。现改挂到 GlassSurface 本体：整个面板浮在键盘上沿，图标紧贴键盘。
+    // navigationBarsPadding 兜底键盘收起时的手势条避让（ime 展开时其 inset 已被 imePadding 消费，不叠加）。
     GlassSurface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding(),
         shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
         showBorder = true
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .imePadding()
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),

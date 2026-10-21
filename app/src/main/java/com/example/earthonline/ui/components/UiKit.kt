@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -45,11 +47,14 @@ object UiDimens {
     val OverviewCardHeight: Dp = 104.dp
 }
 
-/** 分区标题：emoji + 标题 + 右侧可选操作，全页统一 */
+/** 分区标题：emoji/矢量图标 + 标题 + 右侧可选操作，全页统一。
+ *  v1.0.17：新增 [icon] 参数 —— 传入矢量图标时优先渲染 Icons.Rounded 圆角矢量，
+ *  不再依赖 emoji 字符（全局图标现代化）。 */
 @Composable
 fun SectionHeader(
     text: String,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
     Row(
@@ -57,6 +62,14 @@ fun SectionHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = AmberPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
         Text(
             text,
             style = MaterialTheme.typography.titleMedium,
@@ -72,7 +85,8 @@ fun SectionHeader(
 fun EmptyHint(
     text: String,
     modifier: Modifier = Modifier,
-    emoji: String = "✧"
+    emoji: String = "✧",
+    icon: ImageVector? = null
 ) {
     Box(
         modifier = modifier
@@ -80,11 +94,30 @@ fun EmptyHint(
             .padding(vertical = 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            "$emoji $text",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            if (icon != null) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    "$emoji $text",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -105,6 +138,7 @@ fun EmptyState(
     title: String,
     message: String,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
@@ -115,7 +149,7 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 插画位：圆形柔底 + 大 emoji，比裸 emoji 更像一张「图」
+        // 插画位：圆形柔底 + 大图标（v1.0.17 起优先矢量 Icons.Rounded，emoji 仅作回退）
         Box(
             modifier = Modifier
                 .size(88.dp)
@@ -123,7 +157,16 @@ fun EmptyState(
                 .background(AmberPrimary.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(emoji, style = MaterialTheme.typography.displayMedium)
+            if (icon != null) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = AmberPrimary,
+                    modifier = Modifier.size(40.dp)
+                )
+            } else {
+                Text(emoji, style = MaterialTheme.typography.displayMedium)
+            }
         }
         Text(
             title,

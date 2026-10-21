@@ -30,8 +30,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Backpack
+import androidx.compose.material.icons.rounded.BarChart
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -47,6 +66,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -83,7 +103,8 @@ import com.example.earthonline.ui.theme.OnAmber
  *  [id] 与 HomeViewModel.DEFAULT_QUICK_ENTRIES 对应，供「自定义速览入口」按 DataStore 开关显隐。 */
 private data class HomeEntry(
     val id: String,
-    val icon: String,
+    /** v1.0.17：emoji → Icons.Rounded 圆角矢量（全局图标现代化） */
+    val icon: ImageVector,
     val label: String,
     val sub: String,
     /** route 为空表示「记账」：不走页面导航，改为弹出下载渠道弹窗 */
@@ -451,7 +472,7 @@ private fun HomeSearchBox(
     GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(UiDimens.CardPad)) {
                     if (results.isEmpty()) {
-                        EmptyHint("没有匹配「$query」的内容", emoji = "🔍")
+                        EmptyHint("没有匹配「$query」的内容", icon = Icons.Rounded.Search)
                     } else {
                         Text(
                             "找到 ${results.size} 条",
@@ -513,7 +534,13 @@ private fun HomeTitleBar(actions: MoreMenuActions, greeting: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("🌍", style = MaterialTheme.typography.titleLarge)
+        // v1.0.17：Logo 由 🌍 emoji 换为圆角矢量地球（Public），色贴主题琥珀
+        Icon(
+            Icons.Rounded.Public,
+            contentDescription = null,
+            tint = AmberPrimary,
+            modifier = Modifier.size(26.dp)
+        )
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("地球Online", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -708,15 +735,15 @@ private fun OverviewGrid(
     onEditEntries: () -> Unit = {}
 ) {
     val allEntries = listOf(
-        HomeEntry("tasks", "📋", "任务", "完成率 ${state.doneRatio}%", "tasks"),
-        HomeEntry("backpack", "🎒", "背包", "${state.itemCount} 件物品", "backpack"),
-        HomeEntry("notes", "📝", "笔记", "${state.noteCount} 篇笔记", "notes"),
-        HomeEntry("album", "🖼️", "相册", "${state.albumCount} 张照片", "album"),
-        HomeEntry("map", "🗺️", "地图", "${state.locationCount} 处足迹", "map"),
-        HomeEntry("accounting", "📊", "记账", "账本与导出", null),
-        HomeEntry("data", "📈", "数据", "统计看板", "data"),
-        HomeEntry("achievements", "🏆", "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
-        HomeEntry("ai", "🤖", "系统", "AI 助手", "ai")
+        HomeEntry("tasks", Icons.Rounded.Checklist, "任务", "完成率 ${state.doneRatio}%", "tasks"),
+        HomeEntry("backpack", Icons.Rounded.Backpack, "背包", "${state.itemCount} 件物品", "backpack"),
+        HomeEntry("notes", Icons.Rounded.EditNote, "笔记", "${state.noteCount} 篇笔记", "notes"),
+        HomeEntry("album", Icons.Rounded.PhotoLibrary, "相册", "${state.albumCount} 张照片", "album"),
+        HomeEntry("map", Icons.Rounded.Map, "地图", "${state.locationCount} 处足迹", "map"),
+        HomeEntry("accounting", Icons.Rounded.BarChart, "记账", "账本与导出", null),
+        HomeEntry("data", Icons.Rounded.QueryStats, "数据", "统计看板", "data"),
+        HomeEntry("achievements", Icons.Rounded.EmojiEvents, "成就", "${state.unlockedAch}/${state.totalAch}", "achievements"),
+        HomeEntry("ai", Icons.Rounded.SmartToy, "系统", "AI 助手", "ai")
     )
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
@@ -742,7 +769,7 @@ private fun OverviewGrid(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             // weight 让标题占据剩余宽度：大字号下标题换行也不会把右侧按钮挤出屏幕
-            SectionHeader("🧭 速览", Modifier.weight(1f))
+            SectionHeader("速览", Modifier.weight(1f), icon = Icons.Rounded.Explore)
             // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
             TextButton(
                 onClick = { expanded = !expanded },
@@ -827,15 +854,15 @@ private fun OverviewGrid(
 private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) -> Unit) {
     // 与 OverviewGrid 的 allEntries 保持同一份清单（含隐藏项，才能重新勾回来）
     val quickAll = listOf(
-        Triple("tasks", "📋", "任务"),
-        Triple("backpack", "🎒", "背包"),
-        Triple("notes", "📝", "笔记"),
-        Triple("album", "🖼️", "相册"),
-        Triple("map", "🗺️", "地图"),
-        Triple("accounting", "📊", "记账"),
-        Triple("data", "📈", "数据"),
-        Triple("achievements", "🏆", "成就"),
-        Triple("ai", "🤖", "系统")
+        Triple("tasks", Icons.Rounded.Checklist, "任务"),
+        Triple("backpack", Icons.Rounded.Backpack, "背包"),
+        Triple("notes", Icons.Rounded.EditNote, "笔记"),
+        Triple("album", Icons.Rounded.PhotoLibrary, "相册"),
+        Triple("map", Icons.Rounded.Map, "地图"),
+        Triple("accounting", Icons.Rounded.BarChart, "记账"),
+        Triple("data", Icons.Rounded.QueryStats, "数据"),
+        Triple("achievements", Icons.Rounded.EmojiEvents, "成就"),
+        Triple("ai", Icons.Rounded.SmartToy, "系统")
     )
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
@@ -857,7 +884,13 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
                     checked = id in enabled,
                     onCheckedChange = { onToggle(id, it) }
                 )
-                Text("$icon $label", style = MaterialTheme.typography.bodyMedium)
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = AmberPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(label, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -870,7 +903,7 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
  * 现在：同一套玻璃底 + 同一套色散高光描边 + 同一 16dp 圆角，只保留触点聚光灯与按压缩放。
  */
 @Composable
-private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun WaffleTile(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var spot by remember { mutableStateOf<Offset?>(null) }
     val shape = RoundedCornerShape(UiDimens.CardRadius)
     GlassSurface(
@@ -917,7 +950,13 @@ private fun WaffleTile(icon: String, label: String, modifier: Modifier = Modifie
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(icon, style = MaterialTheme.typography.headlineSmall)
+            // v1.0.17：emoji → 圆角矢量图标，琥珀色贴暖色治愈系主题
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = AmberPrimary,
+                modifier = Modifier.size(30.dp)
+            )
             Spacer(Modifier.height(6.dp))
             Text(
                 label,
@@ -1008,7 +1047,7 @@ private fun ActsCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // weight 占满剩余宽度：大字号下标题换行也不会把右侧入口挤出屏幕
-                SectionHeader("⚡ 最近动态", Modifier.weight(1f))
+                SectionHeader("最近动态", Modifier.weight(1f), icon = Icons.Rounded.Bolt)
                 // 可见性修复（第二轮）：纯图标 32dp 方块在琥珀底上仍不够醒目，
                 // 改为「图标 + 文字」实心按钮，前景用 OnAmber（深棕），
                 // 浅深主题对琥珀底都有 ≥4.5:1 对比度，且文字入口更易发现、易点中。
@@ -1061,12 +1100,20 @@ private fun ActsCard(
                 )
             } else {
                 shown.forEach { act ->
-                    val (icon, verb) = when (act.kind) {
-                        "ach" -> "🏆" to "解锁成就"
-                        "task" -> "📋" to "完成任务"
-                        "item" -> "🎒" to "获得物品"
-                        "custom" -> "⭐" to "自定义事件"
-                        else -> "💭" to "记录"
+                    // v1.0.17：动态种类图标 emoji → 圆角矢量
+                    val actIcon = when (act.kind) {
+                        "ach" -> Icons.Rounded.EmojiEvents
+                        "task" -> Icons.Rounded.Checklist
+                        "item" -> Icons.Rounded.Backpack
+                        "custom" -> Icons.Rounded.Star
+                        else -> Icons.Rounded.ChatBubbleOutline
+                    }
+                    val verb = when (act.kind) {
+                        "ach" -> "解锁成就"
+                        "task" -> "完成任务"
+                        "item" -> "获得物品"
+                        "custom" -> "自定义事件"
+                        else -> "记录"
                     }
                     Row(
                         Modifier.fillMaxWidth(),
@@ -1075,7 +1122,12 @@ private fun ActsCard(
                     ) {
                         Text(act.time.take(10), style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(icon)
+                        Icon(
+                            actIcon,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Text(
                             "$verb「${act.title}」",
                             style = MaterialTheme.typography.bodyMedium,
@@ -1188,7 +1240,7 @@ private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -
     var title by remember { mutableStateOf("") }
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("⭐ 添加自定义动态") },
+        title = { Text("添加自定义动态") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -1233,7 +1285,14 @@ private fun ThrowbackCard(
                     shape = CircleShape,
                     modifier = Modifier.size(26.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) { Text("🕰", style = MaterialTheme.typography.labelMedium) }
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.History,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
                 Text("历年今日", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
@@ -1250,9 +1309,15 @@ private fun ThrowbackCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        when (entry.kind) { "task" -> "📋"; "loc" -> "🗺️"; else -> "💭" },
-                        style = MaterialTheme.typography.bodySmall
+                    Icon(
+                        when (entry.kind) {
+                            "task" -> Icons.Rounded.Checklist
+                            "loc" -> Icons.Rounded.Map
+                            else -> Icons.Rounded.ChatBubbleOutline
+                        },
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
                         entry.title,
@@ -1287,7 +1352,14 @@ private fun DailyDrawCard(item: ThrowbackItem) {
                     shape = CircleShape,
                     modifier = Modifier.size(26.dp)
                 ) {
-                    Box(contentAlignment = Alignment.Center) { Text("🎴", style = MaterialTheme.typography.labelMedium) }
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
                 Text("今日一签", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Text(
@@ -1340,7 +1412,14 @@ private fun TimelineCard(
                         shape = CircleShape,
                         modifier = Modifier.size(26.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Text("🕰", style = MaterialTheme.typography.labelMedium) }
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Rounded.History,
+                                contentDescription = null,
+                                tint = AmberPrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                     Text("人生时间轴", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     // v1.0.3：生长阶段徽标（≥3 天出现，随天数升级）
@@ -1374,8 +1453,16 @@ private fun TimelineCard(
                         )
                         Text(item.day, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            when (item.kind) { "ach" -> "🏆"; "loc" -> "🗺️"; "custom" -> "⭐"; else -> "📋" }
+                        Icon(
+                            when (item.kind) {
+                                "ach" -> Icons.Rounded.EmojiEvents
+                                "loc" -> Icons.Rounded.Map
+                                "custom" -> Icons.Rounded.Star
+                                else -> Icons.Rounded.Checklist
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
                         )
                         Text(
                             item.title,
@@ -1409,7 +1496,7 @@ private fun AddTimelineDialog(
     var showDate by remember { mutableStateOf(false) }
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🕰 添加里程碑") },
+        title = { Text("添加里程碑") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(title, { title = it.take(40) }, label = { Text("标题") },
@@ -1493,10 +1580,11 @@ private fun timelineColor(kind: String) = when (kind) {
 }
 
 private val MEMO_TYPES = listOf(
-    Triple("note", "💭", "随笔"),
-    Triple("idea", "⭐", "灵感"),
-    Triple("important", "📌", "重要"),
-    Triple("mood", "🎭", "心情")
+    // v1.0.17：类别图标 emoji → 圆角矢量（随笔/灵感/重要/心情）
+    Triple("note", Icons.Rounded.ChatBubbleOutline, "随笔"),
+    Triple("idea", Icons.Rounded.Lightbulb, "灵感"),
+    Triple("important", Icons.Rounded.PushPin, "重要"),
+    Triple("mood", Icons.Rounded.Mood, "心情")
 )
 
 @Composable
@@ -1507,11 +1595,14 @@ private fun MemoTypeRow(selected: String, onSelect: (String) -> Unit) {
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        MEMO_TYPES.forEach { (value, emoji, label) ->
+        MEMO_TYPES.forEach { (value, icon, label) ->
             FilterChip(
                 selected = selected == value,
                 onClick = { onSelect(value) },
-                label = { Text("$emoji $label", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) }
+                leadingIcon = {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                },
+                label = { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false) }
             )
         }
     }
@@ -1520,11 +1611,12 @@ private fun MemoTypeRow(selected: String, onSelect: (String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MemoRow(text: String, type: String, time: String, onDelete: () -> Unit) {
+    // v1.0.17：备忘行首图标 emoji → 圆角矢量
     val dot = when (type) {
-        "important" -> "📌"
-        "idea" -> "⭐"
-        "mood" -> "🎭"
-        else -> "💭"
+        "important" -> Icons.Rounded.PushPin
+        "idea" -> Icons.Rounded.Lightbulb
+        "mood" -> Icons.Rounded.Mood
+        else -> Icons.Rounded.ChatBubbleOutline
     }
     // v1.0.3：右滑删除（M3 SwipeToDismissBox，松手后未过阈值自动回弹）
     val dismissState = rememberSwipeToDismissBoxState(
@@ -1563,7 +1655,7 @@ private fun MemoRow(text: String, type: String, time: String, onDelete: () -> Un
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(dot, style = MaterialTheme.typography.bodySmall)
+            Icon(dot, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(14.dp))
             Text(
                 time,
                 style = MaterialTheme.typography.labelSmall,

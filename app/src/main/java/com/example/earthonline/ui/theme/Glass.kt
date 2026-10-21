@@ -107,7 +107,8 @@ fun GlassSurface(
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
     val (tintTop, tintBottom) = when {
         tier == GlassTier.FLAT -> 0.94f to 0.94f
-        else -> 0.74f to 0.62f
+        // v1.0.17：底部着色下限 0.62→0.66 —— 用户反馈可读性优先，Alpha 收敛进 60%~80% 区间上沿
+        else -> 0.74f to 0.66f
     }
     val tintBrush = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -176,7 +177,8 @@ fun GlassSurface(
         //      把有效不透明度抬到 ~0.82，任意壁纸下正文对比度都在 WCAG AA 以上；
         //      同时仍保留壁纸的色相与模糊层次，不会退化成死灰面板。
         //    - FLAT 档（低端机 / 性能降级）：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
-        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.24f
+        // v1.0.17：同色系可读性遮罩 0.24→0.28 —— 任何壁纸下正文都保持稳定对比度
+        val scrimAlpha = if (tier == GlassTier.FLAT) 0f else 0.28f
         if (scrimAlpha > 0f) {
             Box(
                 Modifier

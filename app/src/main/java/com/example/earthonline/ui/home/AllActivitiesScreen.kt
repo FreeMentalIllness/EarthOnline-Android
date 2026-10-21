@@ -6,7 +6,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Backpack
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
@@ -149,19 +155,27 @@ fun AllActivitiesRoute(
             }
 
             if (filtered.isEmpty()) {
-                EmptyHint("暂无动态，点右上角 + 添加一条自定义动态吧", emoji = "⚡")
+                EmptyHint("暂无动态，点右上角 + 添加一条自定义动态吧", icon = Icons.Rounded.Bolt)
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     items(filtered, key = { it.id }, contentType = { "actRow" }) { act ->
-                        val (icon, verb) = when (act.kind) {
-                            "ach" -> "🏆" to "解锁成就"
-                            "task" -> "📋" to "完成任务"
-                            "item" -> "🎒" to "获得物品"
-                            "custom" -> "⭐" to "自定义事件"
-                            else -> "💭" to "记录"
+                        // v1.0.17：动态种类图标 emoji → 圆角矢量
+                        val actIcon = when (act.kind) {
+                            "ach" -> Icons.Rounded.EmojiEvents
+                            "task" -> Icons.Rounded.Checklist
+                            "item" -> Icons.Rounded.Backpack
+                            "custom" -> Icons.Rounded.Star
+                            else -> Icons.Rounded.ChatBubbleOutline
+                        }
+                        val verb = when (act.kind) {
+                            "ach" -> "解锁成就"
+                            "task" -> "完成任务"
+                            "item" -> "获得物品"
+                            "custom" -> "自定义事件"
+                            else -> "记录"
                         }
                         Card(Modifier.fillMaxWidth().animateItem()) {
                             Row(
@@ -175,7 +189,12 @@ fun AllActivitiesRoute(
                                     Text(act.time.drop(11).take(5), style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Text(icon)
+                                Icon(
+                                    actIcon,
+                                    contentDescription = null,
+                                    tint = AmberPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                                 Column(Modifier.weight(1f)) {
                                     Text(
                                         act.title.ifBlank { "(未命名动态)" },
@@ -220,7 +239,7 @@ private fun AddActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
     var title by remember { mutableStateOf("") }
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("⭐ 添加自定义动态") },
+        title = { Text("添加自定义动态") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

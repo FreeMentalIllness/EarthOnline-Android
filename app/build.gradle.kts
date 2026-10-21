@@ -38,8 +38,9 @@ android {
         // versionCode 28 = v1.0.11：笔记 WYSIWYG 重写（richeditor 富文本，去 Markdown 源码暴露）+ 取消默认分类 + 底栏图标重绘（完整背包/倾斜钢笔）+ 底部横杠修复 + 壁纸模糊度滑块 + 设置首页重组/危险区 + 全局 Header 透明与搜索栏胶囊化。
         // versionCode 31 = v1.0.14：顶部状态栏硬遮挡（基础背景色实心填充/不透壁纸）+ 主页避让状态栏 + 笔记撤销重做点击必生效 + 加粗等样式焦点回editor/激活态高亮 + 工具栏紧贴键盘（safeDrawing 消双重 inset）。
         // versionCode 33 = v1.0.16：全局图标现代化升级（笔记工具栏与各页操作图标统一改用圆角风格 Icons.Rounded.*，设置页与底部导航自绘图标不变）。
-        versionCode = 33
-        versionName = "1.0.16"
+        // versionCode 34 = v1.0.17：主页 Logo/速览入口/最近动态/人生时间轴/任务页/背包页 Emoji 全面换装圆角矢量 + 笔记工具栏键盘贴合根因修复（imePadding 挂错层级）+ 玻璃卡片可读性强化（scrim 0.28/着色下限 0.66）。
+        versionCode = 34
+        versionName = "1.0.17"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
