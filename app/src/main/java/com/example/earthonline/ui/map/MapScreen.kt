@@ -207,7 +207,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("足迹地图") },
                 actions = {
                     // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）

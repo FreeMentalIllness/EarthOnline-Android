@@ -49,13 +49,15 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.util.rememberImagePicker
 import com.mohamedrejeb.richeditor.model.RichTextState
 import com.mohamedrejeb.richeditor.model.rememberRichTextState
 import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -109,8 +111,10 @@ fun NoteEditorScreen(
 
     /* ---------- 撤销 / 重做：自建快照栈（richeditor 本版无内置 undo） ---------- */
     val history = remember { mutableStateListOf<String>() }
-    var histIndex by remember { mutableIntStateOf(-1) }
-    var applyingHistory by remember { mutableStateOf(false) }
+    var histIndex by remember { mutableIntStateOf(0) }
+    // v1.0.15：程序化 setHtml（撤销/重做）的时间戳；收集期内命中则跳过记录，
+    // 避免把「撤销/重做」本身当成新快照污染栈（旧实现会让重做越界失效的根因）
+    var lastProgSet by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(id) {
         if (id.isNotBlank()) {
@@ -123,56 +127,55 @@ fun NoteEditorScreen(
             }
         }
         loaded = true
+        lastProgSet = System.currentTimeMillis()
         history.clear()
         history.add(rich.toHtml())
         histIndex = 0
     }
 
-    // 输入停顿 400ms 记一次快照；主动 undo/redo 期间不记录
+    // 输入停顿 250ms 记一次快照；程序化 setHtml 的 500ms 内不记录
     LaunchedEffect(Unit) {
-        snapshotFlow { rich.toHtml() }.collectLatest { html ->
-            if (applyingHistory) return@collectLatest
-            delay(200)
-            if (history.getOrNull(histIndex) != html) {
-                while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
+        snapshotFlow { rich.toHtml() }.debounce(250).collect { html ->
+            if (!loaded) return@collect
+            if (System.currentTimeMillis() - lastProgSet < 500) return@collect
+            while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
+            if (history.last() != html) {
                 history.add(html)
-                if (history.size > 80) history.removeAt(0)
+                if (history.size > 100) history.removeAt(0)
                 histIndex = history.lastIndex
             }
         }
     }
 
-    fun applyHistory(target: Int) {
-        if (target < 0 || target > history.lastIndex) return
-        applyingHistory = true
-        histIndex = target
-        runCatching { rich.setHtml(history[target]) }
-        applyingHistory = false
-    }
-
-    /* v1.0.14：撤销/重做修复（死命令）。
-       旧实现只靠 snapshotFlow 防抖记录 —— 若快照尚未落栈（连续输入后立即点按），
-       histIndex 恒为 0，撤销按钮永远「点了没反应」。
-       现在点击瞬间先把当前状态压栈、再回退/前进一步，
-       无论防抖是否落栈，撤销/重做都必然生效。 */
+    /* v1.0.15：撤销/重做（死命令）。
+       点击瞬间先把「当前（可能尚未落栈的）状态」压栈，再回退/前进一步 ——
+       无论防抖是否落栈，任意时点点击都必然生效；truncate 保证 redo 分支正确。 */
     fun snapshotCurrent() {
         val cur = runCatching { rich.toHtml() }.getOrDefault("")
+        while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
         if (history.getOrNull(histIndex) != cur) {
-            while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
             history.add(cur)
-            if (history.size > 80) history.removeAt(0)
+            if (history.size > 100) history.removeAt(0)
             histIndex = history.lastIndex
         }
     }
 
     fun undo() {
         snapshotCurrent()
-        if (histIndex > 0) applyHistory(histIndex - 1)
+        if (histIndex > 0) {
+            histIndex--
+            lastProgSet = System.currentTimeMillis()
+            runCatching { rich.setHtml(history[histIndex]) }
+        }
     }
 
     fun redo() {
         snapshotCurrent()
-        if (histIndex < history.lastIndex) applyHistory(histIndex + 1)
+        if (histIndex < history.lastIndex) {
+            histIndex++
+            lastProgSet = System.currentTimeMillis()
+            runCatching { rich.setHtml(history[histIndex]) }
+        }
     }
 
     /** v1.0.14：加粗/斜体/下划线/标题统一切换 —— 切换后立刻把焦点还给编辑器 */
@@ -263,7 +266,7 @@ fun NoteEditorScreen(
         contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text(if (id.isBlank()) "新建笔记" else "编辑笔记") },
                 navigationIcon = {
                     IconButton(onClick = { save() }) {
@@ -524,17 +527,17 @@ private fun EditorFormatBar(
     onFile: () -> Unit,
     onFontSize: () -> Unit
 ) {
-    Surface(
+    // v1.0.15：键盘贴合 —— 取消纯色填充（改用毛玻璃语言），imePadding() 让工具栏紧贴输入法上沿，
+    // 无突兀色块、无巨大间隙；顶部圆角成面板感，底部圆角融入屏底
+    GlassSurface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 3.dp
+        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        showBorder = true
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                // v1.0.14：键盘间隙根治 —— safeDrawing 底部 = max(键盘, 导航栏)：
-                // 键盘弹出时工具栏贴键盘上沿，收起时避让手势条，不再双重叠加留出空白
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .imePadding()
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),

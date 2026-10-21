@@ -169,10 +169,19 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(UiDimens.Gap)
     ) {
         item(key = "titlebar", contentType = "titlebar") {
-            HomeTitleBar(
-                actions = moreActions,
-                greeting = state.greeting
-            )
+            // v1.0.15：顶部硬色块 —— 标题栏区域用主题背景色实心填充，与状态栏（MainScaffold 已填充）同色，
+            // 视觉上合成一个不透明块，壁纸绝不透出「地球Online」标题区
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = UiDimens.ScreenPad, vertical = 4.dp)
+            ) {
+                HomeTitleBar(
+                    actions = moreActions,
+                    greeting = state.greeting
+                )
+            }
         }
 
         item(key = "search", contentType = "search") {

@@ -73,7 +73,7 @@ fun NotesScreen(
             TopAppBar(
                 title = { Text("笔记") },
                 // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
                     IconButton(onClick = {
                         searchOpen = !searchOpen

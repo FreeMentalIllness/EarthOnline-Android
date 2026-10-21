@@ -61,7 +61,7 @@ fun RecycleBinRoute(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("回收站") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

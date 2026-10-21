@@ -241,12 +241,6 @@ fun MainScaffold(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp)
-                        .shadow(
-                            elevation = 16.dp,
-                            shape = RoundedCornerShape(28.dp),
-                            ambientColor = Color.Black,
-                            spotColor = Color.Black
-                        )
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),

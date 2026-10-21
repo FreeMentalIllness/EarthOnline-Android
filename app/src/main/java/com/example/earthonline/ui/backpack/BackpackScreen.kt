@@ -112,7 +112,7 @@ fun BackpackScreen(
             TopAppBar(
                 title = { Text("背包") },
                 // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
                     // v1.2.3：分类管理入口移到右上角，与筛选条解耦，避免「筛选」与「管理」入口重叠
                     IconButton(onClick = { showCategoryManager = true }) {

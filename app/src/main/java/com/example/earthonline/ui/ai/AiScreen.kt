@@ -53,7 +53,7 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("系统") },
                 actions = {
                     IconButton(onClick = { showConfig = true }) {

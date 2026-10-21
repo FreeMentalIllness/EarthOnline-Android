@@ -106,7 +106,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("📷 记忆相册") },
                 actions = {
                     // v1.0.7：全览网格 / 3D 翻页 视图切换

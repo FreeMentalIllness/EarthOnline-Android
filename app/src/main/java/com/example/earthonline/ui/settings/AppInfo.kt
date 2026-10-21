@@ -20,7 +20,7 @@ object AppInfo {
      * （对应下面的 0.9.x 条目）。改版本号时**两端 + build.gradle 三处一起改**，
      * 否则用户导出备份再导入时会对不上「这到底是哪一版」。
      */
-    const val version = "1.0.14"
+    const val version = "1.0.15"
     const val buildDate = "2026-10-21"
     const val license = "MIT"
 
@@ -72,6 +72,14 @@ object AppInfo {
      * 这样「正式版从 1.0.0 开始」这条线是连续的，历史又不丢。
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
+        Triple(
+            "1.0.15", "2026-10-21", listOf(
+                "全局顶部硬色块遮挡（强制修复）：主页标题栏与所有页面 TopAppBar 改用主题基础背景色实心填充，与状态栏（MainScaffold 已填充）同色合成一个不透明块，壁纸绝不透出标题区",
+                "笔记富文本撤销/重做根因修复：用「时间戳跳过」隔离程序化 setHtml，避免把撤销/重做本身当新快照污染栈，重做不再越界失效；点击瞬间先落栈再回退，任意时点必生效",
+                "笔记工具栏与键盘贴合：取消纯色 Surface 填充与 safeDrawing 双重 inset，改用毛玻璃 GlassSurface + imePadding()，工具栏紧贴输入法上沿、无突兀色块、无巨大间隙",
+                "主页底部导航黑色方形阴影修复：移除 GlassSurface 的 16dp 纯黑 elevation 阴影，仅保留边缘高光/描边，不再有生硬黑色投影"
+            )
+        ),
         Triple(
             "1.0.14", "2026-10-21", listOf(
                 "顶部状态栏改为硬遮挡：状态栏区域（时间/电量处）用应用基础背景色实心填充，不再透出壁纸，标题与列表从色块下方开始、不被通知栏遮挡",

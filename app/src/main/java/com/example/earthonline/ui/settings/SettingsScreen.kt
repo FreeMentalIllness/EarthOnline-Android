@@ -65,7 +65,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("设置") },
                 actions = { SettingsIconButton(actions = moreActions, visible = false) }
             )
