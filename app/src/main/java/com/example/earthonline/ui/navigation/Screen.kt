@@ -37,6 +37,9 @@ sealed class Screen(val route: String, val label: String) {
     /** v1.0.5：回收站（任务/灵感/物品/收藏软删行，30 天保留）。从「通用」设置进入。 */
     object RecycleBin : Screen("recycle_bin", "回收站")
 
+    /** v1.0.6.6：Steam 游戏数据独立页（背包「收藏 → 我的游戏库」入口进入）。 */
+    object SteamLibrary : Screen("steam_library", "我的游戏库")
+
     /**
      * 「收藏」与「背包」复用同一个界面（背包页的收藏 Tab），但必须是**独立路由**：
      * 若用同一路由加查询参数（backpack?tab=1），两者会共享 destination id 与 SavedState，

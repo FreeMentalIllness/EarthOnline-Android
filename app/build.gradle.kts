@@ -71,7 +71,12 @@ android {
         // 诚实空状态与 AI 未配置引导；③ 游戏化：GamificationEngine 统一 XP→等级换算、**废弃连击机制**、
         // 等级进度条平滑增长 + 飘出 +XP 微动效、背包收藏页新增 Steam 游戏数据模块；
         // ④ AI 闭环：n_ctx 收敛 512 防 OOM、800MB 解压改前台服务（通知栏进度 + 进程保活）。
-        versionCode = 54
+        // versionCode 55 = v1.0.6（真机反馈修复批）：外观默认值收敛(壁纸100/模糊0/卡片100)+
+        // 修复外观设置保存不生效；全站二级窗口由底部抽屉改为居中固定 GlassDialog；
+        // AI 页只留一个导入入口 + 模型加载失败红字明示(架构/内存/文件损坏)+MNN 加载链路修复；
+        // 撤销列表滚动模糊降级(液态玻璃常驻)；取消默认 Emoji 头像改矢量占位；
+        // 主页新增轻量日历卡；任务备注工具栏去 B/I/U；Steam 游戏库独立二级页；笔记待办打勾不吞字
+        versionCode = 55
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

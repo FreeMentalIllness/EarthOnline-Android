@@ -45,6 +45,7 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.MarkerOptions
 import com.example.earthonline.data.local.entity.LocationEntity
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.GlassDialog
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -416,9 +417,13 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     // v1.0.7：路径点记录页 —— 独立的足迹列表（本地搜索筛选，不依赖高德 Key）
     // v1.0.6.4：点击某条足迹 → 关闭列表并回地图居中 + 信息气泡
     if (showList) {
-        ModalBottomSheet(onDismissRequest = { showList = false }) {
+        GlassDialog(
+            onDismissRequest = { showList = false },
+            // 内含 LazyColumn：关闭外层滚动，列表自行限高，避免同方向嵌套滚动崩溃
+            scrollable = false
+        ) {
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
@@ -438,23 +443,29 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LocationList(
-                    filteredLocations,
-                    vm::deleteLocation,
-                    onLocate = { loc ->
-                        showList = false
-                        focusLoc = loc
-                    }
-                )
+                Box(Modifier.height(360.dp)) {
+                    LocationList(
+                        filteredLocations,
+                        vm::deleteLocation,
+                        onLocate = { loc ->
+                            showList = false
+                            focusLoc = loc
+                        }
+                    )
+                }
             }
         }
     }
 
     // v1.0.6.5：高德 POI 地点搜索抽屉（原生 Search SDK）—— 关键字 → 候选列表 → 点击移动视野并一键添加足迹
     if (showPoi) {
-        ModalBottomSheet(onDismissRequest = { showPoi = false }) {
+        GlassDialog(
+            onDismissRequest = { showPoi = false },
+            // 内含 POI 候选 LazyColumn：关闭外层滚动避免同方向嵌套
+            scrollable = false
+        ) {
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(

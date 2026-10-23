@@ -36,8 +36,11 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
@@ -51,6 +54,7 @@ import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.filled.Mic
@@ -83,11 +87,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.data.local.entity.ActivityEntity
+import com.example.earthonline.data.local.entity.TaskEntity
 import com.example.earthonline.util.millisToDayStr
 import com.example.earthonline.util.todayStr
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.bouncyPress
 import com.example.earthonline.ui.components.ConfettiBurst
 import com.example.earthonline.ui.components.EmptyHint
+import com.example.earthonline.ui.components.GlassDialog
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
@@ -280,6 +287,15 @@ fun HomeScreen(
             )
         }
 
+        // v1.0.6.6（真机反馈 #6）：速览与最近动态之间的**轻量日历卡** ——
+        // 一眼看到这个月哪天有安排，并直接列出今天的任务 / 日程。
+        item(key = "calendar", contentType = "card") {
+            HomeCalendarCard(
+                tasks = state.calendarTasks,
+                onOpenTasks = { onNavigate("tasks") }
+            )
+        }
+
         item(key = "acts", contentType = "card") {
             ActsCard(
                 allActs = state.allActs,
@@ -378,7 +394,7 @@ fun HomeScreen(
 
         // 主页速览：自定义显示哪些入口（DataStore 持久化，至少保留一个）
         if (showQuickEdit) {
-            ModalBottomSheet(onDismissRequest = { showQuickEdit = false }) {
+            GlassDialog(onDismissRequest = { showQuickEdit = false }) {
                 QuickEntriesSheet(
                     enabled = state.quickEntries,
                     onToggle = { id, checked ->
@@ -815,6 +831,194 @@ private fun AvatarWithBadge(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(Icons.Rounded.Edit, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(12.dp))
+            }
+        }
+    }
+}
+
+/**
+ * v1.0.6.6（真机反馈 #6）：**主页轻量日历卡**。
+ *
+ * 定位：不是完整的日历页，而是「这个月哪天有安排 + 今天要做什么」的一屏速览 ——
+ *  - 上半：本月迷你月历（周一开头），有任务 / 日程的日期打琥珀圆点，今天实心高亮；
+ *  - 下半：当天任务清单（最多 3 条，超出折叠为「还有 N 项」），整卡可跳任务页；
+ *  - 没有安排时给诚实空状态，绝不伪造"今天很充实"。
+ *
+ * 数据口径：日程 = 带到期日（dueDate，YYYY-MM-DD）且未完成的任务（ViewModel 已过滤）。
+ */
+@Composable
+private fun HomeCalendarCard(
+    tasks: List<TaskEntity>,
+    onOpenTasks: () -> Unit
+) {
+    var monthOffset by remember { mutableStateOf(0) }
+    val base = remember(monthOffset) {
+        java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.MONTH, monthOffset)
+        }
+    }
+    val year = base.get(java.util.Calendar.YEAR)
+    val month = base.get(java.util.Calendar.MONTH)
+
+    /** 有安排的日期集合（YYYY-MM-DD） */
+    val busyDays = remember(tasks) {
+        tasks.mapNotNull { it.dueDate?.takeIf { d -> d.isNotBlank() } }.toSet()
+    }
+    val todayKey = remember {
+        val c = java.util.Calendar.getInstance()
+        String.format(
+            java.util.Locale.US, "%04d-%02d-%02d",
+            c.get(java.util.Calendar.YEAR),
+            c.get(java.util.Calendar.MONTH) + 1,
+            c.get(java.util.Calendar.DAY_OF_MONTH)
+        )
+    }
+    val todayList = remember(tasks, todayKey) { tasks.filter { it.dueDate == todayKey } }
+
+    val first = remember(year, month) {
+        java.util.Calendar.getInstance().apply { set(year, month, 1) }
+    }
+    val daysInMonth = base.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+    // 周一开头：Calendar.MONDAY=2 → 0
+    val firstDow = (first.get(java.util.Calendar.DAY_OF_WEEK) - java.util.Calendar.MONDAY + 7) % 7
+    val rows = (firstDow + daysInMonth + 6) / 7
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad)) {
+            SectionHeader(
+                text = "日程",
+                icon = Icons.Rounded.CalendarMonth,
+                chipColor = ModuleTints.Tasks
+            )
+            Spacer(Modifier.height(10.dp))
+
+            /* —— 月份切换行 —— */
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { monthOffset -= 1 }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Rounded.ChevronLeft, contentDescription = "上个月", modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    "${year}年 ${month + 1}月",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+                IconButton(onClick = { monthOffset += 1 }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Rounded.ChevronRight, contentDescription = "下个月", modifier = Modifier.size(18.dp))
+                }
+            }
+
+            /* —— 星期表头（周一开头） —— */
+            Row(Modifier.fillMaxWidth()) {
+                listOf("一", "二", "三", "四", "五", "六", "日").forEach { w ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            w,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+
+            /* —— 日期网格：有安排打点、今天实心高亮 —— */
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (r in 0 until rows) {
+                    Row(Modifier.fillMaxWidth()) {
+                        for (c in 0..6) {
+                            val idx = r * 7 + c - firstDow
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                if (idx in 0 until daysInMonth) {
+                                    val key = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, idx + 1)
+                                    val isToday = key == todayKey
+                                    val busy = key in busyDays
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                when {
+                                                    isToday -> AmberPrimary
+                                                    busy -> AmberPrimary.copy(alpha = 0.14f)
+                                                    else -> Color.Transparent
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "${idx + 1}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = when {
+                                                isToday -> Color.White
+                                                busy -> AmberPrimary
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            fontWeight = if (isToday || busy) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(vertical = 10.dp)
+            )
+
+            /* —— 当天安排 —— */
+            Text(
+                "今天（${todayKey.takeLast(5).replace("-", "月")}日）",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(6.dp))
+            if (todayList.isEmpty()) {
+                Text(
+                    "今天没有安排，安心过一天。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                todayList.take(3).forEach { t ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            t.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (todayList.size > 3) {
+                    Text(
+                        "还有 ${todayList.size - 3} 项…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onOpenTasks, modifier = Modifier.bouncyPress()) {
+                Text("查看全部任务")
             }
         }
     }
@@ -1270,7 +1474,7 @@ private fun ActsCard(
 
     // 自定义配置面板（BottomSheet）：启用分类 / 显示条数 / 添加自定义动态 / 全部动态入口
     if (showConfig) {
-        ModalBottomSheet(onDismissRequest = { showConfig = false }) {
+        GlassDialog(onDismissRequest = { showConfig = false }) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)

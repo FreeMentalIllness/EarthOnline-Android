@@ -56,9 +56,10 @@ val LocalWallpaperPath = compositionLocalOf<String?> { null }
  * v1.0.19：取值放宽为 0.0 ~ 1.0 全域 ——
  *  - 1.0：卡片完全不透明（surface 纯色底，跳过壁纸模糊采样，纯色性能档）；
  *  - 0.0：卡片完全通透（仅剩高光描边轮廓）；
- *  - 默认 0.74（历史视觉基线）。
+ *  - v1.0.6.6 默认 **1.0（100%）**：真机反馈默认半透在花壁纸上正文发虚，可读性优先；
+ *    想透出壁纸色相的用户可在「设置 → 外观」下调到 70%~90%。
  */
-val LocalCardOpacity = compositionLocalOf { 0.74f }
+val LocalCardOpacity = compositionLocalOf { 1f }
 
 /** v1.0.19：卡片不透明度被视为「纯色不透明」的阈值（≥ 该值 = 100% 档） */
 const val CARD_OPAQUE_THRESHOLD = 0.995f
@@ -73,13 +74,15 @@ const val CARD_OPAQUE_THRESHOLD = 0.995f
 val LocalLiquidGlass = compositionLocalOf { true }
 
 /**
- * v1.0.6.5（死磕细节批）：列表滚动模糊降级 —— 全局模糊半径状态。
- * 列表滑动中由 [com.example.earthonline.ui.components.TrackScrollBlur] 把它临时置 0，
- * 玻璃卡据此跳过壁纸模糊采样、降级为纯半透明底色，GPU 零高斯开销，保滚动 60FPS；
- * 滑动停止自动恢复。列表外的玻璃卡（详情页、弹窗、底栏等）读到的仍是满模糊，观感不变。
+ * v1.0.6.6（真机反馈批）：**取消列表滑动降级，液态玻璃常驻**。
+ *
+ * 真机反馈：滚动时玻璃突然"消失/变灰"的跳变比掉帧更刺眼。
+ * 故撤销 v1.0.6.5 的 `TrackScrollBlur` 动态关模糊逻辑 —— 无论列表是否在滑动，
+ * [GlassSurface] 都保持满模糊半径（[GLASS_BLUR_RADIUS_DP]）的毛玻璃渲染。
+ *
+ * 性能红线：**只降半径、绝不关模糊**。若真机出现卡顿，调小 [GLASS_BLUR_RADIUS_DP]
+ * 即可（6dp → 4dp），模糊效果仍在，只是更细腻；禁止再走"置 0 关模糊"的降级路径。
  */
-val glassScrollBlurRadius = androidx.compose.runtime.mutableFloatStateOf(6f)
-
 enum class GlassTier { FULL, BLUR, FLAT }
 
 @Composable
@@ -129,14 +132,11 @@ fun GlassSurface(
     val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
-    // v1.0.6.5：滚动模糊降级 —— 滑动时 glassScrollBlurRadius 被置 0，玻璃卡跳过壁纸模糊采样，
-    // 直接走纯半透明底色（blurOff），GPU 零高斯开销，确保列表快速滚动 60FPS 跟手。
-    val scrollBlurDp = glassScrollBlurRadius.floatValue
-    val blurOff = scrollBlurDp <= 0.5f
     // v1.0.19：卡片不透明度拉满（100% 纯色档）时跳过壁纸模糊采样 ——
     // 纯色底下采样结果完全被盖住，纯属 GPU 浪费；跳过后卡片走零采样纯色渲染。
+    // v1.0.6.6：滚动不再影响本开关 —— 液态玻璃常驻，滑动中也是满模糊。
     val cardOpaque = (tintOverride ?: 0f) >= CARD_OPAQUE_THRESHOLD
-    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque && !blurOff
+    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque
 
     /* 着色层改用「上深下浅」的竖向渐变。
        - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
@@ -184,7 +184,7 @@ fun GlassSurface(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .backdrop(tier, Dp(scrollBlurDp))
+                    .backdrop(tier)
                     .background(Color.Transparent)
             ) {
                 AsyncImage(

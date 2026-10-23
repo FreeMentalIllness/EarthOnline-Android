@@ -140,6 +140,11 @@ data class HomeUiState(
     val feedLimit: Int = 3,
     /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
+    /**
+     * v1.0.6.6 主页日历卡：**带到期日的未完成任务**（日程即"有到期日的任务"）。
+     * 已在 ViewModel 里过滤好，UI 只管渲染（月历打点 + 当天清单）。
+     */
+    val calendarTasks: List<TaskEntity> = emptyList(),
     // ————— v1.0.3 情绪价值与成长 —————
     /** 动态问候语（时间段 + 最近心情 + 连续天数） */
     val greeting: String = "",
@@ -204,6 +209,8 @@ private data class Parts(
     val feedLimit: Int = 3,
     /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
+    /** v1.0.6.6：主页日历卡数据源 —— 带到期日且未完成的任务 */
+    val scheduled: List<TaskEntity> = emptyList(),
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
     val bundle: Bundle = Bundle(),
     val customTitle: String = "",
@@ -270,6 +277,13 @@ class HomeViewModel @Inject constructor(
     // 全量动态（表内环形裁剪最多 50 条），首页 take(feedLimit)，全部动态页完整展示
     private val actFlow = activityRepo.observeRecent(200)
     private val doneTaskFlow = taskRepo.observeDoneRecent(TIMELINE_LIMIT)
+    /**
+     * v1.0.6.6 主页日历卡：带到期日且**未完成**的任务（日程口径）。
+     * 复用现有 observeAll 流做内存过滤，不新增 Room 查询、不动表结构。
+     */
+    private val scheduledFlow: Flow<List<TaskEntity>> = taskRepo.observeAll().map { list ->
+        list.filter { !it.dueDate.isNullOrBlank() && it.status != "done" }
+    }
     // v1.2.0：概览「背包」卡第三行要显示收藏数
     private val collectionFlow = collectionRepo.count()
     // v1.0.6：概览「相册」卡显示照片总数（DataStore JSON 内 path 数量）
@@ -332,6 +346,7 @@ class HomeViewModel @Inject constructor(
             .combine(feedFilterFlow) { parts, kinds -> parts.copy(feedKinds = kinds) }
             .combine(feedLimitFlow) { parts, limit -> parts.copy(feedLimit = limit) }
             .combine(quickEntriesFlow) { parts, quick -> parts.copy(quickEntries = quick) }
+            .combine(scheduledFlow) { parts, sched -> parts.copy(scheduled = sched) }
             .combine(bundleFlow) { parts, bundle -> parts.copy(bundle = bundle) }
             .combine(customTitleFlow) { parts, title -> parts.copy(customTitle = title) }
             .combine(lastCelebratedFlow) { parts, lv -> parts.copy(lastCelebrated = lv) }
@@ -583,6 +598,8 @@ class HomeViewModel @Inject constructor(
             feedKinds = feedKinds,
             feedLimit = feedLimit,
             quickEntries = quickEntries,
+            // v1.0.6.6：主页轻量日历卡的数据源（带到期日的未完成任务）
+            calendarTasks = scheduled,
             // ————— v1.0.3 情绪价值与成长 —————
             greeting = Greeting.build(
                 Greeting.now(),

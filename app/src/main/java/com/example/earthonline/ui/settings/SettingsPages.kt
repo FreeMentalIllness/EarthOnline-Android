@@ -85,11 +85,28 @@ fun AppearanceRoute(
 
     val theme by vm.theme.collectAsStateWithLifecycle(initialValue = "system")
     val wallpaper by vm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
-    val wallpaperAlpha by vm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
-    // v1.0.11：壁纸模糊度滑块数据源
+    // v1.0.6.6：三档外观默认值收敛 —— 壁纸不透明度 100% / 壁纸模糊度 0 / 卡片不透明度 100%
+    val wallpaperAlpha by vm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 1f)
+    // v1.0.11：壁纸模糊度滑块数据源（默认 0 = 清晰）
     val wallpaperBlur by vm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
-    // v1.0.18：卡片背景不透明度滑块数据源
-    val cardOpacity by vm.cardOpacity.collectAsStateWithLifecycle(initialValue = 0.74f)
+    // v1.0.18：卡片背景不透明度滑块数据源（v1.0.6.6 默认 100%）
+    val cardOpacity by vm.cardOpacity.collectAsStateWithLifecycle(initialValue = 1f)
+
+    /* v1.0.6.6 修复「改完保存不了」的另一半：草稿态必须与持久化值双向同步。
+       此前 remember(wallpaper) 只在壁纸变化时重建草稿 —— 落盘值回流后草稿不跟随，
+       一旦外部（导入备份 / 其它入口）改了设置，UI 就会显示旧值，看起来像"没保存"。
+       现在：拖动中不回写（保跟手），松手/外部变更后自动对齐落盘值。 */
+    var alphaDraft by remember { mutableFloatStateOf(wallpaperAlpha) }
+    var alphaDragging by remember { mutableStateOf(false) }
+    LaunchedEffect(wallpaperAlpha) { if (!alphaDragging) alphaDraft = wallpaperAlpha }
+
+    var blurDraft by remember { mutableFloatStateOf(wallpaperBlur) }
+    var blurDragging by remember { mutableStateOf(false) }
+    LaunchedEffect(wallpaperBlur) { if (!blurDragging) blurDraft = wallpaperBlur }
+
+    var cardOpacityDraft by remember { mutableFloatStateOf(cardOpacity) }
+    var cardDragging by remember { mutableStateOf(false) }
+    LaunchedEffect(cardOpacity) { if (!cardDragging) cardOpacityDraft = cardOpacity }
     // v1.0.4：字号档位设置已移除 —— 应用内不再额外缩放文字，直接跟随系统字体大小，
     // 由系统无障碍设置统一控制（对应需求「删除字号大小设置，自动适配」）。
     // v1.0.3：壁纸从记忆相册随机轮换
@@ -156,7 +173,6 @@ fun AppearanceRoute(
                     }
                     if (wallpaper.isNotBlank()) {
                         // v1.0.19：壁纸不透明度全域 0~100% —— 0% 壁纸完全隐藏（显示纯背景色），100% 完全透出
-                        var alphaDraft by remember(wallpaper) { mutableFloatStateOf(wallpaperAlpha) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("壁纸不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                             Text(
@@ -169,12 +185,13 @@ fun AppearanceRoute(
                             value = alphaDraft,
                             onValueChange = {
                                 alphaDraft = it
+                                alphaDragging = true
                                 vm.setWallpaperAlpha(it)
                             },
+                            onValueChangeFinished = { alphaDragging = false },
                             valueRange = 0f..1f
                         )
                         // v1.0.11：壁纸模糊度滑块（实时预览，拖动即时生效；0 = 清晰）
-                        var blurDraft by remember(wallpaper) { mutableFloatStateOf(wallpaperBlur) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("壁纸模糊度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                             Text(
@@ -187,14 +204,15 @@ fun AppearanceRoute(
                             value = blurDraft,
                             onValueChange = {
                                 blurDraft = it
+                                blurDragging = true
                                 vm.setWallpaperBlur(it)
                             },
+                            onValueChangeFinished = { blurDragging = false },
                             valueRange = 0f..24f
                         )
                     }
                     // v1.0.18/v1.0.19：卡片不透明度滑块（实时预览；不依赖壁纸设置，始终可见。
                     // v1.0.19 起全域 0~100%：0% 完全通透，100% surface 纯色底）
-                    var cardOpacityDraft by remember { mutableFloatStateOf(cardOpacity) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("卡片不透明度", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                         Text(
@@ -207,9 +225,18 @@ fun AppearanceRoute(
                         value = cardOpacityDraft,
                         onValueChange = {
                             cardOpacityDraft = it
+                            cardDragging = true
                             vm.setCardOpacity(it)
                         },
+                        onValueChangeFinished = { cardDragging = false },
                         valueRange = 0f..1f
+                    )
+                    // v1.0.6.6：卡片不透明度与「透出壁纸色相」的取舍说明 —— 100% 纯色底最清晰，
+                    // 想让玻璃透出壁纸颜色就往 70%~90% 调（默认值已按可读性设为 100%）。
+                    Text(
+                        "100% 为纯色底（最清晰）；想让玻璃透出壁纸色相，可调到 70%~90%。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     // v1.0.3：动态主页背景 —— 从记忆相册随机轮换（每天一张，确定性挑选）
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

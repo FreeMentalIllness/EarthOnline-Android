@@ -65,7 +65,7 @@ import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.TrackScrollBlur
-import com.example.earthonline.ui.steam.SteamGamesSection
+import com.example.earthonline.ui.steam.SteamLibraryEntry
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
@@ -164,7 +164,9 @@ fun BackpackScreen(
                     context = context,
                     onAddCollection = { showCollection = true },
                     onOpenCollection = { openCollection(it) },
-                    onEditCollection = { editCollection = it }
+                    onEditCollection = { editCollection = it },
+                    // v1.0.6.6：Steam 游戏数据不再内联展示，改为入口跳独立页
+                    onOpenSteamLibrary = { moreActions.onNavigate(com.example.earthonline.ui.navigation.Screen.SteamLibrary.route) }
                 )
             }
         }
@@ -456,7 +458,9 @@ private fun CollectionsPane(
     context: Context,
     onAddCollection: () -> Unit,
     onOpenCollection: (CollectionEntity) -> Unit,
-    onEditCollection: (CollectionEntity) -> Unit
+    onEditCollection: (CollectionEntity) -> Unit,
+    /** v1.0.6.6：Steam 游戏库独立页入口（收藏页只留入口，不再内联展示游戏数据） */
+    onOpenSteamLibrary: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     var cat by remember { mutableStateOf<String?>(null) }
@@ -490,13 +494,14 @@ private fun CollectionsPane(
             onSelect = { cat = it }
         )
         ViewModeToggle(grid = grid, onToggle = { grid = !grid })
-        // 终极重构 · 工程三：收藏页「游戏数据」模块 —— Steam 游戏库作为特殊收藏品卡片化展示。
-        // 未配置 / 拉取失败时组件内部会显示诚实的引导态，绝不伪造数据。
-        SteamGamesSection(
+        /* v1.0.6.6（真机反馈 #8）：Steam 游戏数据**移出收藏页**，只保留一个入口。
+           内联展示会把收藏列表顶下去、也让「收藏」语义变杂；游戏库现在是独立二级页。 */
+        SteamLibraryEntry(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = UiDimens.ListPad)
-                .padding(top = 8.dp)
+                .padding(top = 8.dp),
+            onClick = onOpenSteamLibrary
         )
         if (filtered.isEmpty()) {
             if (collections.isEmpty()) {

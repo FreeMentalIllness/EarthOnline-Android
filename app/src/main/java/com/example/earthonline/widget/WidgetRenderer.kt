@@ -27,7 +27,6 @@ import com.example.earthonline.data.repository.TaskRepository
 import com.example.earthonline.ui.navigation.Screen
 import com.example.earthonline.util.ImageDownsampler
 import com.example.earthonline.util.XpRules
-import com.example.earthonline.util.avatarEmoji
 import com.example.earthonline.util.lifeStatsOf
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn

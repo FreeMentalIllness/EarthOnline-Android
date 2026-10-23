@@ -24,8 +24,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.example.earthonline.ui.theme.AmberPrimary
+import com.example.earthonline.ui.theme.GlassSurface
 
 /**
  * 全局 UI 基线常量。
@@ -268,17 +272,84 @@ fun MeterBar(
 }
 
 /**
- * 弹窗统一改为底部上浮（ModalBottomSheet）—— 取代原先居中 AlertDialog。
+ * **全局居中固定玻璃弹窗**（v1.0.6.6 真机反馈批 · 取代所有 ModalBottomSheet）。
  *
- * 为什么这样改：死磕细节批要求「废弃生硬 AlertDialog，全局走 ModalBottomSheet + 弹簧动画」。
- * 这里直接复用 [ModalBottomSheet]（内置弹簧滑出，skipPartiallyExpanded 让它干脆到位、不卡半屏，
- * 视觉上像果冻一样 Q 弹），并把 AlertDialog 的 title/text/buttons 槽位在底部容器内重排：
- * 标题在上、正文居中、按钮区右对齐（dismiss 在左、confirm 在右，沿用用户习惯）。
+ * 真机反馈：底部抽屉式弹窗在单手操作时够不着、且与全站玻璃质感割裂。
+ * 现统一为**居中固定尺寸**弹窗：
+ *  - 宽度 280dp ~ [maxWidth]（默认 400dp），绝不占满全屏；
+ *  - 高度上限取屏高的 [maxHeightFraction]（默认 86%），超出可滚动，键盘顶起也不出屏；
+ *  - 入场用中阻尼弹簧缩放（0.94 → 1.0）+ 120ms 淡入，果冻感但不拖沓；
+ *  - 材质走全站 [GlassSurface]，与卡片同源 —— 半透明着色 + 色散高光描边，无黑色 elevation。
  *
- * 签名与 Material3 AlertDialog 对齐（常用参数子集），因此全项目 40+ 处 `AnimatedAlertDialog(...)`
- * 调用点**原地生效**，无需逐个改；原本裸用 `AlertDialog` 的少数几处也改为调用本函数即可。
+ * 全站二级窗口 / 选择器 / 菜单 / 表单弹层一律走这里，杜绝各页各写一份。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GlassDialog(
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    properties: DialogProperties = DialogProperties(),
+    maxWidth: Dp = 400.dp,
+    maxHeightFraction: Float = 0.86f,
+    /**
+     * 内容是否可纵向滚动。内含 LazyColumn / LazyVerticalGrid 的调用点必须传 false
+     * （并自行给列表固定高度），否则「同方向嵌套滚动」会直接抛异常。
+     */
+    scrollable: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val maxH = configuration.screenHeightDp.dp * maxHeightFraction
+
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.94f,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "glassDialogScale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(120),
+        label = "glassDialogAlpha"
+    )
+
+    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        GlassSurface(
+            modifier = modifier
+                .widthIn(min = 280.dp, max = maxWidth)
+                .heightIn(max = maxH)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                },
+            shape = RoundedCornerShape(24.dp),
+            showBorder = true
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(horizontal = 22.dp, vertical = 18.dp)
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * 全站统一弹窗（签名与 Material3 AlertDialog 对齐）。
+ *
+ * v1.0.6.6：由 ModalBottomSheet 改回**居中 [GlassDialog]** —— 真机反馈底部抽屉
+ * 单手够不着、和全站玻璃质感割裂。签名保持不变，因此全项目 40+ 处
+ * `AnimatedAlertDialog(...)` 调用点**原地生效**，无需逐个改动。
+ *
+ * 槽位顺序沿用 AlertDialog 习惯：图标 → 标题 → 正文 → 按钮区（dismiss 在左、confirm 在右）。
+ */
 @Composable
 fun AnimatedAlertDialog(
     onDismissRequest: () -> Unit,
@@ -293,36 +364,25 @@ fun AnimatedAlertDialog(
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     properties: DialogProperties = DialogProperties()
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    GlassDialog(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
-        sheetState = sheetState,
-        shape = shape,
-        containerColor = containerColor,
-        tonalElevation = tonalElevation,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
+        properties = properties
     ) {
-        Column(
+        icon?.let { Box(Modifier.padding(bottom = 12.dp)) { it() } }
+        title?.let {
+            Box(Modifier.padding(bottom = if (text != null) 10.dp else 0.dp)) { it() }
+        }
+        text?.let { Box(Modifier.fillMaxWidth()) { it() } }
+        Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 24.dp)
+                .padding(top = if (title != null || text != null) 20.dp else 0.dp),
+            horizontalArrangement = Arrangement.End
         ) {
-            icon?.let { Box(Modifier.padding(bottom = 12.dp)) { it() } }
-            title?.let {
-                Box(Modifier.padding(bottom = if (text != null) 10.dp else 0.dp)) { it() }
-            }
-            text?.let { Box(Modifier.fillMaxWidth()) { it() } }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = if (title != null || text != null) 20.dp else 0.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                dismissButton?.let { it() }
-                if (dismissButton != null) Spacer(Modifier.width(8.dp))
-                confirmButton()
-            }
+            dismissButton?.let { it() }
+            if (dismissButton != null) Spacer(Modifier.width(8.dp))
+            confirmButton()
         }
     }
 }

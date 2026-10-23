@@ -3,9 +3,11 @@ package com.example.earthonline.ui.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PersonOutline
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -22,7 +24,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.size.Precision
 import com.example.earthonline.ui.theme.AmberPrimary
-import com.example.earthonline.util.avatarEmoji
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -104,15 +105,21 @@ fun UserAvatar(
             modifier = modifier.size(size).clip(CircleShape)
         )
     } else {
+        /* v1.0.6.6（真机反馈批）：**取消默认 Emoji 头像**。
+           真机反馈：系统按 avatarKey 派发的 emoji 在部分机型上字体缺字形（豆腐块）、
+           且风格与全站矢量图标语言割裂。未上传头像时改为极简矢量占位 ——
+           琥珀底 + Person 轮廓线图标，安静、不抢戏，也不会出现方块字。 */
         Surface(
             color = AmberPrimary.copy(alpha = 0.15f),
             shape = CircleShape,
             modifier = modifier.size(size)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    avatarEmoji(avatarKey),
-                    fontSize = MaterialTheme.typography.headlineLarge.fontSize * (size / 80.dp)
+                Icon(
+                    imageVector = Icons.Rounded.PersonOutline,
+                    contentDescription = "未设置头像",
+                    tint = AmberPrimary,
+                    modifier = Modifier.size(size * 0.5f)
                 )
             }
         }

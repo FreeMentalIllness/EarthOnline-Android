@@ -140,11 +140,13 @@ fun MainScaffold(
 
     val wallpaper by settingsVm.wallpaper.collectAsStateWithLifecycle(initialValue = "")
     // v1.0.19：壁纸不透明度全域 0~100%（0% = 壁纸完全隐藏，显示纯背景色）
-    val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 0.35f)
+    // v1.0.6.6：默认值收敛为 100%（与 DataStore 默认一致，避免首帧闪一下半透明）
+    val wallpaperAlpha by settingsVm.wallpaperAlpha.collectAsStateWithLifecycle(initialValue = 1f)
     // v1.0.11：壁纸模糊度（设置→外观 滑块，0=清晰，24=重度毛玻璃）
     val wallpaperBlur by settingsVm.wallpaperBlur.collectAsStateWithLifecycle(initialValue = 0f)
     // v1.0.18：卡片背景不透明度（设置→外观 滑块，全局 GlassCard 生效）
-    val cardOpacity by settingsVm.cardOpacity.collectAsStateWithLifecycle(initialValue = 0.74f)
+    // v1.0.6.6：默认 100%（与 DataStore / Glass.kt 默认一致）
+    val cardOpacity by settingsVm.cardOpacity.collectAsStateWithLifecycle(initialValue = 1f)
     val achSound by settingsVm.achSound.collectAsStateWithLifecycle(initialValue = true)
     // v1.0.6：当日轮换壁纸（含相册筛选）由 ViewModel 统一计算，避免组合层做 JSON 解析
     val effectiveWallpaper by settingsVm.effectiveWallpaper.collectAsStateWithLifecycle(initialValue = "")
@@ -200,7 +202,9 @@ fun MainScaffold(
         when {
             // v1.2.3：设置二级页（外观/通用/数据与备份/关于）按返回应弹回「设置」主页，
             // 而非直接跳回首页 —— 返回栈由 NavHost 维护，这里只负责触发一次 pop。
-            currentRoute in settingsSubRoutes -> navController.popBackStack()
+            // v1.0.6.6：Steam 游戏库页同属「从 Tab 页钻进来的二级页」，返回应回收藏页。
+            currentRoute in settingsSubRoutes || currentRoute == com.example.earthonline.ui.navigation.Screen.SteamLibrary.route ->
+                navController.popBackStack()
             currentRoute != null && currentRoute != home -> navigateToTab(navController, home)
             else -> {
                 val now = System.currentTimeMillis()

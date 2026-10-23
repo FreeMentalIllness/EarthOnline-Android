@@ -133,11 +133,17 @@ class SettingsViewModel @Inject constructor(
     private var alphaJob: Job? = null
 
     /**
-     * 壁纸不透明度：拖动时高频回调，这里做 120ms 防抖再落盘，
+     * 壁纸不透明度：拖动时高频回调，这里做 120ms 防拖抖再落盘，
      * 避免每帧一次 DataStore 写入 + 全局 Flow 发射引发重组风暴。
+     *
+     * ⚠️ v1.0.6.6 修复「保存失败 / 不生效」真机 Bug：
+     * 此前这里把值硬钳到 0.05~0.9，而滑块 UI 与 DataStore 的合法域是 **0.0~1.0** ——
+     * 用户拖到 0%（想隐藏壁纸）或 100%（想完全透出）都会被悄悄改写成 0.05 / 0.9，
+     * 松手后 Flow 回流 0.9 把滑块"弹回去"，表现为「改了保存不了」。
+     * 现在钳制域与 UI / DataStore 完全对齐（0f..1f），所见即所存。
      */
     fun setWallpaperAlpha(v: Float) {
-        val c = v.coerceIn(0.05f, 0.9f)
+        val c = v.coerceIn(0f, 1f)
         alphaJob?.cancel()
         alphaJob = viewModelScope.launch {
             delay(120)
@@ -160,9 +166,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** v1.0.18：卡片背景不透明度滑块 —— 120ms 防抖落盘，拖动即时经 Flow 重组预览 */
+    /**
+     * 卡片背景不透明度滑块 —— 120ms 防抖落盘，拖动即时经 Flow 重组预览。
+     *
+     * ⚠️ v1.0.6.6 修复：原钳制域 0.40~0.95 与滑块 0.0~1.0 不符，
+     * 拖到两端会被改写并回弹（同 [setWallpaperAlpha] 的"保存不生效"根因），现对齐为 0f..1f。
+     */
     fun setCardOpacity(v: Float) {
-        val c = v.coerceIn(0.40f, 0.95f)
+        val c = v.coerceIn(0f, 1f)
         cardOpacityJob?.cancel()
         cardOpacityJob = viewModelScope.launch {
             delay(120)

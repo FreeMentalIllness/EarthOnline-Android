@@ -75,6 +75,7 @@ import com.example.earthonline.data.repository.ActivityRepository
 import com.example.earthonline.data.repository.ItemRepository
 import com.example.earthonline.data.repository.MemoRepository
 import com.example.earthonline.data.repository.TaskRepository
+import com.example.earthonline.ui.components.GlassDialog
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.IconChip
 import com.example.earthonline.ui.components.ModuleTints
@@ -613,32 +614,16 @@ fun AiQuickHubSheet(
         }
     }
 
-    ModalBottomSheet(
-        // v1.0.6 封板：下滑手势 / 返回键 / 点击外部，统一走 close() 收口
+    // v1.0.6.6（真机反馈批）：AI 快捷中枢由底部抽屉改为**居中固定玻璃弹窗** ——
+    // 单手可达、不遮挡主页顶部，且与全站玻璃材质同源。
+    // 下滑手势 / 返回键 / 点击外部，统一走 close() 收口。
+    GlassDialog(
         onDismissRequest = { close() },
-        containerColor = Color.Transparent,
-        tonalElevation = 0.dp,
-        // 死命令 #6 视觉融合：弹出时底层加半透明遮罩（默认 scrim 太浅，压不住主页花背景；
-        // 面板本身已是液态玻璃毛玻璃，遮罩 + 玻璃 = 主页同款观感）
-        scrimColor = Color.Black.copy(alpha = 0.45f),
-        // inset 自理（面板自带 navigationBarsPadding + imePadding），防双重垫高
-        contentWindowInsets = { WindowInsets(0) },
-        dragHandle = null
+        maxWidth = 420.dp
     ) {
-        GlassSurface(
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            showBorder = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
+        Column(
+            Modifier.fillMaxWidth()
         ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 18.dp, bottom = 18.dp)
-            ) {
                 /* —— 标题行：图标芯片 + 标题 + 接口状态 —— */
                 Row(
                     Modifier.fillMaxWidth(),
@@ -777,7 +762,6 @@ fun AiQuickHubSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
         }
     }
 

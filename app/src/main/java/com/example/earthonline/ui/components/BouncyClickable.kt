@@ -88,19 +88,16 @@ fun Modifier.bouncyPress(enabled: Boolean = true): Modifier = composed {
 }
 
 /**
- * 列表滚动模糊降级追踪：在持有 [androidx.compose.foundation.lazy.LazyListState] 的页面里
- * 调一次即可（插入一行，不碰任何括号）。
- * 滑动进行中 → 把全局 [com.example.earthonline.ui.theme.glassScrollBlurRadius] 置 0，
- * 玻璃卡据此跳过壁纸模糊采样、降级为纯半透明底色（GPU 零高斯开销，保滚动 60FPS）；
- * 滑动停止 → 恢复满模糊。列表内 [com.example.earthonline.ui.theme.GlassCard] 自动读取，无需改造。
+ * v1.0.6.6（真机反馈批）：**已废弃** —— 列表滑动模糊降级被撤销，液态玻璃改为常驻。
+ *
+ * 真机反馈：滚动时玻璃忽有忽无的跳变比掉帧更刺眼。全局模糊半径不再随滚动置 0，
+ * 因此本追踪器已无实际作用。保留空实现仅为兼容尚未清理的调用点（调用即无操作），
+ * 新代码不要引用；后续会连同调用点一起删除。
  */
+@Deprecated("v1.0.6.6 起液态玻璃常驻，滚动不再降级模糊；本调用已无操作")
 @Composable
 fun TrackScrollBlur(
     listState: androidx.compose.foundation.lazy.LazyListState
 ) {
-    androidx.compose.runtime.LaunchedEffect(listState.isScrollInProgress) {
-        com.example.earthonline.ui.theme.glassScrollBlurRadius.floatValue =
-            if (listState.isScrollInProgress) 0f
-            else com.example.earthonline.ui.theme.GLASS_BLUR_RADIUS_DP.value
-    }
+    // 无操作：模糊半径恒定，玻璃常驻
 }

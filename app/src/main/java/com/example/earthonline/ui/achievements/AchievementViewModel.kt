@@ -147,8 +147,9 @@ class AchievementViewModel @Inject constructor(
                 val photosJson = arr[9] as? String ?: ""
                 @Suppress("UNCHECKED_CAST")
                 val activities = arr[10] as? List<ActivityEntity> ?: emptyList()
-                val cardOpacity = arr[11] as? Float ?: 0.74f
-                val wallpaperAlpha = arr[12] as? Float ?: 0.35f
+                // v1.0.6.6：外观默认值收敛为「卡片 100% / 壁纸 100%」
+                val cardOpacity = arr[11] as? Float ?: 1f
+                val wallpaperAlpha = arr[12] as? Float ?: 1f
 
                 val life = lifeStatsOf(profile?.birthDate)
                 val stats = AchStats(
@@ -189,8 +190,8 @@ class AchievementViewModel @Inject constructor(
                     // —— v1.0.6 新功能成就字段 ——
                     aiHubCount = activities.count { it.title.startsWith("AI 快捷") },
                     longMemos = memos.count { it.text.length >= 300 },
-                    // 卡片默认 0.74 / 壁纸默认 0.35：任一被改动即视为「调校过手感」
-                    appearanceTuned = if (cardOpacity != 0.74f || wallpaperAlpha != 0.35f) 1 else 0
+                    // 卡片默认 1.0 / 壁纸默认 1.0：任一被改动即视为「调校过手感」
+                    appearanceTuned = if (cardOpacity != 1f || wallpaperAlpha != 1f) 1 else 0
                 )
                 val sources = EventSources(
                     doneAtList = tasks.mapNotNull { it.doneAt }.sorted(),

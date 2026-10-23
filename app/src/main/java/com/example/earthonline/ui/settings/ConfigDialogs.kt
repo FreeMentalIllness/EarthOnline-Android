@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -524,23 +525,71 @@ private fun LocalModelPanel(
                         })
                         loadMsg = "正在检查设备与模型文件…"
 
-                        // ① 模型文件存在性 + 完整性（半截文件是最常见的「加载失败」原因）
-                        val gguf = dir.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }
-                            ?.maxByOrNull { it.length() }
-                        if (gguf == null) {
-                            loadMsg = "加载失败：目录里没有 .gguf 文件，请先下载或导入模型"
-                            return@launch
-                        }
-                        if (gguf.length() < 32L * 1024 * 1024) {
-                            loadMsg = "加载失败：模型文件只有 ${LocalLlmRuntime.formatBytes(gguf.length())}，" +
-                                "明显不完整（下载中断或被截断），请点「重下 / 校验」重新下载"
+                        /* ⓪ 目录存在性（v1.0.6.6 修复：导入路径被手改 / 清数据后目录消失，
+                            此前会一路走到「没有 .gguf」的误导性结论） */
+                        if (!dir.exists() || !dir.isDirectory) {
+                            loadMsg = "加载失败：模型目录不存在（${dir.absolutePath}），请先导入模型"
                             return@launch
                         }
 
+                        /* ① 先定引擎，再按各自格式校验完整性。
+                           ⚠️ v1.0.6.6 修复「本地模型加载必失败」真机 Bug：
+                           原流程无条件要求目录里有 .gguf，而 MNN 模型包里根本没有 gguf
+                           （是 llm.mnn + llm.mnn.weight），于是 MNN 用户永远卡在
+                           「目录里没有 .gguf 文件」—— 实为校验逻辑与引擎选型脱节。
+                           现在与 LocalLlmRuntime.engineFor 的选型顺序保持一致：MNN 优先、GGUF 回落。 */
+                        val useMnn = LocalModelManager.hasMnn(dir)
+                        val gguf = dir.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }
+                            ?.maxByOrNull { it.length() }
+                        val weightName: String
+                        when {
+                            useMnn -> {
+                                val w = dir.walkTopDown().firstOrNull {
+                                    it.isFile && it.name == "llm.mnn.weight" && it.length() > 0
+                                }
+                                if (w == null) {
+                                    loadMsg = "加载失败：MNN 权重文件 llm.mnn.weight 缺失，模型包不完整，请重新导入"
+                                    return@launch
+                                }
+                                if (w.length() < 32L * 1024 * 1024) {
+                                    loadMsg = "加载失败：MNN 权重只有 ${LocalLlmRuntime.formatBytes(w.length())}，" +
+                                        "明显不完整（解压中断或文件损坏），请重新导入模型"
+                                    return@launch
+                                }
+                                weightName = "llm.mnn.weight（${LocalLlmRuntime.formatBytes(w.length())}）"
+                            }
+                            gguf != null -> {
+                                if (gguf.length() < 32L * 1024 * 1024) {
+                                    loadMsg = "加载失败：模型文件只有 ${LocalLlmRuntime.formatBytes(gguf.length())}，" +
+                                        "明显不完整（下载中断或被截断），请点「重下 / 校验」重新下载"
+                                    return@launch
+                                }
+                                weightName = "${gguf.name}（${LocalLlmRuntime.formatBytes(gguf.length())}）"
+                            }
+                            else -> {
+                                loadMsg = "加载失败：模型目录里既没有 MNN 权重（llm.mnn + llm.mnn.weight），" +
+                                    "也没有 .gguf 文件 —— 请先用「导入模型」导入完整模型包"
+                                return@launch
+                            }
+                        }
+
                         // ② 设备体检：不过关就**零 JNI 调用**（native 崩溃 Java 层拦不住）
+                        val engine = LocalLlmRuntime.engineFor(dir)
+                        if (engine === MockLlmEngine) {
+                            loadMsg = when {
+                                !LocalLlmRuntime.hasRequiredAbi() ->
+                                    "加载失败：设备架构不支持（当前 ABI=${android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "未知"}，" +
+                                        "本地推理仅支持 arm64-v8a），请改用云端模型"
+                                LocalLlmRuntime.isEmulator() ->
+                                    "加载失败：检测到模拟器环境，本地推理仅支持 arm64 真机，请改用云端模型"
+                                else ->
+                                    "加载失败：模型格式未被识别（需 MNN 权重或 .gguf），请重新导入模型"
+                            }
+                            return@launch
+                        }
                         when (val diag = LocalLlmRuntime.diagnose(dir)) {
                             is LocalLlmSupport.Blocked -> {
-                                loadMsg = "本机无法运行本地模型：${diag.short}"
+                                loadMsg = "加载失败：${diag.short}"
                                 Log.w("EarthOnline-LLM", "load blocked: ${diag.detail}")
                                 return@launch
                             }
@@ -548,12 +597,7 @@ private fun LocalModelPanel(
                         }
 
                         // ③ 真实加载（IO 协程，内部已 catch Throwable + OOM）
-                        loadMsg = "正在加载 ${gguf.name}（${LocalLlmRuntime.formatBytes(gguf.length())}）…"
-                        val engine = LocalLlmRuntime.engineFor(dir)
-                        if (engine === MockLlmEngine) {
-                            loadMsg = "本机只支持模拟模式：真实推理需要 arm64 真机（无 arm64 原生库或运行在模拟器）"
-                            return@launch
-                        }
+                        loadMsg = "正在加载 $weightName…"
                         val ok = engine.load(dir.absolutePath) { step -> loadMsg = step }
                         if (ok) {
                             LocalLlmRuntime.activate(engine)
@@ -563,7 +607,7 @@ private fun LocalModelPanel(
                         } else {
                             // load() 内部已把具体原因（OOM / 文件损坏 / 原生库缺失）写到 loadMsg
                             loadMsg = loadMsg?.takeIf { it.contains("失败") || it.contains("不足") || it.contains("不可用") }
-                                ?: "加载失败：引擎未能初始化（可尝试更小的量化模型，或切换云端）"
+                                ?: "加载失败：引擎未能初始化（内存不足或模型文件损坏），可尝试重新导入模型，或切换云端模型"
                         }
                     }
                 },
@@ -588,7 +632,14 @@ private fun LocalModelPanel(
                 modifier = Modifier.weight(1f)
             ) { Text("卸载释放", maxLines = 1) }
         }
-        loadMsg?.let { HintLine(it, MaterialTheme.colorScheme.onSurfaceVariant) }
+        /* v1.0.6.6（死命令 #3 诚实反馈）：**失败一律红字**。
+           此前所有提示都用次要灰，用户分不清「正在加载」和「加载失败」，
+           以为卡住了。现在按语义判定：含失败 / 不足 / 不可用 / 不支持 / 损坏 → error 红字 + 警示图标。 */
+        loadMsg?.let { msg ->
+            val isFailure = msg.contains("失败") || msg.contains("不足") || msg.contains("不可用") ||
+                msg.contains("不支持") || msg.contains("损坏") || msg.contains("无法") || msg.contains("不存在")
+            ErrorHintLine(msg, if (isFailure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
 
         /* —— 旧能力（默认收起）：本机自建 OpenAI 兼容服务端口 / .zip 插件 ——
            改为与整体设置项风格一致的「列表项」：左侧标题、右侧箭头，点击展开/收起，
@@ -626,9 +677,13 @@ private fun LocalModelPanel(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
-            Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
-                Text("导入插件（.zip）", maxLines = 1)
-            }
+            /* v1.0.6.6（死命令：删除重复入口）：原「导入插件（.zip）」按钮已移除 ——
+               它与上方「导入模型」是同一件事（都是选文件导入），两处并存让用户分不清该点哪个。
+               全页**只保留一个「导入模型」入口**。 */
+            HintLine(
+                "模型的导入 / 下载统一使用上方「导入模型」「下载模型」按钮（全页仅此一处入口）。",
+                MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (discovered.isNotEmpty()) {
                 Text("已发现插件", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 discovered.forEach { name ->
@@ -817,6 +872,34 @@ private fun HintLine(text: String, color: androidx.compose.ui.graphics.Color) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
     )
+}
+
+/**
+ * v1.0.6.6：**可换行的错误提示行**（失败原因往往很长，一行截断等于没说）。
+ * 失败色（error）时左侧带警示图标，让「出问题了」在扫视层面就能被看见。
+ */
+@Composable
+private fun ErrorHintLine(text: String, color: androidx.compose.ui.graphics.Color) {
+    val isError = color == MaterialTheme.colorScheme.error
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (isError) {
+            Icon(
+                Icons.Rounded.ErrorOutline,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Text(
+            text,
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+            fontWeight = if (isError) FontWeight.SemiBold else FontWeight.Normal
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

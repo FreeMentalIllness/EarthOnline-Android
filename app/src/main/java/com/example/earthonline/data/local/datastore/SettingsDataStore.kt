@@ -145,14 +145,21 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     val theme: Flow<String> = ds.data.map { it[THEME] ?: "system" }
     val wallpaper: Flow<String> = ds.data.map { it[WALLPAPER] ?: "" }
 
-    /** 壁纸不透明度（v1.0.19 放宽 0.0 ~ 1.0 全域：0 = 壁纸完全隐藏显示纯背景色，1 = 完全透出） */
-    val wallpaperAlpha: Flow<Float> = ds.data.map { (it[WALLPAPER_ALPHA] ?: 0.35f).coerceIn(0f, 1f) }
+    /**
+     * 壁纸不透明度（0.0 ~ 1.0 全域：0 = 壁纸完全隐藏显示纯背景色，1 = 完全透出）。
+     * v1.0.6.6（真机反馈批）：默认值 0.35 → **1.0（100%）** —— 用户选了壁纸就是要看见它，
+     * 默认半透会让"换了壁纸却像没换"；想压暗的用户自行下调滑块。
+     */
+    val wallpaperAlpha: Flow<Float> = ds.data.map { (it[WALLPAPER_ALPHA] ?: 1f).coerceIn(0f, 1f) }
 
-    /** v1.0.11：壁纸模糊度 0~24dp（0 = 清晰，越大越毛玻璃；用户自平衡美观与性能） */
+    /** v1.0.11：壁纸模糊度 0~24dp（0 = 清晰，越大越毛玻璃）。默认 **0（清晰）**，不擅自给壁纸加模糊。 */
     val wallpaperBlur: Flow<Float> = ds.data.map { (it[WALLPAPER_BLUR] ?: 0f).coerceIn(0f, 24f) }
 
-    /** v1.0.18/v1.0.19：卡片背景不透明度（0.0~1.0，默认 0.74 视觉基线；低=通透感，高=可读性，1.0=纯色底） */
-    val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 0.74f).coerceIn(0f, 1f) }
+    /**
+     * 卡片背景不透明度（0.0~1.0）。v1.0.6.6 默认值 0.74 → **1.0（100%）**：真机反馈
+     * 默认半透在花壁纸上正文发虚，可读性优先；想透出壁纸色相的用户自行下调（建议 70%~90%）。
+     */
+    val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 1f).coerceIn(0f, 1f) }
     val notify: Flow<Boolean> = ds.data.map { it[NOTIFY] ?: false }
     val aiConfig: Flow<String> = ds.data.map { it[AI_CONFIG] ?: "" }
     /** 本地模型（离线推理）配置 JSON */

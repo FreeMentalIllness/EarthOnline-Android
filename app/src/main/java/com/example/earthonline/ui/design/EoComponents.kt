@@ -19,12 +19,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +30,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.earthonline.ui.components.GlassDialog
 import com.example.earthonline.ui.components.bouncyPress
 import com.example.earthonline.ui.theme.GlassCard
 
@@ -100,51 +99,53 @@ fun EOInput(
 }
 
 /**
- * 全局底部弹窗：所有次级菜单 / 选择器 / 表单弹层的唯一载体。
- * 带阻尼上浮（[rememberModalBottomSheetState] 默认弹簧），skipPartiallyExpanded 直接全展开。
+ * **全局居中固定弹窗**：所有次级菜单 / 选择器 / 表单弹层的唯一载体。
+ *
+ * v1.0.6.6（真机反馈批）：废弃 ModalBottomSheet 底部抽屉 —— 改走 [GlassDialog] 居中固定尺寸，
+ * 单手可达、与全站玻璃质感同源。名称保留 `EOBottomSheet` 仅为历史调用点兼容，
+ * 新代码一律使用 [EODialog]。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EODialog(
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    GlassDialog(
+        onDismissRequest = onDismissRequest,
+        modifier = modifier
+    ) {
+        if (!title.isNullOrBlank()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = EoSpace.Lg)
+            )
+        }
+        content()
+    }
+}
+
+/** 历史别名（原底部抽屉组件），内部已改为 [EODialog] 居中玻璃弹窗。 */
 @Composable
 fun EOBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     title: String? = null,
     content: @Composable ColumnScope.() -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        modifier = modifier,
-        shape = RoundedCornerShape(
-            topStart = EoRadius.Sheet,
-            topEnd = EoRadius.Sheet
-        ),
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = EoSpace.Xl)
-                .padding(bottom = EoSpace.Xxl)
-        ) {
-            if (!title.isNullOrBlank()) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = EoSpace.Lg)
-                )
-            }
-            content()
-        }
-    }
-}
+) = EODialog(
+    onDismissRequest = onDismissRequest,
+    modifier = modifier,
+    title = title,
+    content = content
+)
 
 /**
  * **破坏性操作确认弹窗**（红线组件）。
  *
  * 红线：所有删除 / 清空数据 / 卸载模型等不可逆操作，**必须**强制调用本组件二次确认，
- * 业务页严禁直接执行删除。视觉上走 [EOBottomSheet] 底部上浮，
+ * 业务页严禁直接执行删除。视觉上走 [EODialog] 居中玻璃弹窗，
  * 确认按钮用 error 色 + 破坏性图标，让用户在点下去之前就知道后果。
  */
 @Composable
@@ -158,7 +159,7 @@ fun EOConfirmDialog(
     /** 破坏性=true 时用 error 配色与警示图标 */
     destructive: Boolean = true
 ) {
-    EOBottomSheet(onDismissRequest = onDismiss, title = title) {
+    EODialog(onDismissRequest = onDismiss, title = title) {
         if (destructive) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

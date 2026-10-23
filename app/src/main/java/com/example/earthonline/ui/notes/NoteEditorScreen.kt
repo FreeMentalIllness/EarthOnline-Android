@@ -187,10 +187,23 @@ fun NoteEditorScreen(
     val underlineActive = editorState.currentSpanStyle.textDecoration == TextDecoration.Underline
     val headingActive = editorState.currentSpanStyle.fontSize == 20.sp
 
-    /* ---------- 待办：行首插入 / 切换「- [ ] 」「- [x] 」，原文字绝不清空 ---------- */
+    /* ---------- 待办：光标处插入 / 切换「- [ ] 」「- [x] 」，原文字绝不清空 ----------
+     *
+     * ⚠️ v1.0.6.6 修复「打勾吞字」真机回归：
+     * 此前新增待办走 `addTextAtIndex(ls, "- [ ] ")`。richeditor 的 addTextAtIndex 内部
+     * 按 TextFieldValue 语义插入 —— **当编辑器里存在选区（哪怕是一段被选中的旧文字）时，
+     * 插入会顺带把选区内容替换掉**，用户体感就是「一按待办，刚写的字没了」。
+     *
+     * 修复要点（两条，缺一不可）：
+     *  ① 一律改用 `replaceTextRange(TextRange(pos, pos), "- [ ] ")` —— 空区间替换 = **纯插入**，
+     *     删除长度为 0，数学上不可能吃掉任何已存在的字符；
+     *  ② 插入位置取 **光标处**（selection.min，用 min 而非 start 避免反向选区把位置算到末尾），
+     *     已勾选 / 未勾选的整行切换仍然按行首判定，兼顾「在光标处插入」与 Markdown 规范。
+     */
     fun toggleTodo() {
         val text = editorState.toText()
-        val caret = editorState.selection.start.coerceIn(0, text.length)
+        // selection.min：反向选区（从后往前选）时 start 在末尾，用 min 才是视觉上的光标起点
+        val caret = editorState.selection.min.coerceIn(0, text.length)
         val ls = lineStartOf(text, caret)
         val le = lineEndOf(text, caret)
         val line = text.substring(ls, le)
@@ -201,7 +214,8 @@ fun NoteEditorScreen(
             line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
                 editorState.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
             else ->
-                editorState.addTextAtIndex(ls, "- [ ] ")
+                // 光标处纯插入标准 Checkbox 结构：区间为空 → 只加字、零删除
+                editorState.replaceTextRange(TextRange(caret, caret), "- [ ] ")
         }
         pushHistory(editorState)
         runCatching { editorFocus.requestFocus() }

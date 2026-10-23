@@ -19,6 +19,7 @@ import com.example.earthonline.ui.achievements.AchievementsRoute
 import com.example.earthonline.ui.ai.AiRoute
 import com.example.earthonline.ui.album.AlbumRoute
 import com.example.earthonline.ui.recyclebin.RecycleBinRoute
+import com.example.earthonline.ui.steam.SteamLibraryRoute
 import com.example.earthonline.ui.backpack.BackpackRoute
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.data.DataRoute
@@ -182,6 +183,10 @@ fun AppNavHost(
         // v1.0.5：回收站（设置-通用「回收站」入口进入）
         composable(Screen.RecycleBin.route) {
             RecycleBinRoute(onBack = { navController.popBackStack() })
+        }
+        // v1.0.6.6：Steam 游戏数据独立页（背包「收藏 → 我的游戏库」入口进入）
+        composable(Screen.SteamLibrary.route) {
+            SteamLibraryRoute(onBack = { navController.popBackStack() })
         }
         composable(Screen.Ai.route) { AiRoute(moreActions = moreActions) }
         composable(Screen.Settings.route) { SettingsRoute(moreActions = moreActions) }

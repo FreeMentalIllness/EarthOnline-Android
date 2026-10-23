@@ -27,9 +27,12 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.List
 import androidx.compose.material.icons.rounded.ListAlt
 import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
 import androidx.compose.material.icons.rounded.TaskAlt
@@ -53,7 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import com.mohamedrejeb.richeditor.model.RichTextState
@@ -883,6 +886,32 @@ private fun StatusChip(status: String) {
 }
 
 /**
+ * 任务备注「待办」按钮：在光标处插入标准 Checkbox 结构（`[ ]` / `[x]`）。
+ *
+ * 与笔记编辑器 [NoteEditorScreen] 完全同一套语义 —— 一律用**空区间 replaceTextRange** 插入，
+ * 删除长度为 0，绝不可能吃掉已有文字（早期 `addTextAtIndex` 在存在选区时会替换选区，即"吞字"）。
+ * 光标所在行已是待办行时，按行首切换未勾选 / 已勾选。
+ */
+private fun toggleTaskTodo(state: com.mohamedrejeb.richeditor.model.RichTextState) {
+    val text = state.toText()
+    val caret = state.selection.min.coerceIn(0, text.length)
+    val nl = text.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
+    val ls = if (nl < 0) 0 else nl + 1
+    val ne = text.indexOf('\n', caret)
+    val le = if (ne < 0) text.length else ne
+    val line = text.substring(ls, le)
+    val prefixLen = "- [ ] ".length
+    when {
+        line.startsWith("- [ ] ") ->
+            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [x] ")
+        line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
+            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
+        else ->
+            state.replaceTextRange(TextRange(caret, caret), "- [ ] ")
+    }
+}
+
+/**
  * 任务编辑 / 新增对话框。
  * 相比旧版补齐：父任务选择（决定层级）、状态选择、到期日不再限于 todo 分类。
  */
@@ -901,8 +930,8 @@ private fun TaskEditDialog(
     onDelete: (() -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(initialTitle) }
-    // 终极重构 · 工程二：任务备注**复用笔记的富文本组件**（richeditor-compose），
-    // 支持加粗 / 斜体等 Markdown 语法，所见即所得。
+    // 终极重构 · 工程二：任务备注**复用笔记的富文本组件**（richeditor-compose）。
+    // v1.0.6.6：工具栏只保留列表 / 待办等基础结构格式（去掉加粗 / 斜体 / 下划线）。
     // 存储层依旧是 Markdown 字符串，直接复用现有 `note` 列 —— **零 Room 迁移**；
     // 与笔记完全同源（载入 setMarkdown / 保存 toMarkdown），跨端契约不破坏。
     val noteRich = remember { RichTextState() }
@@ -1029,18 +1058,30 @@ private fun TaskEditDialog(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                /* v1.0.6.6（死命令 #7）：任务备注**去掉加粗 / 斜体 / 下划线**。
+                   备注是随手记的短文本，行内字重样式既用不上，又会把整段文字搞得花哨；
+                   只保留「无序列表 / 有序列表 / 待办」三类**基础结构格式**。 */
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(
-                        onClick = { noteRich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                        onClick = { noteRich.toggleUnorderedList() },
                         modifier = Modifier.size(36.dp)
                     ) {
-                        Text("B", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Rounded.List, contentDescription = "无序列表", modifier = Modifier.size(18.dp))
                     }
                     IconButton(
-                        onClick = { noteRich.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                        onClick = { noteRich.toggleOrderedList() },
                         modifier = Modifier.size(36.dp)
                     ) {
-                        Text("I", style = MaterialTheme.typography.labelLarge, fontStyle = FontStyle.Italic)
+                        Icon(Icons.Rounded.FormatListNumbered, contentDescription = "有序列表", modifier = Modifier.size(18.dp))
+                    }
+                    IconButton(
+                        onClick = { toggleTaskTodo(noteRich) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Rounded.CheckBox, contentDescription = "待办", modifier = Modifier.size(18.dp))
                     }
                 }
                 BasicRichTextEditor(
@@ -1053,7 +1094,7 @@ private fun TaskEditDialog(
                     ),
                     decorationBox = { inner ->
                         if (noteRich.annotatedString.text.isEmpty()) {
-                            Text("备注…支持加粗 / 斜体", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("备注…支持列表 / 待办", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         inner()
                     }
