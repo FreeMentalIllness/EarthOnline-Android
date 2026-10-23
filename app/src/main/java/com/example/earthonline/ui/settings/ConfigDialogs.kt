@@ -2,12 +2,15 @@ package com.example.earthonline.ui.settings
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,8 +32,15 @@ import com.example.earthonline.ui.ai.ModelDownloader
 import com.example.earthonline.ui.ai.ModelVariant
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.GlassTextField
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /** 本地模型下载的 UI 状态（进度条直接消费） */
 private sealed interface ModelDownloadUi {
@@ -45,6 +55,9 @@ private sealed interface ModelDownloadUi {
 fun AiConfigDialog(
     initial: AiConfig,
     localModel: LocalModelConfig = LocalModelConfig(),
+    /** v1.0.6（融合重构 · 死命令 #3）：本地模型加载态变化回调（加载成功 true / 卸载 false），供冷启动自动加载。
+     *  注意：必须排在 [onSave] 之前 —— 两个调用点都用尾随 lambda 传 onSave，尾随 lambda 恒绑最后一个参数。 */
+    onLoadedChange: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
     onSave: (AiConfig, LocalModelConfig) -> Unit
 ) {
@@ -57,19 +70,28 @@ fun AiConfigDialog(
     var portText by remember { mutableStateOf(local.port.toString()) }
 
     val context = LocalContext.current
-    var discovered by remember { mutableStateOf(LocalModelManager.scan(context)) }
+    val scope = rememberCoroutineScope()
+    // v1.0.6.14（死命令 #3 主线程守护）：scan 是文件遍历 I/O，原写法在组合期主线程同步执行；
+    // 改为空态初始化 + IO 协程回填，杜绝打开配置弹窗时的主线程磁盘扫描
+    var discovered by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(Unit) {
+        discovered = withContext(Dispatchers.IO) { LocalModelManager.scan(context) }
+    }
     // 说明入口：默认关闭；本地模式下才由用户主动点开，不占据主版面
     var showGuide by remember { mutableStateOf(false) }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        val name = LocalModelManager.importFromUri(context, uri, "plugin_${System.currentTimeMillis()}")
-            ?: return@rememberLauncherForActivityResult
-        discovered = discovered + name
-        local = local.copy(
-            pluginName = name,
-            pluginPath = LocalModelManager.pluginsDir(context).resolve("$name.zip").absolutePath,
-            discovered = discovered
-        )
+        // v1.0.6.11：整段搬到 IO 协程 —— 旧插件 zip 可能很大，主线程同步复制会 ANR / 导入失败
+        scope.launch(Dispatchers.IO) {
+            val name = LocalModelManager.importFromUri(context, uri, "plugin_${System.currentTimeMillis()}")
+                ?: return@launch
+            discovered = discovered + name
+            local = local.copy(
+                pluginName = name,
+                pluginPath = LocalModelManager.pluginsDir(context).resolve("$name.zip").absolutePath,
+                discovered = discovered
+            )
+        }
     }
 
     AnimatedAlertDialog(
@@ -107,6 +129,11 @@ fun AiConfigDialog(
                 /* v1.0.6.9：**不再均分 width**。之前三枚 chip 各占 1/3，文字稍长就被
                    Ellipsis 吃成「云端…」「本地…」。现在按内容自适应宽度 + 居中铺开，
                    四个字必然完整显示；实在极窄的屏幕才会用 Arrangement 压缩间距。 */
+                // v1.0.6.14（死命令 #1）：x86 / 模拟器架构不支持 arm64-only 推理库 ——
+                // 直接禁用「本地模型」选项，从源头杜绝误选后加载闪退
+                val localSupported = remember {
+                    LocalLlmRuntime.hasRequiredAbi() && !LocalLlmRuntime.isEmulator()
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -114,7 +141,13 @@ fun AiConfigDialog(
                 ) {
                     ModeChip("关闭", runMode == "off") { runMode = "off" }
                     ModeChip("云端模型", runMode == "cloud") { runMode = "cloud" }
-                    ModeChip("本地模型", runMode == "local") { runMode = "local" }
+                    ModeChip("本地模型", runMode == "local", enabled = localSupported) { runMode = "local" }
+                }
+                if (!localSupported) {
+                    HintLine(
+                        "当前设备架构不支持本地推理，已禁用本地模型选项",
+                        MaterialTheme.colorScheme.error
+                    )
                 }
                 HintLine(modeSummary(runMode), MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -127,6 +160,31 @@ fun AiConfigDialog(
                             singleLine = true, modifier = Modifier.fillMaxWidth())
                         GlassTextField(model, { model = it }, label = "模型名（必填）",
                             placeholder = "如 deepseek-chat / qwen-plus", singleLine = true, modifier = Modifier.fillMaxWidth())
+
+                        /* —— v1.0.6.13（死命令 #3）：测试连接 ——
+                           用当前输入框里的值（无需先保存）做轻量探测：GET /models 优先，
+                           404/405 回退 1 token 极短对话；成功 Toast「连接成功！耗时 X ms」，
+                           失败给精确错误码（401 鉴权失败 / 404 路径错误 / 超时 / DNS…）。 */
+                        var testing by remember { mutableStateOf(false) }
+                        OutlinedButton(
+                            onClick = {
+                                if (testing) return@OutlinedButton
+                                testing = true
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        testCloudConnection(baseUrl.trim(), apiKey.trim(), model.trim())
+                                    }
+                                    testing = false
+                                    runCatching {
+                                        Toast.makeText(context, result, Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            enabled = !testing && baseUrl.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (testing) "测试中…" else "测试连接", maxLines = 1)
+                        }
                         HintLine("兼容 OpenAI / 类 OpenAI 接口；模型名照抄服务商文档。", MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     else -> {
@@ -137,6 +195,7 @@ fun AiConfigDialog(
                             discovered = discovered,
                             onDiscoveredChange = { discovered = it },
                             onLocalChange = { local = it },
+                            onLoadedChange = onLoadedChange,
                             onImport = { importLauncher.launch("*/*") },
                             onOpenGuide = { showGuide = true }
                         )
@@ -154,10 +213,17 @@ fun AiConfigDialog(
  * 自适应宽度，四个字必然完整；模型规格那行用 weight 平分，长文案才需要 Ellipsis。
  */
 @Composable
-private fun ModeChip(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun ModeChip(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
     FilterChip(
         selected = selected,
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier,
         label = {
             Text(
@@ -178,6 +244,75 @@ private fun modeSummary(mode: String): String = when (mode) {
     else -> "云端模型：走你自己的 OpenAI 兼容接口"
 }
 
+/**
+ * v1.0.6.13（死命令 #3）：云端接口连通性探测（IO 协程调用）。
+ * 两段式：① GET {base}/models（OpenAI 兼容最轻量探针）；
+ *        ② 遇 404/405（服务商不提供 /models）回退 POST {base}/chat/completions 极短对话（1 token）。
+ * 成功返回「连接成功！耗时 X ms」；失败返回**精确原因**（401 鉴权失败 / 404 路径错误 /
+ * 429 限流 / 5xx 服务端 / DNS / 超时 / TLS）。全程 runCatching，绝不向 UI 抛异常。
+ */
+private fun testCloudConnection(baseUrl: String, apiKey: String, model: String): String {
+    if (baseUrl.isBlank()) return "请先填写 Base URL"
+    val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .build()
+    val base = baseUrl.trimEnd('/')
+    val t0 = System.currentTimeMillis()
+    fun elapsed(): String = "${System.currentTimeMillis() - t0} ms"
+
+    fun ioError(e: Throwable): String = when (e) {
+        is java.net.UnknownHostException -> "域名无法解析：请检查 Base URL 拼写与网络连接"
+        is java.net.ConnectException -> "连接失败：地址不可达、端口被拒或被防火墙/代理拦截"
+        is java.net.SocketTimeoutException -> "连接超时：网络不通或服务无响应"
+        is javax.net.ssl.SSLException -> "TLS/SSL 握手失败：证书无效或代理劫持"
+        else -> "网络异常：${e.message ?: e.javaClass.simpleName}"
+    }
+
+    // ① GET /models
+    runCatching {
+        client.newCall(
+            Request.Builder().url("$base/models")
+                .header("Authorization", "Bearer $apiKey")
+                .get().build()
+        ).execute().use { resp ->
+            val code = resp.code
+            when {
+                resp.isSuccessful -> return "连接成功！耗时 ${elapsed()}"
+                code == 401 || code == 403 -> return "鉴权失败（$code）：API Key 无效或无权限"
+                code == 429 -> return "请求过于频繁（429）：稍后再试"
+                code in 500..599 -> return "服务端错误（$code）：服务商故障或额度用尽"
+                // 404/405：该服务商可能不提供 /models → 落到 ② 极短对话探测
+            }
+        }
+    }.getOrElse { e -> return ioError(e) }
+
+    // ② POST /chat/completions（1 token 极短对话）
+    runCatching {
+        val probeModel = model.ifBlank { "probe" }
+        val payload =
+            "{\"model\":\"$probeModel\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}"
+        val body = payload.toRequestBody("application/json; charset=utf-8".toMediaType())
+        client.newCall(
+            Request.Builder().url("$base/chat/completions")
+                .header("Authorization", "Bearer $apiKey")
+                .post(body).build()
+        ).execute().use { resp ->
+            val code = resp.code
+            return when {
+                resp.isSuccessful -> "连接成功！耗时 ${elapsed()}"
+                code == 401 || code == 403 -> "鉴权失败（$code）：API Key 无效或无权限"
+                code == 404 -> "路径不存在（404）：请检查 Base URL 是否需要以 /v1 结尾"
+                code == 429 -> "请求过于频繁（429）：Key 有效但被限流"
+                code in 500..599 -> "服务端错误（$code）：服务商故障或模型名不存在"
+                else -> "接口返回 $code：请核对 Base URL / Key / 模型名"
+            }
+        }
+    }.getOrElse { e -> return ioError(e) }
+
+    return "连接失败：未知错误"
+}
+
 @Composable
 private fun LocalModelPanel(
     local: LocalModelConfig,
@@ -186,6 +321,7 @@ private fun LocalModelPanel(
     discovered: List<String>,
     onDiscoveredChange: (List<String>) -> Unit,
     onLocalChange: (LocalModelConfig) -> Unit,
+    onLoadedChange: (Boolean) -> Unit,
     onImport: () -> Unit,
     onOpenGuide: () -> Unit
 ) {
@@ -193,11 +329,10 @@ private fun LocalModelPanel(
     val scope = rememberCoroutineScope()
     var downloadUi by remember { mutableStateOf<ModelDownloadUi>(ModelDownloadUi.Idle) }
     var loadMsg by remember { mutableStateOf<String?>(null) }
-    /* 模型规格：默认按本机总内存选 —— ≥6GB 才给 1.5B，其余一律 0.5B。
-       1GB 权重的模型在 4GB 机上加载后极易 OOM / 被系统杀进程，必须让用户显式选择。 */
-    var variant by remember {
-        mutableStateOf(if (LocalLlmRuntime.memory(context).second >= 6L * 1024 * 1024 * 1024) ModelVariant.BASE else ModelVariant.SMALL)
-    }
+    /* v1.0.6（融合重构 · 死命令 #2）：只保留「标准 1.5B」一档并默认选中 ——
+       0.5B 小模型回复质量太差（用户实测「答非所问」），两档并存徒增选择负担；
+       4GB 以下机型本来就会被加载前体检拦住并降级云端，无需用户自己避坑。 */
+    var variant by remember { mutableStateOf(ModelVariant.BASE) }
 
     val modelImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -207,27 +342,28 @@ private fun LocalModelPanel(
         }.getOrNull() ?: "model.zip"
         scope.launch {
             loadMsg = "正在导入并解包模型…"
-            val dir = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 LocalModelManager.importModelPackage(context, uri, name)
             }
-            if (dir == null) {
-                loadMsg = "模型导入失败，请重试"
-            } else {
-                val (ok, msg) = LocalModelManager.validateModelDir(dir)
-                if (ok) {
-                    val size = dir.listFiles()?.sumOf { it.length() } ?: 0L
-                    onLocalChange(
-                        local.copy(
-                            downloaded = true,
-                            modelDir = dir.absolutePath,
-                            sizeBytes = size,
-                            modelName = dir.name
+            when (result) {
+                is LocalModelManager.ModelImportResult.Ok -> {
+                    val (ok, msg) = LocalModelManager.validateModelDir(result.modelDir)
+                    if (ok) {
+                        val size = result.modelDir.listFiles()?.sumOf { it.length() } ?: 0L
+                        onLocalChange(
+                            local.copy(
+                                downloaded = true,
+                                modelDir = result.modelDir.absolutePath,
+                                sizeBytes = size,
+                                modelName = result.modelDir.name
+                            )
                         )
-                    )
-                    loadMsg = msg
-                } else {
-                    loadMsg = msg
+                        loadMsg = msg
+                    } else {
+                        loadMsg = msg
+                    }
                 }
+                is LocalModelManager.ModelImportResult.Fail -> loadMsg = result.reason
             }
         }
     }
@@ -244,7 +380,8 @@ private fun LocalModelPanel(
 
         /* —— 设备体检：本机能不能跑本地推理，先说清楚（内存统一 GB/MB 口径） —— */
         val support = remember { LocalLlmRuntime.diagnose() }
-        val (avail, total) = LocalLlmRuntime.memory(context)
+        // v1.0.6.14：memory() 走 ActivityManager 系统调用，remember 一次防止每次重组都打系统服务
+        val (avail, total) = remember { LocalLlmRuntime.memory(context) }
         val memText = remember(avail, total) {
             if (total > 0) "可用 ${LocalLlmRuntime.formatBytes(avail)} / 共 ${LocalLlmRuntime.formatBytes(total)}"
             else "内存信息不可用"
@@ -261,13 +398,23 @@ private fun LocalModelPanel(
             }
         )
 
-        /* —— 状态卡片：当前模型 / 引擎状态，单行截断 —— */
+        /* —— 状态卡片：当前模型 / 引擎状态，单行截断 ——
+           状态必须与实际文件 / 引擎事实一致，不能只信易失的 Compose 状态 local.downloaded
+           （dialog 重开或没点「保存」时会丢，导致「已下载却显示尚未准备模型」的错位）。
+           改为直接校验模型目录是否真有 GGUF——下载/解压后即时变为「已就绪」。 */
+        val modelDirResolved = remember(local.modelDir, variant) {
+            File(local.modelDir.ifBlank { LocalModelManager.modelDir(context, variant.modelName).absolutePath })
+        }
+        // v1.0.6.14（死命令 #3 主线程守护）：hasGguf 是文件系统遍历，原写法在组合期主线程同步执行；
+        // 改为 produceState + IO 协程回填，目录变化时自动重查
+        val fileReady by produceState(false, modelDirResolved) {
+            value = withContext(Dispatchers.IO) { LocalModelManager.hasGguf(modelDirResolved) }
+        }
         val statusText = when {
-            // 只有真的 ready 才敢说「已加载」。历史上这里对 Mock 也显示过「已加载」，
-            // 结果用户看到「引擎已加载」但一问就崩 —— 状态必须和事实一致。
+            // 只有真的 ready 才敢说「已加载」
             LocalLlmRuntime.engine.ready -> "引擎已加载：${LocalLlmRuntime.engine.name}"
+            fileReady -> "模型文件已就绪（未加载），点「加载模型」"
             support is LocalLlmSupport.Blocked -> "模拟模式：本机不能跑真实推理"
-            local.downloaded -> "模型文件已就绪（未加载），点「加载模型」"
             else -> "尚未准备模型：请先下载或导入 GGUF"
         }
         AssistChip(
@@ -275,13 +422,12 @@ private fun LocalModelPanel(
             label = { Text(statusText, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         )
 
-        /* —— 模型规格：体积直接决定会不会 OOM —— */
+        /* —— 模型规格（v1.0.6 融合重构）：只保留「标准 1.5B」一档，默认选中 —— */
         Text("模型规格", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModeChip("轻量 0.5B · 360MB", variant == ModelVariant.SMALL, Modifier.weight(1f)) { variant = ModelVariant.SMALL }
-            ModeChip("标准 1.5B · 1GB", variant == ModelVariant.BASE, Modifier.weight(1f)) { variant = ModelVariant.BASE }
+            ModeChip("标准 1.5B · 1GB", true, Modifier.weight(1f)) { }
         }
-        HintLine("内存 ≤ 6GB 的机型请用轻量版，标准版加载后容易被系统回收。", MaterialTheme.colorScheme.onSurfaceVariant)
+        HintLine("统一使用 1.5B 模型：回复质量与速度最佳平衡；内存不足时 App 会在加载前自动提示。", MaterialTheme.colorScheme.onSurfaceVariant)
 
         /* —— 在线下载：魔搭 Qwen 官方 GGUF 直链 + 断点续传 + 进度条 —— */
         when (val st = downloadUi) {
@@ -392,6 +538,8 @@ private fun LocalModelPanel(
                         val ok = engine.load(dir.absolutePath) { step -> loadMsg = step }
                         if (ok) {
                             LocalLlmRuntime.activate(engine)
+                            // 死命令 #3：加载成功即持久化「已加载」标志 → 下次冷启动静默自动加载
+                            onLoadedChange(true)
                             loadMsg = "已加载 ${engine.name}，离线推理就绪"
                         } else {
                             // load() 内部已把具体原因（OOM / 文件损坏 / 原生库缺失）写到 loadMsg
@@ -404,19 +552,51 @@ private fun LocalModelPanel(
             ) { Text("加载模型", maxLines = 1) }
             OutlinedButton(
                 onClick = {
-                    LocalLlmRuntime.engine.release()
-                    LocalLlmRuntime.activate(MockLlmEngine)
-                    loadMsg = "已卸载本地模型，释放内存"
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        // ① 先强制释放引擎 fd + 置空引用（unloadAndDelete 内部已调 release），
+                        //    延迟 120ms 等 native 交还句柄，再物理删除模型目录；删不掉则写逻辑卸载标记。
+                        val dir = if (local.modelDir.isNotBlank()) java.io.File(local.modelDir)
+                        else LocalModelManager.modelDir(context, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME)
+                        val ok = LocalModelManager.unloadAndDelete(context, dir)
+                        // ② 引擎引用复位为 Mock（避免状态卡残留）
+                        LocalLlmRuntime.activate(MockLlmEngine)
+                        // ③ 清除「已下载」与「已加载」标记，UI 状态与事实一致（否则冷启动会白加载）
+                        onLoadedChange(false)
+                        onLocalChange(local.copy(downloaded = false, modelDir = "", sizeBytes = 0))
+                        loadMsg = if (ok) "已卸载模型并释放空间" else "已标记卸载，重启应用后清理残留文件"
+                    }
                 },
                 modifier = Modifier.weight(1f)
             ) { Text("卸载释放", maxLines = 1) }
         }
         loadMsg?.let { HintLine(it, MaterialTheme.colorScheme.onSurfaceVariant) }
 
-        /* —— 旧能力（默认收起）：本机自建 OpenAI 兼容服务端口 / .zip 插件 —— */
+        /* —— 旧能力（默认收起）：本机自建 OpenAI 兼容服务端口 / .zip 插件 ——
+           改为与整体设置项风格一致的「列表项」：左侧标题、右侧箭头，点击展开/收起，
+           不再用孤立的文本按钮挂在底部。 */
         var showAdvanced by remember { mutableStateOf(false) }
-        TextButton(onClick = { showAdvanced = !showAdvanced }) {
-            Text(if (showAdvanced) "收起高级选项" else "高级选项", maxLines = 1)
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showAdvanced = !showAdvanced }
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    if (showAdvanced) "高级选项（点击收起）" else "高级选项",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         if (showAdvanced) {
             GlassTextField(
@@ -513,7 +693,7 @@ private fun LocalModelGuide(onDismiss: () -> Unit) {
 
                 GuideSection("二、准备模型文件") {
                     GuideBullet("格式", "GGUF（不支持 MNN，已废弃）")
-                    GuideBullet("推荐", "轻量 0.5B（约 360MB）优先；内存 ≥6GB 可选 1.5B（约 1GB）")
+                    GuideBullet("规格", "标准 1.5B（约 1GB，统一档位）")
                     GuideBullet("来源", "在线下载，或电脑下载后传 .gguf / .zip 导入")
                 }
 

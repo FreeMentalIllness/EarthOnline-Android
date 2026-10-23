@@ -174,6 +174,8 @@ class SettingsViewModel @Inject constructor(
     fun parseLocalModel(s: String): LocalModelConfig =
         runCatching { json.decodeFromString<LocalModelConfig>(s) }.getOrDefault(LocalModelConfig())
     fun saveLocalModel(c: LocalModelConfig) = viewModelScope.launch { settings.setLocalModel(json.encodeToString(LocalModelConfig.serializer(), c)) }
+    /** v1.0.6（融合重构）：本地模型「已加载」标志持久化（冷启动静默自动加载依据） */
+    fun setLocalModelLoaded(v: Boolean) = viewModelScope.launch { settings.setLocalModelLoaded(v) }
     fun saveWebDavConfig(c: WebDavConfig) = viewModelScope.launch { settings.setWebdavConfig(json.encodeToString(WebDavConfig.serializer(), c)) }
 
     fun parseAiConfig(s: String): AiConfig =

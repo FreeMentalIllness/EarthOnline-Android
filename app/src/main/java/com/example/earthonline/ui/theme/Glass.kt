@@ -78,15 +78,20 @@ enum class GlassTier { FULL, BLUR, FLAT }
 @Composable
 fun rememberGlassTier(): GlassTier {
     val context = LocalContext.current
-    val lowRam = remember {
+    // v1.0.6.14（死命令 #2 防卡顿）：isLowRamDevice 之外加一道**总内存闸** ——
+    // 总内存 < 4GB 的机型即便系统未标记 low-RAM，GPU/带宽也撑不住全屏高斯，
+    // 一律强制 FLAT（半透明纯色底板，零 GPU 模糊开销，保证列表滚动 60FPS）
+    val flatTier = remember {
         runCatching {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            am?.isLowRamDevice == true
+            val info = android.app.ActivityManager.MemoryInfo()
+            am?.getMemoryInfo(info)
+            am?.isLowRamDevice == true || info.totalMem in 1 until 4_000_000_000L
         }.getOrDefault(false)
     }
     return when {
-        Build.VERSION.SDK_INT >= 33 && !lowRam -> GlassTier.FULL
-        Build.VERSION.SDK_INT >= 31 && !lowRam -> GlassTier.BLUR
+        Build.VERSION.SDK_INT >= 33 && !flatTier -> GlassTier.FULL
+        Build.VERSION.SDK_INT >= 31 && !flatTier -> GlassTier.BLUR
         else -> GlassTier.FLAT
     }
 }

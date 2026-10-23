@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -37,6 +38,9 @@ class EarthOnlineApp : Application(), Configuration.Provider {
 
     /** v1.0.5：回收站 30 天到期物理清理（启动触发点，另一处在打开回收站页时） */
     @Inject lateinit var recycleBin: com.example.earthonline.data.repository.RecycleBinRepository
+
+    /** v1.0.6（融合重构）：JSON 解析（解析 AI 配置，供冷启动自动加载判断） */
+    @Inject lateinit var json: Json
 
     /**
      * 用 Hilt 的 WorkerFactory 构造 WorkManager 配置。
@@ -66,6 +70,9 @@ class EarthOnlineApp : Application(), Configuration.Provider {
             if (enabled) ReminderScheduler.schedule(this@EarthOnlineApp)
             // v1.0.5：启动即清理回收站中软删超过 30 天的行（ISO 串字典序比较）
             runCatching { recycleBin.purgeExpired(purgeCutoffIso()) }
+            // v1.0.6（融合重构 · 死命令 #3）：模型状态持久化 —— 上次手动加载过就静默自动加载，
+            // 用户无需再点「加载模型」，UI 直接显示「引擎已就绪」
+            restoreLocalModelIfLoaded()
         }
         // v1.2.1：本地自动备份 —— 注册 Room 表变更监听（幂等，内部有 started 标志）
         autoBackup.start()
@@ -81,5 +88,46 @@ class EarthOnlineApp : Application(), Configuration.Provider {
         val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
         fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
         return fmt.format(cal.time)
+    }
+
+    /**
+     * v1.0.6（融合重构 · 死命令 #3）：冷启动静默恢复本地模型。
+     *
+     * 触发条件全部满足才加载（任一不满足直接返回，绝不惊动用户）：
+     *  ① DataStore「已加载」标志为 true（用户上次手动加载成功后写入）；
+     *  ② AI 三态开关不是「关闭」；
+     *  ③ 模型目录里确实还有 GGUF（卸载 / 清数据后标志可能残留，缺文件就不加载）；
+     *  ④ 加载前体检通过（非 arm64 / 低内存机型照旧零 JNI）。
+     * 加载在专属 llm 线程串行执行；失败则把标志复位，避免下次启动白跑一遍。
+     */
+    private suspend fun restoreLocalModelIfLoaded() {
+        runCatching {
+            if (!settings.localModelLoaded.first()) return
+            val runMode = runCatching {
+                json.decodeFromString<com.example.earthonline.data.network.AiConfig>(settings.aiConfig.first())
+            }.getOrNull()?.runMode
+            if (runMode == "off") return
+            val localCfg = runCatching {
+                json.decodeFromString<com.example.earthonline.data.network.LocalModelConfig>(settings.localModel.first())
+            }.getOrNull()
+            val dir = java.io.File(
+                localCfg?.modelDir?.takeIf { it.isNotBlank() }
+                    ?: com.example.earthonline.ui.ai.LocalModelManager
+                        .modelDir(this, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME).absolutePath
+            )
+            if (!com.example.earthonline.ui.ai.LocalModelManager.hasGguf(dir)) return
+            val diag = com.example.earthonline.ui.ai.LocalLlmRuntime.diagnose(dir)
+            if (diag is com.example.earthonline.ui.ai.LocalLlmSupport.Blocked) return
+            val engine = com.example.earthonline.ui.ai.LocalLlmRuntime.engineFor(dir)
+            if (engine === com.example.earthonline.ui.ai.MockLlmEngine) return
+            val ok = engine.load(dir.absolutePath)
+            if (ok) {
+                com.example.earthonline.ui.ai.LocalLlmRuntime.activate(engine)
+                android.util.Log.i("EarthOnline-LLM", "冷启动自动加载完成：${engine.name}")
+            } else {
+                // 文件可能被系统清理 / 损坏：复位标志，避免每次启动白跑
+                settings.setLocalModelLoaded(false)
+            }
+        }
     }
 }

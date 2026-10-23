@@ -297,8 +297,13 @@ fun MainScaffold(
                         // v1.0.11：壁纸模糊度滑块（0 时不挂 blur，避免无谓的离屏合成开销）
                         // v1.0.6.7：全屏 blur 是本项目最贵的一处 GPU 操作（每帧一次全屏高斯），
                         // 这里给半径加 12dp 硬上限 —— 超出部分观感收益极低但开销指数上升。
+                        // v1.0.6.14（死命令 #2 防卡顿）：FLAT / BLUR 档（低内存 / 旧机型）直接不挂
+                        // 全屏高斯 —— 壁纸以清晰图 + 蒙层呈现，列表滚动稳 60FPS。
                         .then(
-                            if (wallpaperBlur > 0.5f) Modifier.blur(wallpaperBlur.coerceAtMost(MAX_WALLPAPER_BLUR_DP).dp)
+                            if (wallpaperBlur > 0.5f &&
+                                com.example.earthonline.ui.theme.rememberGlassTier() ==
+                                com.example.earthonline.ui.theme.GlassTier.FULL
+                            ) Modifier.blur(wallpaperBlur.coerceAtMost(MAX_WALLPAPER_BLUR_DP).dp)
                             else Modifier
                         ),
                     contentScale = ContentScale.Crop

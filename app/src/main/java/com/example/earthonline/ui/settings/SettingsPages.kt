@@ -367,6 +367,7 @@ fun GeneralRoute(
         AiConfigDialog(
             initial = vm.parseAiConfig(aiConfigJson),
             localModel = vm.parseLocalModel(localModelJson),
+            onLoadedChange = { vm.setLocalModelLoaded(it) },
             onDismiss = { showAiConfig = false }
         ) { cfg, local -> vm.saveAiConfig(cfg); vm.saveLocalModel(local); showAiConfig = false }
     }

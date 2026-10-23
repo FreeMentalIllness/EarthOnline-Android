@@ -1,9 +1,18 @@
 package com.example.earthonline.ui.ai
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Send
@@ -13,11 +22,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.GlassTextField
+import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.settings.AiConfigDialog
 import com.example.earthonline.ui.theme.GlassSurface
@@ -41,6 +53,21 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val listState = rememberLazyListState()
+    // v1.0.6.14（死命令 #2 重组优化）：打字指示器显隐用 derivedStateOf 收敛——
+    // 仅在 loading 或最后一条 assistant 消息空→非空跃迁时才触发 LazyColumn 内容重组，
+    // 流式过程中每个 token 到达不再引发整屏级重新求值
+    val showTyping by remember {
+        derivedStateOf {
+            val last = messages.lastOrNull()
+            loading && last != null && last.role == "assistant" && last.content.isEmpty()
+        }
+    }
+
+    // 退出对话页时中断后台推理协程：本地推理在 viewModelScope 内跑，页面销毁即取消，
+    // 这里再显式 cancelGeneration() 兜底，杜绝「页面已销毁、协程仍在写 UI State」的越界闪退。
+    DisposableEffect(Unit) {
+        onDispose { vm.cancelGeneration() }
+    }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -119,8 +146,10 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
                     key = { index -> "ai_msg_$index" },
                     contentType = { index -> messages[index].role }
                 ) { index -> MessageBubble(messages[index]) }
-                if (loading) {
-                    item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                // 死命令 #1 状态联动：仅在「请求中且首个流式字符尚未上屏」时显示三点跳动；
+                // 第一个字一到，最后一条 assistant 消息非空 → 指示器瞬间消失，替换为文字。
+                if (showTyping) {
+                    item(key = "ai_typing") { TypingIndicator() }
                 }
             }
         }
@@ -130,6 +159,7 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
         AiConfigDialog(
             initial = vm.parseAiConfig(aiConfigJson),
             localModel = vm.parseLocalModel(localModelJson),
+            onLoadedChange = { vm.setLocalModelLoaded(it) },
             onDismiss = { showConfig = false }
         ) { cfg, local ->
             vm.saveAiConfig(cfg)
@@ -149,6 +179,8 @@ private fun MessageBubble(msg: UiMessage) {
         GlassSurface(
             shape = RoundedCornerShape(16.dp),
             showBorder = true,
+            // 死命令 #6 视觉融合：用户气泡提高玻璃不透明度区分阵营，材质仍是同一套液态玻璃
+            tintOverride = if (isUser) 0.9f else null,
             modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Text(
@@ -156,6 +188,74 @@ private fun MessageBubble(msg: UiMessage) {
                 modifier = Modifier.padding(12.dp),
                 fontWeight = if (isUser) FontWeight.Normal else FontWeight.Medium
             )
+        }
+    }
+}
+
+/**
+ * 死命令 #1：三点跳动打字指示器（Typing Indicator）。
+ * - 替换旧的 LinearProgressIndicator（气泡下方横穿全屏的进度条，丑且突兀）；
+ * - `rememberInfiniteTransition` 驱动三枚圆点错峰上跳，极度轻量（仅 translationY）；
+ * - 颜色用应用主题的 AI 暖色（ModuleTints.Ai · 星紫）；
+ * - 状态联动由调用方控制：最后一个字流式上屏后本组件直接离开组合，动画零残留。
+ */
+@Composable
+private fun TypingIndicator() {
+    val tint = ModuleTints.Ai
+    val transition = rememberInfiniteTransition(label = "typing")
+    // 三枚圆点各自持 State（错峰 150ms），值在 graphicsLayer 块内延迟读取 ——
+    // 动画每帧只重绘图层，不触发任何重组，极度轻量
+    val d0 = transition.animateFloat(
+        initialValue = 0f, targetValue = -5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(340, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(0)
+        ),
+        label = "dot0"
+    )
+    val d1 = transition.animateFloat(
+        initialValue = 0f, targetValue = -5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(340, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(150)
+        ),
+        label = "dot1"
+    )
+    val d2 = transition.animateFloat(
+        initialValue = 0f, targetValue = -5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(340, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+            initialStartOffset = StartOffset(300)
+        ),
+        label = "dot2"
+    )
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        GlassSurface(
+            shape = RoundedCornerShape(16.dp),
+            showBorder = true
+        ) {
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val dots = listOf(d0, d1, d2)
+                dots.forEachIndexed { i, state ->
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .graphicsLayer { translationY = state.value }
+                            .background(tint.copy(alpha = 0.95f - i * 0.18f), CircleShape)
+                            .clip(CircleShape)
+                    )
+                }
+            }
         }
     }
 }

@@ -67,6 +67,8 @@ import com.example.earthonline.data.local.entity.TaskEntity
 import com.example.earthonline.data.network.AiConfig
 import com.example.earthonline.data.network.AiRepository
 import com.example.earthonline.data.network.LocalModelConfig
+import com.example.earthonline.ui.ai.AI_MEMORY_ABORT_MSG
+import com.example.earthonline.ui.ai.LocalLlmRuntime
 import com.example.earthonline.ui.ai.LocalModelManager
 import com.example.earthonline.data.network.ChatMessage
 import com.example.earthonline.data.repository.ActivityRepository
@@ -82,11 +84,13 @@ import com.example.earthonline.util.todayStr
 import com.example.earthonline.util.uid
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -145,10 +149,13 @@ object QuickIntentDecoder {
     /**
      * 系统提示词：把「分类 + 抽取」这件事完整交给大模型，并要求严格 JSON 输出。
      * 带上今天日期与星期，模型才能正确换算「明天 / 下周三」这类相对时间。
+     * v1.0.6（融合重构 · 死命令 #4）：带上用户昵称，生成的标题能正确处理
+     * 「给Z买生日礼物」这类与用户本人相关的表达。
      */
-    fun systemPrompt(today: String, weekday: String): String =
+    fun systemPrompt(today: String, weekday: String, nickname: String? = null): String =
         "你是「地球Online」这个个人事务 App 的输入解析器。用户会随手说一句话，你要判断它属于哪一类并抽取字段。\n" +
             "今天的日期是 $today（$weekday）。\n" +
+            (if (nickname.isNullOrBlank()) "" else "用户昵称是「$nickname」，输入里提到「我」即指该用户。\n") +
             "只输出一行 JSON，不要解释、不要 Markdown 代码块、不要多余文字：\n" +
             "{\"type\":\"task|item|note|ledger\",\"title\":\"\",\"time\":\"\",\"amount\":null,\"note\":\"\"}\n" +
             "type 判定规则：\n" +
@@ -162,18 +169,24 @@ object QuickIntentDecoder {
             "- amount：金额（元，纯数字）；ledger 必填，其余填 null。\n" +
             "- note：补充说明，没有就填空字符串。"
 
-    /** 从模型返回的文本里还原结构化意图；失败返回 null */
-    fun decode(text: String, fallbackTitle: String): QuickIntent? {
-        val trimmed = text.trim()
-        val start = trimmed.indexOf('{')
-        val end = trimmed.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
+    /**
+     * 从模型返回的文本里还原结构化意图。**任何异常都返回 null**（runCatching 兜底），
+     * 由调用方走兜底逻辑，绝不闪退。
+     * v1.0.6.11 增强：① 剥离 ```json ... ``` 代码围栏（模型常带 Markdown 标记）；
+     * ② 用平衡括号扫描提取第一个完整 JSON 对象，容忍前后多余解释文字；
+     * ③ 整个解析包在 try-catch 内，遇到截断 / 非法 JSON 直接返回 null。
+     */
+    fun decode(text: String, fallbackTitle: String): QuickIntent? = runCatching {
+        var raw = text.trim()
+        // ① 去 Markdown 代码围栏：```json\n{...}\n``` 或 ```\n{...}\n```
+        if (raw.contains("```")) {
+            raw = raw.replace("```", "").replaceFirst(Regex("^\\s*json", RegexOption.IGNORE_CASE), "").trim()
+        }
+        // ② 提取第一个平衡 JSON 对象（容忍前后解释文字、正确处理字符串内的括号）
+        val objText = extractJsonObject(raw) ?: return null
+        val obj = Json.parseToJsonElement(objText) as? JsonObject ?: return null
 
-        val obverse = runCatching {
-            Json.parseToJsonElement(trimmed.substring(start, end + 1)) as JsonObject
-        }.getOrNull() ?: return null
-
-        val type = (obverse["type"] as? JsonPrimitive)?.content?.trim()?.lowercase(Locale.US)
+        val type = (obj["type"] as? JsonPrimitive)?.content?.trim()?.lowercase(Locale.US)
             ?: return null
         val kind = when (type) {
             "task" -> QuickKind.TASK
@@ -183,33 +196,65 @@ object QuickIntentDecoder {
             else -> return null
         }
 
-        val title = (obverse["title"] as? JsonPrimitive)?.content
+        val title = (obj["title"] as? JsonPrimitive)?.content
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: fallbackTitle
 
-        val due = (obverse["time"] as? JsonPrimitive)?.content
+        val due = (obj["time"] as? JsonPrimitive)?.content
             ?.trim()
             ?.takeIf { DATE.matches(it) }
 
-        val amount = (obverse["amount"] as? JsonPrimitive)?.content
+        val amount = (obj["amount"] as? JsonPrimitive)?.content
             ?.trim()
             ?.toDoubleOrNull()
 
-        return QuickIntent(
+        QuickIntent(
             kind = kind,
             title = if (kind == QuickKind.MEMO) fallbackTitle else title,
             dueDate = due.takeIf { kind == QuickKind.TASK },
             amount = amount.takeIf { kind == QuickKind.LEDGER }
         )
+    }.getOrNull()
+
+    /** 提取文本里第一个匹配的平衡 { ... } 子串（正确处理字符串内的括号与转义） */
+    private fun extractJsonObject(s: String): String? {
+        val start = s.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inStr = false
+        var esc = false
+        for (i in start until s.length) {
+            val c = s[i]
+            if (inStr) {
+                when {
+                    esc -> esc = false
+                    c == '\\' -> esc = true
+                    c == '"' -> inStr = false
+                }
+            } else {
+                when (c) {
+                    '"' -> inStr = true
+                    '{' -> depth++
+                    '}' -> {
+                        depth--
+                        if (depth == 0) return s.substring(start, i + 1)
+                    }
+                }
+            }
+        }
+        return null
     }
 }
 
 /** AI 接口就绪状态（抽屉顶部展示用） */
 data class AiHubStatus(
+    /** 是否可用：云端配置了 Key **或** 本地模型已加载（Loaded）二者其一即为 true（死命令 #3） */
     val configured: Boolean = false,
     val model: String = "",
-    val host: String = ""
+    val host: String = "",
+    /** 本地引擎是否真正就绪（与云端 Key 独立的状态位） */
+    val localLoaded: Boolean = false
 )
 
 /**
@@ -226,6 +271,10 @@ class AiQuickHubViewModel @Inject constructor(
     private val memoRepo: MemoRepository,
     private val activityRepo: ActivityRepository,
     private val aiRepo: AiRepository,
+    /** v1.0.6（融合重构 · 死命令 #4）：个人资料 —— 分类 prompt 带上用户昵称 */
+    private val profileRepo: com.example.earthonline.data.repository.ProfileRepository,
+    /** v1.0.6（融合重构 · 死命令 #5 数据同步）：全局对话历史 —— 快捷对话进入对话页可见 */
+    private val chatHistory: com.example.earthonline.data.repository.AiChatHistoryRepository,
     private val settings: SettingsDataStore,
     private val json: Json,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context
@@ -235,20 +284,23 @@ class AiQuickHubViewModel @Inject constructor(
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     /** AI 配置是否齐全（三项都填了才算可用） */
-    val aiStatus: StateFlow<AiHubStatus> = settings.aiConfig
-        .map { raw ->
-            val cfg = parseConfig(raw)
-            AiHubStatus(
-                configured = cfg != null,
-                model = cfg?.model.orEmpty(),
-                host = cfg?.baseUrl
-                    ?.trim()
-                    ?.removePrefix("https://")
-                    ?.removePrefix("http://")
-                    ?.substringBefore("/")
-                    .orEmpty()
-            )
-        }
+    val aiStatus: StateFlow<AiHubStatus> = combine(settings.aiConfig, LocalLlmRuntime.engineReady) { raw, localReady ->
+        val cfg = parseConfig(raw)
+        val cloudOk = cfg != null
+        // 死命令 #3：只要云端配置了 Key **或** 本地模型已加载（Loaded），快捷中枢即可用
+        val ready = cloudOk || localReady
+        AiHubStatus(
+            configured = ready,
+            model = if (localReady) "本地模型" else cfg?.model.orEmpty(),
+            host = if (localReady) "离线" else cfg?.baseUrl
+                ?.trim()
+                ?.removePrefix("https://")
+                ?.removePrefix("http://")
+                ?.substringBefore("/")
+                .orEmpty(),
+            localLoaded = localReady
+        )
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AiHubStatus())
 
     private fun parseConfig(raw: String): AiConfig? {
@@ -261,6 +313,10 @@ class AiQuickHubViewModel @Inject constructor(
 
     private fun parseLocal(raw: String): LocalModelConfig =
         runCatching { json.decodeFromString<LocalModelConfig>(raw) }.getOrDefault(LocalModelConfig())
+
+    /** 用户昵称（未填写返回 null）——分类 prompt 带上它，标题才能正确处理「我」相关表达 */
+    private suspend fun nicknameOrNull(): String? =
+        runCatching { profileRepo.get()?.name?.takeIf { it.isNotBlank() } }.getOrNull()
 
     /** 缺哪一项就提示哪一项，别让用户猜 */
     private fun missingHint(cfg: AiConfig?): String? = when {
@@ -291,6 +347,9 @@ class AiQuickHubViewModel @Inject constructor(
                     "local" -> localIntent(raw)
                     else -> cloudIntent(raw)
                 }
+                // 死命令 #5 数据同步：快捷中枢的这次对话（输入 + 结果）追加进全局 ChatHistory，
+                // 进入 AI 对话页能看见完整脉络；写历史失败绝不影响主流程
+                runCatching { chatHistory.append(raw, message) }
                 onDone(message)
             } catch (t: Throwable) {
                 onDone(fallbackNote(raw, friendlyError(t)))
@@ -327,14 +386,18 @@ class AiQuickHubViewModel @Inject constructor(
      */
     private suspend fun localIntent(raw: String): String {
         val localCfg = parseLocal(settings.localModel.first())
-        val dir = java.io.File(
-            localCfg.modelDir.ifBlank {
-                LocalModelManager.modelDir(appContext, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME).absolutePath
-            }
-        )
+        /* v1.0.6.14（死命令 #3 主线程守护）：目录解析（含 mkdirs 磁盘 I/O）与
+           体检（ActivityManager 系统调用）整体移入 IO 协程，主线程只留结果判定。 */
+        val (dir, diag) = withContext(Dispatchers.IO) {
+            val d = java.io.File(
+                localCfg.modelDir.ifBlank {
+                    LocalModelManager.modelDir(appContext, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME).absolutePath
+                }
+            )
+            d to com.example.earthonline.ui.ai.LocalLlmRuntime.diagnose(d)
+        }
         /* 加载/推理前先体检：架构、总内存、可用内存任一不过关都不碰 JNI，直接降级云端。
            native 崩溃（SIGABRT / SIGSEGV / OOM-kill）Java 层拦不住，必须在源头挡住。 */
-        val diag = com.example.earthonline.ui.ai.LocalLlmRuntime.diagnose(dir)
         if (diag is com.example.earthonline.ui.ai.LocalLlmSupport.Blocked) {
             return cloudIntent(raw, diag.short)
         }
@@ -345,12 +408,16 @@ class AiQuickHubViewModel @Inject constructor(
         return try {
             val content = engine.chat(
                 listOf(
-                    ChatMessage("system", QuickIntentDecoder.systemPrompt(todayStr(), weekdayCn())),
+                    ChatMessage("system", QuickIntentDecoder.systemPrompt(todayStr(), weekdayCn(), nicknameOrNull())),
                     ChatMessage("user", raw)
                 )
             ) { /* 流式增量：快捷中枢一次出结果，无需逐段上屏 */ }
             val intent = content?.let { QuickIntentDecoder.decode(it, raw) }
-            if (intent == null) cloudIntent(raw, "本地模型返回无法解析")
+            if (intent == null) {
+                // 内存看门狗中断：如实告知原因并降级云端，不误报成「返回无法解析」
+                if (content == AI_MEMORY_ABORT_MSG) cloudIntent(raw, "本地推理因设备内存不足被中断")
+                else cloudIntent(raw, "本地模型返回无法解析")
+            }
             else save(intent, raw)
         } catch (t: Throwable) {
             cloudIntent(raw, "本地推理失败：${friendlyError(t)}")
@@ -368,7 +435,7 @@ class AiQuickHubViewModel @Inject constructor(
                 aiRepo.chat(
                     effective,
                     listOf(
-                        ChatMessage("system", QuickIntentDecoder.systemPrompt(today, weekday)),
+                        ChatMessage("system", QuickIntentDecoder.systemPrompt(today, weekday, nicknameOrNull())),
                         ChatMessage("user", raw)
                     )
                 )
@@ -551,6 +618,9 @@ fun AiQuickHubSheet(
         onDismissRequest = { close() },
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
+        // 死命令 #6 视觉融合：弹出时底层加半透明遮罩（默认 scrim 太浅，压不住主页花背景；
+        // 面板本身已是液态玻璃毛玻璃，遮罩 + 玻璃 = 主页同款观感）
+        scrimColor = Color.Black.copy(alpha = 0.45f),
         // inset 自理（面板自带 navigationBarsPadding + imePadding），防双重垫高
         contentWindowInsets = { WindowInsets(0) },
         dragHandle = null
@@ -611,7 +681,11 @@ fun AiQuickHubSheet(
                     )
                     Spacer(Modifier.size(8.dp))
                     Text(
-                        if (status.configured) "智能识别已启用 · ${status.model}" else "未配置 AI 接口，将原文存为笔记",
+                        when {
+                            status.localLoaded -> "本地模型已加载 · 离线识别已启用"
+                            status.configured -> "智能识别已启用 · ${status.model}"
+                            else -> "未配置 AI 接口，将原文存为笔记"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = statusTint,
                         fontWeight = FontWeight.SemiBold,

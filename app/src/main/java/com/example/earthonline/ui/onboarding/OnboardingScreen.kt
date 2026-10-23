@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -145,20 +147,34 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                         onSelect = { vm.gender = it }
                     )
 
-                    GlassTextField(
-                        value = vm.birthDate,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = "出生日期 *",
-                        placeholder = "yyyy/mm/dd",
-                        isError = tried && vm.birthDate.isBlank(),
-                        trailingIcon = {
-                            IconButton({ showDatePicker = true }) {
-                                Icon(Icons.Rounded.DateRange, contentDescription = "选择日期")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    /* v1.0.6.15（体验巡检修复）：出生日期字段整体可点。
+                       原 readOnly 字段点文本区会抢焦点弹出**无法输入**的键盘（占位 yyyy/mm/dd
+                       只是展示文本），真实用户会以为坏了；只有右下角小日历图标才弹选择器。
+                       现在整字段盖一层透明点击层 → 点任意位置直接弹日期选择器，键盘不再出现。 */
+                    Box {
+                        GlassTextField(
+                            value = vm.birthDate,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = "出生日期 *",
+                            placeholder = "yyyy/mm/dd",
+                            isError = tried && vm.birthDate.isBlank(),
+                            trailingIcon = {
+                                IconButton({ showDatePicker = true }) {
+                                    Icon(Icons.Rounded.DateRange, contentDescription = "选择日期")
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { showDatePicker = true }
+                        )
+                    }
 
                     LabeledDropdown(
                         label = "选择区服 · 国家",
@@ -278,6 +294,23 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+
+        // v1.0.6（b51）：右上角「跳过」——不想现在填资料的用户一键直达主页。
+        // 不写任何资料，只标记 onboarding_done=true（Root 的分流数据流自动切换），
+        // 资料以后可随时在「设置 → 个人资料」补填，AI 也会诚实地以「尚未填写资料」应对。
+        TextButton(
+            onClick = { vm.skip() },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(top = 4.dp, end = 8.dp)
+        ) {
+            Text(
+                "跳过",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 
@@ -468,4 +501,7 @@ class OnboardingViewModel @Inject constructor(
             settings.setOnboardingDone(true)
         }
     }
+
+    /** v1.0.6：跳过引导 —— 不写任何资料直接进主页，资料以后可在设置里补 */
+    fun skip() = viewModelScope.launch { settings.setOnboardingDone(true) }
 }

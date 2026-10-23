@@ -49,7 +49,15 @@ android {
         // versionCode 40 = v1.0.6（补丁批二）：笔记伪粗体(Shadow合成) + 日期默认今天 + 清除数据彻底化
         // + 加载失败明确原因 + 内存格式 2.1 GB + 架构/模拟器双门控加固。
         // versionCode 41 = v1.0.6（收尾批）：开启 R8 混淆(minify) + 推理/富文本库保留规则 + 内存不足(<2GB)阻断提示 + 伪粗体加厚。
-        versionCode = 41
+        // versionCode 44 = v1.0.6（AI 深度修复批）：对话滑动窗口+专属单线程+onCleared中断+流式try-catch；导入返回具体原因(含MNN不支持)；快捷中枢 isAiReady 合并本地引擎 ready 流。
+        // versionCode 45 = v1.0.6（AI 彻底融合批）：三点跳动打字指示器（首字即隐）；模型只留 1.5B；模型状态持久化+冷启动静默自动加载；个人资料注入 system prompt（AI 认识用户，能算年龄）；引擎生成 Mutex 排队防并发崩溃；快捷中枢对话同步进全局 ChatHistory；快捷中枢半透明遮罩+用户气泡玻璃加深。
+        // versionCode 46 = v1.0.6（Redmi Note 12 Pro / 8GB 防闪退专项）：n_ctx 2048→1024（红线 ≤2048）；历史截断只留最近 2 轮；线程恒 4；生成前内存预检+每秒内存看门狗（<500MB 立即中断生成并 Toast「设备内存不足…」）；年龄改代码层计算注入事实（绝不让模型算）+生日=今天占位兜底。
+        // versionCode 47 = v1.0.6（应用内助理收口批）：快捷中枢引擎级防闪退（release/load 与生成全互斥、推理实例锁内捕获、调度器 Dispatchers.IO.limitedParallelism(1)、最新问题截断保留不丢弃）；强约束 Prompt（仅应用内问答+拒绝无关问题+未完成任务/最近笔记摘要注入）；云端配置「测试连接」按钮（/models 优先+1token 回退+精确错误码+耗时）。
+        // versionCode 48 = v1.0.6（模拟器实证+全局防卡顿批）：x86_64 AVD 实测取证（门控日志 load blocked / 零 FATAL / 进程存活）；不支持架构禁用「本地模型」选项并提示；全局毛玻璃防卡顿（总内存<4GB 强制 FLAT 纯色档+壁纸全屏高斯仅 FULL 档挂载）；主线程 I/O 收口（scan/hasGguf/内存快照/目录解析与体检全部移入 IO）；打字指示器显隐 derivedStateOf 化。
+        // versionCode 49 = v1.0.6（全维沉浸巡检批）：首启出生日期字段整体可点（原 readOnly 字段点击弹无效键盘，真实用户困惑点，修复为全字段点击直接弹日期选择器）。
+        // versionCode 50 = v1.0.6（巡检 P1 修复批）：DataStore 加 ReplaceFileCorruptionHandler —— 偏好文件损坏（低存储写入中断等）从「每次启动必崩的无限循环」修复为「回退空偏好自动重建」，最多丢偏好、绝不闪退。
+        // versionCode 51 = v1.0.6（Tool Calling 终版批）：AI 对话支持 OpenAI 兼容 tools —— 模型可调用本地工具 create_task / complete_task / create_note（Room 落库 + 动态/XP 流水同口径），结果回传生成最终回复；服务端不支持 tools 时自动剥掉重试，绝不崩溃。首启引导右上角新增「跳过」。
+        versionCode = 51
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

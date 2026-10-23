@@ -21,3 +21,4 @@ setup_release_signing.bat
 # 应用级密钥配置（内含高德 Web 服务 Key，严禁入库）
 # 模板见 Docs/AppConfig.kt.template，克隆后按模板新建同名文件即可编译
 app/src/main/java/com/example/earthonline/AppConfig.kt
+.kotlin/

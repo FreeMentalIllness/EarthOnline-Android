@@ -36,8 +36,18 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
          * BootReceiver 会手动 new SettingsDataStore(context)（绕过 Hilt），
          * 委托在类体时每个实例各自持有一个 DataStore，同一文件双实例直接崩
          *（IllegalStateException: multiple DataStores active for the same file）。
+         *
+         * v1.0.6.15（沉浸巡检发现）：加 ReplaceFileCorruptionHandler ——
+         * 偏好文件损坏（低存储写入中断 / root 误写等）时默认行为是抛
+         * CorruptionException，且**每次启动都重抛** = 无限崩溃循环，用户只能卸载重装。
+         * 现在损坏时回退空偏好并自动重建文件，最多丢偏好设置、绝不崩。
          */
-        private val Context.dataStore by preferencesDataStore(name = "earth_settings")
+        private val Context.dataStore by preferencesDataStore(
+            name = "earth_settings",
+            corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler {
+                androidx.datastore.preferences.core.emptyPreferences()
+            }
+        )
 
         val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         val THEME = stringPreferencesKey("earth_theme")
@@ -104,6 +114,18 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
          *   保障低端机与旧机型绝对流畅。读取方见 ui/theme/Glass.kt 的 GlassSurface。
          */
         val LIQUID_GLASS = booleanPreferencesKey("liquid_glass")
+        /**
+         * v1.0.6（融合重构）：本地模型「已加载」持久化标志。
+         * true = 用户上次手动加载成功；下次冷启动由 EarthOnlineApp 在后台静默自动加载，
+         * 无需再点「加载模型」——卸载 / 清数据时必须清掉本键，否则会每次启动都白加载。
+         */
+        val LOCAL_MODEL_LOADED = booleanPreferencesKey("local_model_loaded")
+        /**
+         * v1.0.6（融合重构）：AI 对话全局历史（JSON 列表，最近 100 条封顶）。
+         * 对话页与主页快捷中枢共享同一份 —— 快捷中枢的识别对话也会追加进来，
+         * 进入对话页能看见完整脉络。
+         */
+        val AI_CHAT_HISTORY = stringPreferencesKey("ai_chat_history")
     }
 
     val onboardingDone: Flow<Boolean> = ds.data.map { it[ONBOARDING_DONE] ?: false }
@@ -233,6 +255,14 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     val liquidGlass: Flow<Boolean> = ds.data.map { it[LIQUID_GLASS] ?: true }
     suspend fun setLiquidGlass(v: Boolean) = ds.edit { it[LIQUID_GLASS] = v }
 
+    /** v1.0.6（融合重构）：本地模型「已加载」标志（冷启动静默自动加载依据） */
+    val localModelLoaded: Flow<Boolean> = ds.data.map { it[LOCAL_MODEL_LOADED] ?: false }
+    suspend fun setLocalModelLoaded(v: Boolean) = ds.edit { it[LOCAL_MODEL_LOADED] = v }
+
+    /** v1.0.6（融合重构）：AI 对话全局历史原始 JSON（空串 = 无历史） */
+    val aiChatHistoryJson: Flow<String> = ds.data.map { it[AI_CHAT_HISTORY] ?: "" }
+    suspend fun setAiChatHistoryJson(v: String) = ds.edit { it[AI_CHAT_HISTORY] = v }
+
     /**
      * 清空「用户数据键」，保留应用设置键。与 Web 端 resetAllData 的键语义对齐：
      * - 清：自定义时间轴 / 动态流筛选与条数 / 速览入口 / 自定义称号 / 记忆相册元数据 /
@@ -260,6 +290,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         it.remove(WALLPAPER_BLUR)
         it.remove(WALLPAPER_ROTATE)
         it.remove(WALLPAPER_ALBUM)
+        // —— v1.0.6（融合重构）：AI 对话历史属于用户内容，一并清除 ——
+        it.remove(AI_CHAT_HISTORY)
     }
 
     /**

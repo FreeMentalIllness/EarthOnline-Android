@@ -1,18 +1,72 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.example.earthonline.data.network
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
-/** 单条对话消息（OpenAI 兼容格式） */
+/**
+ * v1.0.6（Tool Calling 批）注解说明：
+ * 全局 Json 配置是 encodeDefaults = true（备份/导出语义要求，不可动），
+ * 新加的可空字段若不挂 @EncodeDefault(NEVER)，空值也会被序列化进请求体
+ * （"tools":null / "tool_calls":null），部分严格网关会直接 400。
+ * NEVER 模式 = 值等于默认值时绝不写出；有值时正常写出。解码不受影响。
+ */
+
+/** 单条对话消息（OpenAI 兼容格式）。
+ *  content 可空：模型发起 tool_calls 时协议允许 content=null（多数服务端真的回 null），
+ *  非空类型会在解码阶段直接抛异常，让整条对话报废。 */
 @Serializable
-data class ChatMessage(val role: String, val content: String)
+data class ChatMessage(
+    val role: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val content: String? = null,
+    /** assistant 消息携带：模型请求调用的本地工具列表 */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) @SerialName("tool_calls") val toolCalls: List<ToolCallRequest>? = null,
+    /** role=tool 消息携带：本条执行结果对应的调用 id */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) @SerialName("tool_call_id") val toolCallId: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val name: String? = null
+)
 
 /** chat/completions 请求体 */
 @Serializable
 data class ChatRequest(
     val model: String,
     val messages: List<ChatMessage>,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    /** v1.0.6（Tool Calling 批）：本地工具定义；null = 不传（纯对话请求体与旧版完全一致） */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val tools: List<ToolSpec>? = null
+)
+
+/** function 工具定义（tools 数组元素，OpenAI 兼容） */
+@Serializable
+data class ToolSpec(
+    val type: String = "function",
+    val function: ToolFunctionDef
+)
+
+@Serializable
+data class ToolFunctionDef(
+    val name: String,
+    val description: String = "",
+    /** JSON Schema，JsonObject 原样透传给服务端，客户端不做语义解析 */
+    val parameters: JsonObject = JsonObject(emptyMap())
+)
+
+/** 模型发起的一次工具调用（assistant 消息 tool_calls 数组元素） */
+@Serializable
+data class ToolCallRequest(
+    val id: String = "",
+    val type: String = "function",
+    val function: ToolCallFunction = ToolCallFunction()
+)
+
+@Serializable
+data class ToolCallFunction(
+    val name: String = "",
+    /** OpenAI 约定：arguments 是「JSON 字符串」而非对象，由客户端自行解析 */
+    val arguments: String = ""
 )
 
 @Serializable

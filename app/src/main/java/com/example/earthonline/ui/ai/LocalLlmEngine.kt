@@ -5,14 +5,27 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.example.earthonline.data.network.ChatMessage
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.coroutines.resume
 
 private const val TAG = "EarthOnline-LLM"
+
+/**
+ * 内存看门狗中断生成时的固定文案（v1.0.6.12 · 死命令 #2）。
+ * 引擎返回该串 = 因可用内存跌破 500MB 而中断；AiViewModel 据此弹同文案 Toast。
+ */
+const val AI_MEMORY_ABORT_MSG = "设备内存不足，AI 已中断生成，请尝试清理后台"
 
 /**
  * 本地推理引擎统一接口（v1.0.6.8）。
@@ -45,6 +58,16 @@ interface LocalLlmEngine {
 
     /** 释放底层资源 */
     fun release()
+
+    /**
+     * 挂起等待「进行中的生成结束 + native 资源真正释放」后返回（v1.0.6.13 死命令 #1）。
+     * 默认实现退化为 [release]；真实引擎覆写为在专属线程上持 Mutex 执行，
+     * 供「卸载并删文件」等需要确定 fd 已关闭的调用方使用。
+     */
+    suspend fun releaseAwait() { release() }
+
+    /** 取消正在进行的生成（不释放模型，供页面退出时中断推理协程，避免向已销毁 UI 写数据） */
+    fun cancel()
 }
 
 /**
@@ -82,11 +105,14 @@ object LlamaCppEngine : LocalLlmEngine {
 
     /**
      * 上下文窗口。**必须 ≥ prompt + 生成长度，否则 llama.cpp 的 KV cache 会越界写**。
-     * 旧值 1024 + MAX_TOKENS 512：只要历史稍长，prompt(≈800) + 生成(512) 就超过 1024，
-     * native 层直接 SIGSEGV —— 这正是「引擎已加载但一提问就闪退」的真凶。
-     * 现在 2048 且生成预算动态收缩，永不越界。
+     * v1.0.6.12（Redmi Note 12 Pro / 8GB 专项）：2048 → **1024**。
+     *  - KV cache 随 n_ctx 线性增长，1024 直接砍半（约省 25MB+），配合权重 mmap，
+     *    天玑 1080 这类中端机连续对话不再有内存悬崖；
+     *  - 1024 配合「2 轮历史截断 + 768 token prompt 预算 + 动态生成预算」刚好自洽，
+     *    数学上不可能越界（见 nPredictFor / buildQwenPrompt）；
+     *  - 死命令红线：**绝不允许超过 2048**。
      */
-    private const val CONTEXT_SIZE = 2048
+    private const val CONTEXT_SIZE = 1024
 
     /** 单次生成上限（还要与 prompt 长度一起做动态预算，见 [nPredictFor]） */
     private const val MAX_TOKENS = 256
@@ -94,14 +120,24 @@ object LlamaCppEngine : LocalLlmEngine {
     /** 提示词占用的 token 预算上限：留 1/4 窗口给系统提示与安全余量 */
     private const val PROMPT_TOKEN_BUDGET = (CONTEXT_SIZE * 3) / 4
 
-    /** 生成互斥：native 侧 completion 不可重入，并发会踩坏上下文 */
-    private val genGuard = Any()
-    @Volatile private var generating = false
+    /** 滑动窗口硬上限：**只保留最近 2 轮对话（= 2 条 user + 2 条 assistant）**，更早的整段丢弃。
+     *  v1.0.6.12 死命令：8GB 中端机上历史无限增长 = KV 越界 SIGSEGV（Java 层拦不住），
+     *  2 轮足够支撑连贯追问，又把 prompt 尺寸彻底钉死。 */
+    private const val MAX_TURNS = 4
+
+    /**
+     * 生成互斥（v1.0.6 融合重构 · 死命令 #5 防闪退）：
+     * 从「并发即丢弃」改为 **Mutex 排队** —— 对话页与主页快捷中枢同时发起请求时，
+     * 后到的一个挂起等待前者完成再进 native，请求一条不丢；llama.cpp 上下文仍严格
+     * 串行，绝不并发踩坏 KV cache（那是 Java 层拦不住的 SIGSEGV）。
+     */
+    private val genMutex = Mutex()
 
     /** 解码批大小：512 → 128，KV / 计算缓冲区内存占用降一个量级 */
     private const val BATCH_SIZE = 128
 
-    /** 线程上限：llama.cpp 每线程各持一份 scratch buffer，手机上一律封顶 */
+    /** 线程上限（v1.0.6.12 死命令）：**恒为 4** —— 天玑 1080 只有 4 个 A78 大核有效，
+     *  开到 6~7 线程会把 A55 小核也拉进来做浮点重活，反而互相抢 L3 造成卡顿掉帧。 */
     private const val MAX_THREADS = 4
 
     /** 权重加载超时（秒级）：超时即放弃并给结论，绝不让 UI 永久停在「正在加载」 */
@@ -110,11 +146,28 @@ object LlamaCppEngine : LocalLlmEngine {
     /** 单次生成超时：慢机型 256 token 大约 30~60s，给足余量 */
     private const val GENERATION_TIMEOUT_MS = 180_000L
 
+    /**
+     * 内存看门狗安全阈值（v1.0.6.12 · 死命令 #2）：可用内存低于 **500MB** 即中断生成。
+     * 低于此线继续解码 = 系统随时 LMK 杀进程或 native OOM，宁可主动停也不闪退。
+     */
+    private const val MEMORY_ABORT_THRESHOLD = 500_000_000L
+
+    /**
+     * 采样参数（v1.0.6.10）：Inferkt 的 [com.dilivva.inferkt.ModelSettings] 不含 temperature，
+     * 必须加载后显式 [com.dilivva.inferkt.Inference.setSamplingParams] 才生效；不设置则模型用库
+     * 默认采样（实测极易「变哑巴」或疯狂重复）——这正是此前「模型能加载、但一对话就没反应」的根因之一。
+     * temp=0.7 兼顾创造与稳定；topK=40 / topP=0.9 / minP=0.05 是 Qwen2.5-Instruct 的标准推理配置。
+     */
+    private val SAMPLING = com.dilivva.inferkt.SamplingSettings(
+        temp = 0.7f, topP = 0.9f, minP = 0.05f, topK = 40
+    )
+
     // Inferkt 实例（真实接口：com.dilivva.inferkt.Inference）
     private var inference: com.dilivva.inferkt.Inference? = null
 
     private fun threadCount(): Int =
-        (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, MAX_THREADS)
+        // v1.0.6.12：恒 min(4, 物理核数) —— 大小核异构 SoC 上超过 4 线程必卡（死命令 #1）
+        minOf(MAX_THREADS, Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
 
     private fun acquireLoadSlot(): Boolean {
         synchronized(loadGuard) {
@@ -127,7 +180,7 @@ object LlamaCppEngine : LocalLlmEngine {
     private fun finishLoad() { loading = false }
 
     override suspend fun load(modelDir: String, onProgress: (String) -> Unit): Boolean =
-        withContext(Dispatchers.IO) {
+        withContext(LocalLlmRuntime.llmDispatcher) {
             if (!acquireLoadSlot()) {
                 onProgress("模型正在加载中，请稍候…")
                 return@withContext false
@@ -155,7 +208,9 @@ object LlamaCppEngine : LocalLlmEngine {
                 }
 
                 onProgress("释放旧上下文…")
-                releaseInternal()
+                // 释放必须与进行中的生成互斥（v1.0.6.13）：等 chat 跑完、锁拿到后才释放，
+                // 杜绝「边生成边释放」的 use-after-free SIGSEGV
+                genMutex.withLock { releaseInternal() }
                 onProgress("加载 GGUF 权重（${gguf.length() / 1024 / 1024} MB）…")
                 val inf = com.dilivva.inferkt.createInference()
                 val settings = com.dilivva.inferkt.ModelSettings(
@@ -173,6 +228,7 @@ object LlamaCppEngine : LocalLlmEngine {
                    UI 会一直停在「正在加载…」。超时后取消并给出可操作结论。 */
                 val ok = withTimeoutOrNull(PRELOAD_TIMEOUT_MS) {
                     inf.preloadModel(settings) { _ -> true }
+                        .also { if (it) runCatching { inf.setSamplingParams(SAMPLING) } }
                 } ?: run {
                     Log.w(TAG, "preloadModel 超时（${PRELOAD_TIMEOUT_MS / 1000}s）")
                     runCatching { inf.release() }
@@ -207,60 +263,108 @@ object LlamaCppEngine : LocalLlmEngine {
         }
 
     override suspend fun chat(messages: List<ChatMessage>, onDelta: (String) -> Unit): String? =
-        withContext(Dispatchers.IO) {
-            val inf = inference ?: return@withContext null
+        withContext(LocalLlmRuntime.llmDispatcher) {
             if (!loaded) return@withContext null
-            // 生成互斥：上一次没结束就再点发送，两个 completion 并发会踩坏 native 上下文 → 段错误
-            synchronized(genGuard) {
-                if (generating) return@withContext null
-                generating = true
-            }
+            // Mutex 排队（v1.0.6.13 死命令 #1）：对话页与快捷中枢同时请求时后到者挂起等待，
+            // 请求一条不丢；native completion 严格串行，绝不并发踩坏上下文。
+            // **推理实例必须在锁内捕获** —— 锁外捕获的引用可能已被并发的 load/release 释放
+            // （use-after-free 是快捷中枢闪退的残留根因）。
+            genMutex.withLock {
+            val inf = inference ?: return@withLock null
+            if (!loaded) return@withLock null
             try {
                 val sb = StringBuilder()
+                // 内存预检（死命令 #2）：可用 < 500MB 直接拒绝生成，连 native 都不碰
+                if (LocalLlmRuntime.availableMemoryNow() < MEMORY_ABORT_THRESHOLD) {
+                    Log.w(TAG, "生成前内存预检失败：可用低于 500MB，拒绝生成")
+                    return@withLock AI_MEMORY_ABORT_MSG
+                }
                 val prompt = buildQwenPrompt(messages)
                 val nPredict = nPredictFor(prompt)
                 if (nPredict <= 0) {
                     Log.w(TAG, "提示词已占满上下文窗口（${prompt.length} 字符），拒绝生成以免 KV 越界")
-                    return@withContext "（这台设备的上下文窗口已被当前对话占满，请长按清空对话后重新提问）"
+                    return@withLock "（这台设备的上下文窗口已被当前对话占满，请长按清空对话后重新提问）"
                 }
+                // done 标志：Generated / Error 任一触发后只 resume 一次，杜绝重复 resume 导致的
+                // 「挂起函数已恢复」崩溃；同时兜底 Generated 事件偶发丢失时不会干等整个超时窗。
+                val done = java.util.concurrent.atomic.AtomicBoolean(false)
+                // 内存看门狗标志（死命令 #2）：看门狗协程置位后，生成结束按此决定中断文案
+                val memoryAborted = java.util.concurrent.atomic.AtomicBoolean(false)
                 val result = withTimeoutOrNull(GENERATION_TIMEOUT_MS) {
-                    suspendCancellableCoroutine { cont ->
-                        inf.completion(prompt, nPredict) { event ->
-                            when (event) {
-                                is com.dilivva.inferkt.GenerationEvent.Generating -> {
-                                    val text = event.text
-                                    if (text.isNotEmpty()) {
-                                        sb.append(text)
-                                        onDelta(text)
-                                    }
+                    coroutineScope {
+                        // 看门狗：独立线程每秒轮询可用内存，跌破 500MB 立即请求 native 停止解码 ——
+                        // 主动中断永远好过被系统 LMK 杀进程（死命令 #2）
+                        val watchdog = launch(kotlinx.coroutines.Dispatchers.Default) {
+                            while (isActive) {
+                                delay(1_000)
+                                val avail = LocalLlmRuntime.availableMemoryNow()
+                                if (avail < MEMORY_ABORT_THRESHOLD) {
+                                    memoryAborted.set(true)
+                                    Log.w(TAG, "内存看门狗：可用 ${LocalLlmRuntime.formatBytes(avail)} < 500MB，中断生成")
+                                    runCatching { inf.cancelGeneration() }
+                                    break
                                 }
-                                is com.dilivva.inferkt.GenerationEvent.Generated -> {
-                                    if (cont.isActive) cont.resume(finishText(sb))
-                                }
-                                is com.dilivva.inferkt.GenerationEvent.Error -> {
-                                    if (cont.isActive) cont.resume(null)
-                                }
-                                else -> Unit
                             }
                         }
-                        // 超时 / 取消都会走到这里 → 通知 native 停止解码，避免它继续占着上下文
-                        cont.invokeOnCancellation { runCatching { inf.cancelGeneration() } }
+                        try {
+                            suspendCancellableCoroutine { cont ->
+                                inf.completion(prompt, nPredict) { event ->
+                                    when (event) {
+                                        is com.dilivva.inferkt.GenerationEvent.Generating -> {
+                                            val text = event.text
+                                            if (text.isNotEmpty()) {
+                                                sb.append(text)
+                                                // 流式回调兜底：任何异常都吞掉并打印 Logcat，绝不因为
+                                                // onDelta 里的意外（如 UI 已销毁）把进程掀掉（死命令要求）
+                                                runCatching { onDelta(text) }
+                                                    .onFailure { Log.e(TAG, "流式 onDelta 回调异常（已吞掉，不闪退）", it) }
+                                            }
+                                        }
+                                        is com.dilivva.inferkt.GenerationEvent.Generated -> {
+                                            if (done.compareAndSet(false, true)) cont.resume(finishText(sb))
+                                        }
+                                        is com.dilivva.inferkt.GenerationEvent.Error -> {
+                                            val err = (event as? com.dilivva.inferkt.GenerationEvent.Error)?.error
+                                            if (done.compareAndSet(false, true))
+                                                cont.resume("（本地推理出错：${err ?: "未知错误"}）")
+                                        }
+                                        else -> Unit
+                                    }
+                                }
+                                // 超时 / 取消都会走到这里 → 通知 native 停止解码，避免它继续占着上下文
+                                cont.invokeOnCancellation { runCatching { inf.cancelGeneration() } }
+                            }
+                        } finally {
+                            watchdog.cancel()
+                        }
                     }
                 }
-                if (result == null) {
-                    Log.w(TAG, "生成超时（${GENERATION_TIMEOUT_MS / 1000}s），已请求 cancelGeneration")
-                    if (sb.isEmpty()) return@withContext "（本地推理超时已停止。可换个更短的问题，或到设置里卸载后重新加载）"
+                // 看门狗触发了内存中断：不管 native 吐了什么，统一按中断文案返回（上层据此弹 Toast）
+                if (memoryAborted.get()) {
+                    Log.w(TAG, "生成因内存不足被中断（已生成 ${sb.length} 字）")
+                    return@withLock AI_MEMORY_ABORT_MSG
                 }
-                result
+                // 终态处理：正常返回 finishText；超时则把已流式输出的内容作为最终结果（不丢），
+                // 否则给可读兜底文案 —— 绝不让「对话无反应」卡住。
+                if (result != null) return@withLock result
+                if (sb.isNotEmpty()) {
+                    Log.w(TAG, "生成超时（${GENERATION_TIMEOUT_MS / 1000}s），返回已生成部分（${sb.length} 字）")
+                    return@withLock sb.toString().trim()
+                        .ifBlank { "（本地推理超时已停止，已返回部分内容。可换更短的问题）" }
+                }
+                Log.w(TAG, "生成超时且无任何输出")
+                "（本地推理超时已停止。可换个更短的问题，或到设置里卸载后重新加载）"
             } catch (oom: OutOfMemoryError) {
                 Log.e(TAG, "本地推理 OOM，释放引擎避免进程被杀", oom)
                 runCatching { releaseInternal() }
-                null
+                "（本地推理内存不足，已中止并释放模型。请改用更小的量化模型，或切换云端模式）"
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                throw ce
             } catch (t: Throwable) {
+                // 真实报错必须上抛给上层气泡展示，不能再静默返回 null 让用户对着空白干等
                 Log.e(TAG, "本地推理失败：${t.javaClass.simpleName}: ${t.message}", t)
-                null
-            } finally {
-                synchronized(genGuard) { generating = false }
+                "（本地推理异常：${t.message ?: t.javaClass.simpleName}）"
+            }
             }
         }
 
@@ -290,14 +394,38 @@ object LlamaCppEngine : LocalLlmEngine {
         return (if (cut != null) raw.substring(0, cut) else raw).trim().ifBlank { null }
     }
 
+    /**
+     * 释放底层资源（v1.0.6.13 死命令 #1 加固）。
+     * **释放必须与生成互斥** —— 直接在调用线程释放会与进行中的 completion 产生
+     * use-after-free → SIGSEGV（这正是「快捷中枢用着用着闪退」的残留根因之一：
+     * 用户在设置里卸载/重载时，快捷中枢或对话页的生成可能还在跑）。
+     * 现改为投递到专属推理线程 + Mutex 排队执行（异步、立即返回、绝不阻塞主线程）。
+     */
     override fun release() {
-        runCatching { releaseInternal() }
+        kotlinx.coroutines.CoroutineScope(LocalLlmRuntime.llmDispatcher).launch {
+            genMutex.withLock { releaseInternal() }
+        }
+    }
+
+    /** 挂起版本：等「生成结束 + 释放完成」才返回（卸载删盘路径用） */
+    override suspend fun releaseAwait() {
+        withContext(LocalLlmRuntime.llmDispatcher) {
+            genMutex.withLock { releaseInternal() }
+        }
+    }
+
+    override fun cancel() {
+        // 仅中断当前生成，不释放模型：退出对话页时调用，避免下次进页面又得重载，
+        // 同时杜绝「协程还在跑、页面已销毁」的越界写。
+        runCatching { inference?.cancelGeneration() }
     }
 
     private fun releaseInternal() {
         runCatching { inference?.release() }
         inference = null
         loaded = false
+        // 反向通知全局状态流：引擎已不再就绪（快捷中枢 / 状态卡据此刷新）
+        runCatching { LocalLlmRuntime.engineReady.value = false }
     }
 
     /**
@@ -310,11 +438,27 @@ object LlamaCppEngine : LocalLlmEngine {
     private fun buildQwenPrompt(messages: List<ChatMessage>): String {
         val systems = messages.filter { it.role == "system" }
         val turns = messages.filter { it.role != "system" }
+            // ① 滑动窗口第一道闸：只保留最近 2 轮（4 条），更早的整段丢弃（死命令 #1）
+            .takeLast(MAX_TURNS)
+
+        // ② 兜底（v1.0.6.13）：最新一条消息（= 当前问题）永远保留 —— 超预算时截断内容
+        //    而不是整条丢弃。旧逻辑下用户粘贴长文会让最新问题被预算闸丢掉，
+        //    模型收不到问题直接「装聋」，看起来就像闪退级的故障。
+        val systemCost = systems.sumOf { estimateTokens(it.content.orEmpty()) + 12 }
+        val safeTurns = if (turns.isNotEmpty()) {
+            val last = turns.last()
+            val allowance = (PROMPT_TOKEN_BUDGET - systemCost).coerceAtLeast(96) - 12
+            val lastCost = estimateTokens(last.content.orEmpty())
+            if (lastCost > allowance) {
+                // CJK 1 字 ≈ 1 token，取预算的 80% 作字符上限，留 20% 余量
+                turns.dropLast(1) + last.copy(content = last.content.orEmpty().take((allowance * 4) / 5) + "…")
+            } else turns
+        } else turns
 
         val kept = ArrayList<ChatMessage>()
-        var used = systems.sumOf { estimateTokens(it.content) + 12 }
-        for (m in turns.asReversed()) {
-            val cost = estimateTokens(m.content) + 12
+        var used = systemCost
+        for (m in safeTurns.asReversed()) {
+            val cost = estimateTokens(m.content.orEmpty()) + 12
             if (used + cost > PROMPT_TOKEN_BUDGET) break
             used += cost
             kept.add(m)
@@ -322,11 +466,11 @@ object LlamaCppEngine : LocalLlmEngine {
         kept.reverse()
 
         return buildString {
-            for (m in systems) append("<|im_start|>system\n${m.content}<|im_end|>\n")
+            for (m in systems) append("<|im_start|>system\n${m.content.orEmpty()}<|im_end|>\n")
             for (m in kept) {
                 when (m.role) {
-                    "assistant" -> append("<|im_start|>assistant\n${m.content}<|im_end|>\n")
-                    else -> append("<|im_start|>user\n${m.content}<|im_end|>\n")
+                    "assistant" -> append("<|im_start|>assistant\n${m.content.orEmpty()}<|im_end|>\n")
+                    else -> append("<|im_start|>user\n${m.content.orEmpty()}<|im_end|>\n")
                 }
             }
             append("<|im_start|>assistant\n")
@@ -368,6 +512,8 @@ object MockLlmEngine : LocalLlmEngine {
     }
 
     override fun release() { /* 无资源 */ }
+
+    override fun cancel() { /* 无资源 */ }
 }
 
 /**
@@ -401,15 +547,38 @@ object LocalLlmRuntime {
 
     val engine: LocalLlmEngine get() = active
 
+    /** 本地引擎就绪状态流：供主页 AI 快捷中枢 / 状态卡实时订阅。
+     *  加载成功 → true；卸载 / 释放 → false。快捷中枢据此判定「是否可用」。 */
+    val engineReady = MutableStateFlow(false)
+
+    /**
+     * 专属推理上下文（v1.0.6.13 死命令 #1）：**Dispatchers.IO + 单并发**。
+     *  - llama.cpp 是单例 native 上下文，多线程并发调用 completion 会踩坏 KV cache →
+     *    直接 SIGSEGV（Java 层拦不住）；
+     *  - `Dispatchers.IO.limitedParallelism(1)` = IO 线程池上的严格串行队列：快捷中枢与
+     *    对话页的所有 load / chat / release 全部在此排队，互斥且不阻塞主线程；
+     *  - 替换旧 `newSingleThreadContext`（delicate API，进程退出不回收线程）。
+     */
+    @kotlin.OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val llmDispatcher: CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)
+
     /**
      * Application 上下文（v1.0.6.8）：由 EarthOnlineApp.onCreate 注入，只用于体检时
      * 读取 ActivityManager。**存的是 applicationContext**，无 Activity 泄漏风险。
      */
     @Volatile private var appContext: Context? = null
 
-    fun bind(context: Context) { appContext = context.applicationContext }
+    fun bind(context: Context) {
+        appContext = context.applicationContext
+        // 启动时清理上次逻辑卸载（此时 fd 必然已释放）残留的模型目录，避免空间永久占用
+        LocalModelManager.cleanupUnloadedOnStartup(context.applicationContext)
+    }
 
-    fun activate(engine: LocalLlmEngine) { active = engine }
+    fun activate(engine: LocalLlmEngine) {
+        active = engine
+        // 引擎切换即广播就绪状态（快捷中枢订阅此流，无需轮询）
+        runCatching { engineReady.value = active.ready }
+    }
 
     /**
      * 按模型目录内容选择**单例**引擎。
@@ -483,6 +652,15 @@ object LocalLlmRuntime {
     }.getOrDefault(0L to 0L)
 
     fun availableMemoryBytes(context: Context): Long = memory(context).first
+
+    /**
+     * 当前可用内存（字节）—— 内存看门狗专用（v1.0.6.12）。
+     * 未注入 Application 上下文 / 读取失败时返回 [Long.MAX_VALUE]：看门狗永不误报中断。
+     */
+    fun availableMemoryNow(): Long {
+        val ctx = appContext ?: return Long.MAX_VALUE
+        return runCatching { availableMemoryBytes(ctx) }.getOrDefault(Long.MAX_VALUE)
+    }
 
     /**
      * **加载前体检**（纯 Java，零 JNI）。
