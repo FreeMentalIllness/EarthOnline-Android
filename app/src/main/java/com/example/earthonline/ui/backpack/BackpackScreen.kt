@@ -59,10 +59,11 @@ import com.example.earthonline.data.model.CollectionFileMeta
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
 import com.example.earthonline.ui.components.EmptyState
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
-import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.ui.theme.pressScaleClickable
 import com.example.earthonline.ui.theme.pressScaleCombinedClickable
@@ -258,12 +259,11 @@ private fun ItemsPane(
     }
 
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
+        GlassTextField(
             value = query, onValueChange = { query = it },
-            placeholder = { Text("搜索名称 / 描述 / 分类") },
+            placeholder = "搜索名称 / 描述 / 分类",
             leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true,
-            shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
                 .padding(UiDimens.ListPad, UiDimens.ListPad, UiDimens.ListPad, 0.dp)
         )
@@ -322,9 +322,8 @@ private fun ItemsPane(
 /** v1.0.7：背包网格模式下的物品磁贴（大图标 + 名称 + 分类，一眼扫更多） */
 @Composable
 private fun ItemGridTile(item: ItemEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+    AppCard(
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit)
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -398,9 +397,8 @@ private fun ViewModeToggle(grid: Boolean, onToggle: () -> Unit) {
 private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () -> Unit) {
     // v1.0.4：整卡可点进入编辑（删除按钮自身消费点击，不会误触）
     // v1.0.7：按压缩放反馈（94% -> 100% spring 弹回）
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+    AppCard(
+        modifier = Modifier.fillMaxWidth().pressScaleClickable(onClick = onEdit)
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -469,13 +467,11 @@ private fun CollectionsPane(
     }
 
     Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
+        GlassTextField(
             value = query, onValueChange = { query = it },
-            placeholder = { Text("搜索标题 / 备注") },
+            placeholder = "搜索标题 / 备注",
             leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true,
-            // v1.0.19（死命令 2）：收藏搜索框圆角与「物品」页统一为两端半圆胶囊形
-            shape = RoundedCornerShape(50),
             modifier = Modifier.fillMaxWidth()
                 .padding(UiDimens.ListPad, UiDimens.ListPad, UiDimens.ListPad, 0.dp)
         )
@@ -550,9 +546,8 @@ private fun CollectionGridTile(
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
     // v1.0.8：单击打开/预览，长按进入编辑
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+    AppCard(
+        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit)
     ) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
@@ -678,9 +673,8 @@ private fun CollectionCard(c: CollectionEntity, vm: BackpackViewModel, context: 
     }
     val coverImage = remember(coverBitmap) { coverBitmap?.asImageBitmap() }
     // v1.0.8：单击整卡 = 打开/预览，长按 = 进入编辑；删除按钮各自消费点击不会误触
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+    AppCard(
+        modifier = Modifier.fillMaxWidth().pressScaleCombinedClickable(onClick = onOpen, onLongClick = onEdit)
     ) {
         Column(modifier = Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (file != null) {
@@ -787,13 +781,13 @@ private fun ItemDialog(
         title = { Text(if (initial == null) "新增物品" else "编辑物品") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名称") },
+                GlassTextField(value = name, onValueChange = { name = it }, label = "名称",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 // v1.0.6：取消「实物 / 虚拟」分类，物品不再做类型二分
                 // v1.0.3：物品故事卡 —— 让背包更像人生纪念品而不是冷数据
-                OutlinedTextField(value = desc, onValueChange = { desc = it },
-                    label = { Text("来源 / 故事") },
-                    placeholder = { Text("它是怎么来到你身边的？") },
+                GlassTextField(value = desc, onValueChange = { desc = it },
+                    label = "来源 / 故事",
+                    placeholder = "它是怎么来到你身边的？",
                     modifier = Modifier.fillMaxWidth())
                 CategoryPicker(
                     categories = categories,
@@ -851,9 +845,9 @@ private fun CollectionDialog(
         title = { Text(if (initial == null) "新增收藏" else "编辑收藏") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("标题") },
+                GlassTextField(value = title, onValueChange = { title = it }, label = "标题",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("备注") },
+                GlassTextField(value = note, onValueChange = { note = it }, label = "备注",
                     modifier = Modifier.fillMaxWidth())
                 CategoryPicker(
                     categories = categories,

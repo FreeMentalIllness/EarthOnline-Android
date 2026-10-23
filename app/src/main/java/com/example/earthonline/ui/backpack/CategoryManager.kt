@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.backpack
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.GlassTextField
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -90,10 +91,10 @@ fun CategoryManagerDialog(
                 )
                 // 新增
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                    GlassTextField(
                         value = newName,
                         onValueChange = { newName = it },
-                        label = { Text("新分类名称") },
+                        label = "新分类名称",
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
@@ -169,9 +170,9 @@ fun CategoryManagerDialog(
             dismissButton = { TextButton({ renaming = null }) { Text("取消") } },
             title = { Text("重命名分类") },
             text = {
-                OutlinedTextField(
+                GlassTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("分类名称") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = "分类名称", singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
             }
         )
@@ -256,9 +257,9 @@ fun CategoryPicker(
             dismissButton = { TextButton({ creating = false }) { Text("取消") } },
             title = { Text("新建分类") },
             text = {
-                OutlinedTextField(
+                GlassTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("分类名称") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = "分类名称", singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
             }
         )

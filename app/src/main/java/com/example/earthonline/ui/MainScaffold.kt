@@ -114,6 +114,9 @@ private fun navigateToTab(navController: NavHostController, route: String) {
  * 系统返回键由 NavHost 自动处理（弹栈）；抽屉打开时先关抽屉。
  * 壁纸：不透明度可调（设置页滑杆），作为背景铺底。
  */
+/** 壁纸全屏模糊半径上限（dp）：防止滑块拉到高值时低端机帧率崩塌 */
+private const val MAX_WALLPAPER_BLUR_DP = 12f
+
 @Composable
 fun MainScaffold(
     /** 外部入口（桌面小组件）指定的落地页；默认主页 */
@@ -292,7 +295,12 @@ fun MainScaffold(
                     modifier = Modifier
                         .fillMaxSize()
                         // v1.0.11：壁纸模糊度滑块（0 时不挂 blur，避免无谓的离屏合成开销）
-                        .then(if (wallpaperBlur > 0.5f) Modifier.blur(wallpaperBlur.dp) else Modifier),
+                        // v1.0.6.7：全屏 blur 是本项目最贵的一处 GPU 操作（每帧一次全屏高斯），
+                        // 这里给半径加 12dp 硬上限 —— 超出部分观感收益极低但开销指数上升。
+                        .then(
+                            if (wallpaperBlur > 0.5f) Modifier.blur(wallpaperBlur.coerceAtMost(MAX_WALLPAPER_BLUR_DP).dp)
+                            else Modifier
+                        ),
                     contentScale = ContentScale.Crop
                 )
                 /* 性能：用「背景色蒙层」表达不透明度，而不是给图片设 alpha。

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.earthonline.util.ImageStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -48,6 +49,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val CARD_OPACITY = floatPreferencesKey("earth_card_opacity")
         val NOTIFY = booleanPreferencesKey("earth_notify")
         val AI_CONFIG = stringPreferencesKey("ai_config")
+        /** v1.0.6：本地模型（离线推理）配置 JSON（端口 / 插件名 / 已加载态 / 自动发现列表） */
+        val LOCAL_MODEL = stringPreferencesKey("local_model")
         val WEBDAV_CONFIG = stringPreferencesKey("webdav_config")
         val AUTO_SYNC = booleanPreferencesKey("earth_autosync")
         val LAST_SYNC = stringPreferencesKey("earth_last_sync")
@@ -117,6 +120,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     val cardOpacity: Flow<Float> = ds.data.map { (it[CARD_OPACITY] ?: 0.74f).coerceIn(0f, 1f) }
     val notify: Flow<Boolean> = ds.data.map { it[NOTIFY] ?: false }
     val aiConfig: Flow<String> = ds.data.map { it[AI_CONFIG] ?: "" }
+    /** 本地模型（离线推理）配置 JSON */
+    val localModel: Flow<String> = ds.data.map { it[LOCAL_MODEL] ?: "" }
     val webdavConfig: Flow<String> = ds.data.map { it[WEBDAV_CONFIG] ?: "" }
     /** 自动同步开关：默认开启（配置好 WebDAV 即生效，未配置时不会发起任何请求） */
     val autoSync: Flow<Boolean> = ds.data.map { it[AUTO_SYNC] ?: true }
@@ -140,6 +145,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         ds.edit { it[CARD_OPACITY] = v.coerceIn(0f, 1f) }
     suspend fun setNotify(v: Boolean) = ds.edit { it[NOTIFY] = v }
     suspend fun setAiConfig(v: String) = ds.edit { it[AI_CONFIG] = v }
+    suspend fun setLocalModel(v: String) = ds.edit { it[LOCAL_MODEL] = v }
     suspend fun setWebdavConfig(v: String) = ds.edit { it[WEBDAV_CONFIG] = v }
     suspend fun setAutoSync(v: Boolean) = ds.edit { it[AUTO_SYNC] = v }
     suspend fun setLastSyncAt(v: String) = ds.edit { it[LAST_SYNC] = v }
@@ -231,8 +237,10 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
      * 清空「用户数据键」，保留应用设置键。与 Web 端 resetAllData 的键语义对齐：
      * - 清：自定义时间轴 / 动态流筛选与条数 / 速览入口 / 自定义称号 / 记忆相册元数据 /
      *      佩戴徽章 / 彩蛋计数器 ×2 / 已庆祝等级；
-     * - 留：onboarding / 主题 / 壁纸（含不透明度与轮换开关）/ 提醒 / AI / WebDAV /
-     *      自动同步与上次同步时间 / 成就音效 / 常驻通知 / 隐藏已完成 / 字号占位。
+     * - **v1.0.6 起「清除本地数据」需把壁纸重置为默认**：壁纸路径 / 不透明度 / 模糊 /
+     *      轮换开关 / 轮换相册五键一并清除（图片文件由 [clearWallpaper] 删盘）；
+     * - 留：onboarding / 主题 / 提醒 / AI / WebDAV / 自动同步与上次同步时间 /
+     *      成就音效 / 常驻通知 / 隐藏已完成 / 字号占位。
      */
     suspend fun clearUserDataKeys() = ds.edit {
         it.remove(CUSTOM_TIMELINE)
@@ -246,5 +254,60 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         it.remove(EGG_BLANK_TITLE)
         it.remove(EGG_THROWBACK)
         it.remove(LAST_CELEBRATED_LEVEL)
+        // —— v1.0.6：壁纸重置为默认（删盘见 clearWallpaper）——
+        it.remove(WALLPAPER)
+        it.remove(WALLPAPER_ALPHA)
+        it.remove(WALLPAPER_BLUR)
+        it.remove(WALLPAPER_ROTATE)
+        it.remove(WALLPAPER_ALBUM)
+    }
+
+    /**
+     * v1.0.6：「清除本地数据」时一并重置壁纸 —— 删除壁纸私有目录（filesDir/wallpaper）
+     * 内的全部原图文件，把磁盘占用彻底释放；壁纸相关键由 [clearUserDataKeys] 负责移除。
+     * 文件可能已被轮换/更换时清掉，一律静默兜底，不影响清空主流程。
+     */
+    suspend fun clearWallpaper() {
+        runCatching { ImageStore.wallpaperDir(context).listFiles()?.forEach { f -> if (f.isFile) f.delete() } }
+    }
+
+    /**
+     * **真·全清**（v1.0.6.9）。
+     *
+     * 与 [clearUserDataKeys] 的区别：那个是「清用户内容、留应用设置」，这个是
+     * **连主题 / 引导状态 / AI 配置 / WebDAV 账号一起铲掉**，等价于「恢复出厂」。
+     *
+     * 四步，顺序不能换：
+     *  ① DataStore 全键 `clear()` —— 所有偏好一次性归零（含壁纸五键、主题、onboarding）；
+     *  ② filesDir 下除 `datastore` 外全部删 —— 壁纸原图 / 模型权重 / 相册图 / 导出缓存；
+     *     `datastore` 目录本身留给 ① 的写入，不能整个 rm，否则 DataStore 会踩到失效句柄；
+     *  ③ cacheDir + 外部私有目录清空 —— Coil 图片缓存、临时解包都在这里；
+     *  ④ 由调用方保证 Room 各表已清、本地引擎已 release（这两件事不归偏好存储管）。
+     *
+     * 返回被释放的字节数（给用户一个「真的清干净了」的量化反馈）。
+     */
+    suspend fun wipeAll(): Long {
+        var freed = 0L
+        // ① 偏好全清
+        runCatching { ds.edit { it.clear() } }
+        // ② filesDir（保留 datastore 目录本身）
+        runCatching {
+            context.filesDir.listFiles()?.forEach { f ->
+                if (f.name != "datastore") {
+                    freed += f.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                    f.deleteRecursively()
+                }
+            }
+        }
+        // ③ 缓存 + 外部私有目录
+        runCatching {
+            listOfNotNull(context.cacheDir, context.getExternalFilesDir(null)).forEach { root ->
+                root.listFiles()?.forEach { f ->
+                    freed += f.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+                    f.deleteRecursively()
+                }
+            }
+        }
+        return freed
     }
 }

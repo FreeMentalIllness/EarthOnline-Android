@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import com.example.earthonline.data.model.CustomField
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.CropShape
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.ImageCropperDialog
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
@@ -178,33 +179,33 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
             HorizontalDivider()
 
             if (editing) {
-                OutlinedTextField(vm.name, { vm.name = it.take(30) }, label = { Text("角色名") },
+                GlassTextField(vm.name, { vm.name = it.take(30) }, label = "角色名",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 GenderDropdown(vm.gender) { vm.gender = it }
-                OutlinedTextField(vm.country, { vm.country = it.take(30) }, label = { Text("区服 · 国家/地区") },
+                GlassTextField(vm.country, { vm.country = it.take(30) }, label = "区服 · 国家/地区",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (vm.country == "中国") {
                     ProvinceDropdown(vm.province) { vm.province = it }
                 } else {
-                    OutlinedTextField(vm.province, { vm.province = it.take(30) }, label = { Text("省份/州") },
+                    GlassTextField(vm.province, { vm.province = it.take(30) }, label = "省份/州",
                         singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
-                OutlinedTextField(vm.birthDate, {}, readOnly = true, label = { Text("出生日期") },
+                GlassTextField(vm.birthDate, {}, readOnly = true, label = "出生日期",
                     trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(vm.signature, { vm.signature = it }, label = { Text("个性签名") },
+                GlassTextField(vm.signature, { vm.signature = it }, label = "个性签名",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(vm.customTitle, { vm.customTitle = it.take(12) },
-                    label = { Text("称号（可选，如「星尘旅人」）") },
-                    placeholder = { Text("留空显示默认「旅行者」") },
+                GlassTextField(vm.customTitle, { vm.customTitle = it.take(12) },
+                    label = "称号（可选，如「星尘旅人」）",
+                    placeholder = "留空显示默认「旅行者」",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
 
                 Text("自定义字段", style = MaterialTheme.typography.titleMedium)
                 vm.customFields.forEachIndexed { idx, cf ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(cf.label, { vm.updateCustomField(idx, it, cf.value) }, label = { Text("字段名") },
+                        GlassTextField(cf.label, { vm.updateCustomField(idx, it, cf.value) }, label = "字段名",
                             singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(cf.value, { vm.updateCustomField(idx, cf.label, it) }, label = { Text("字段值") },
+                        GlassTextField(cf.value, { vm.updateCustomField(idx, cf.label, it) }, label = "字段值",
                             singleLine = true, modifier = Modifier.weight(1f))
                         IconButton(onClick = { vm.removeCustomField(idx) }) {
                             Icon(Icons.Rounded.Delete, contentDescription = "删除")
@@ -445,9 +446,9 @@ private fun GenderDropdown(selected: String, onSelect: (String) -> Unit) {
     )
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
+        GlassTextField(
             value = options.firstOrNull { it.first == selected }?.second ?: "保密",
-            onValueChange = {}, readOnly = true, label = { Text("性别") },
+            onValueChange = {}, readOnly = true, label = "性别",
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )
@@ -464,8 +465,8 @@ private fun GenderDropdown(selected: String, onSelect: (String) -> Unit) {
 private fun ProvinceDropdown(selected: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
-            value = selected, onValueChange = {}, readOnly = true, label = { Text("省份") },
+        GlassTextField(
+            value = selected, onValueChange = {}, readOnly = true, label = "省份",
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )

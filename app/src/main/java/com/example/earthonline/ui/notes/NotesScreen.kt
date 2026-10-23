@@ -28,12 +28,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
-import com.example.earthonline.ui.theme.GlassCard
-import com.example.earthonline.ui.theme.GlassSurface
-import kotlinx.coroutines.launch
+import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.ui.theme.AmberPrimary
+import kotlinx.coroutines.launch
 
 /**
  * 笔记主页（v1.0.6 重写：极简卡片流）。
@@ -97,13 +97,11 @@ fun NotesScreen(
                 .padding(padding)
         ) {
             if (searchOpen) {
-                OutlinedTextField(
+                GlassTextField(
                     value = query,
                     onValueChange = vm::setQuery,
-                    placeholder = { Text("搜正文或标签") },
+                    placeholder = "搜正文或标签",
                     singleLine = true,
-                    // v1.0.11：全局搜索栏统一胶囊形
-                    shape = RoundedCornerShape(50),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -202,12 +200,11 @@ fun NotesScreen(
  */
 @Composable
 private fun NewNoteEntry(onClick: () -> Unit) {
-    GlassCard(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+            .clickable(onClick = onClick)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
@@ -267,10 +264,9 @@ private fun NoteCard(
     }.ifBlank { "无标题笔记" }
     val preview = plainLines.drop(1).joinToString(" ").take(180)
 
-    GlassSurface(
+    AppCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             Modifier.fillMaxWidth().padding(14.dp),

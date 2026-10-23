@@ -17,8 +17,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.settings.AiConfigDialog
+import com.example.earthonline.ui.theme.GlassSurface
 import kotlinx.coroutines.launch
 
 @Composable
@@ -33,6 +35,7 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val aiConfigJson by vm.aiConfigFlow.collectAsStateWithLifecycle(initialValue = "")
+    val localModelJson by vm.localModelJson.collectAsStateWithLifecycle(initialValue = "")
     var showConfig by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -40,7 +43,9 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
     val listState = rememberLazyListState()
 
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty()) {
+            runCatching { listState.animateScrollToItem(messages.lastIndex) }
+        }
     }
     LaunchedEffect(error) {
         error?.let {
@@ -64,27 +69,29 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
-                /* v1.0.20：键盘让位已上收到 MainScaffold（bottomBar 高度与 IME 取大者）。
-                   此前这里的 navigationBarsPadding + imePadding 与外层叠加，
-                   键盘弹出时输入框被双重抬高（导航条高度再垫一层）—— 现删除，
-                   外层已保证：键盘弹出时紧贴键盘、收起时让开导航胶囊。 */
+            // 液态玻璃胶囊输入条：与主应用毛玻璃风格统一
+            GlassSurface(
+                shape = RoundedCornerShape(24.dp),
+                showBorder = true,
+                modifier = Modifier.fillMaxWidth().padding(8.dp)
+            ) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(8.dp),
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
+                    GlassTextField(
                         value = input,
                         onValueChange = { vm.onInputChange(it) },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("说点什么…") },
+                        placeholder = "说点什么…",
                         enabled = !loading,
                         minLines = 1,
-                        maxLines = 4
+                        maxLines = 4,
+                        singleLine = false
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(4.dp))
                     IconButton(onClick = {
                         // 发送前离线拦截：无网时直接给明确文案，不等请求失败
                         if (!com.example.earthonline.util.NetworkMonitor.isOnlineNow(context)) {
@@ -105,12 +112,13 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
                 modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // v1.0.6：用稳定索引 key 代替 content.hashCode() —— 相同内容（或两次相同回复）
+                // 曾触发 Compose「Key was already used」致命崩溃（AI 对话两次必崩的根因）。
                 items(
-                    messages,
-                    // 气泡只有两种样式（我 / AI），contentType 让复用命中率最高
-                    key = { it.content.hashCode().toString() + it.role },
-                    contentType = { it.role }
-                ) { msg -> MessageBubble(msg) }
+                    count = messages.size,
+                    key = { index -> "ai_msg_$index" },
+                    contentType = { index -> messages[index].role }
+                ) { index -> MessageBubble(messages[index]) }
                 if (loading) {
                     item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                 }
@@ -121,8 +129,13 @@ fun AiScreen(vm: AiViewModel, moreActions: MoreMenuActions) {
     if (showConfig) {
         AiConfigDialog(
             initial = vm.parseAiConfig(aiConfigJson),
+            localModel = vm.parseLocalModel(localModelJson),
             onDismiss = { showConfig = false }
-        ) { vm.saveAiConfig(it); showConfig = false }
+        ) { cfg, local ->
+            vm.saveAiConfig(cfg)
+            vm.saveLocalModel(local)
+            showConfig = false
+        }
     }
 }
 
@@ -133,15 +146,14 @@ private fun MessageBubble(msg: UiMessage) {
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
-        Surface(
-            tonalElevation = 1.dp,
-            color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.widthIn(max = 280.dp)
+        GlassSurface(
+            shape = RoundedCornerShape(16.dp),
+            showBorder = true,
+            modifier = Modifier.widthIn(max = 300.dp)
         ) {
             Text(
                 msg.content,
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(12.dp),
                 fontWeight = if (isUser) FontWeight.Normal else FontWeight.Medium
             )
         }

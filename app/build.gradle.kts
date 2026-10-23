@@ -44,7 +44,12 @@ android {
         // 版本号以此为准（AppInfo.kt / Web core.js / Windows csproj 三端同步），versionCode 只增不减。
         // 本版要点：液态玻璃底层重构 + 全局透明度自定义 + 笔记系统重构 + AI 快捷中枢（真实大模型）
         // + 图标全面圆角矢量化 + 键盘唤起/让位 Bug 修复。
-        versionCode = 38
+        // versionCode 39 = v1.0.6（补丁批）：AI 配置 UI 重做 + 说明页重写 + 首启资料页进场动效
+        // + 出生日期选择器性能优化 + 本地推理闪退根治（架构/内存体检前置 + 自动降级云端）。
+        // versionCode 40 = v1.0.6（补丁批二）：笔记伪粗体(Shadow合成) + 日期默认今天 + 清除数据彻底化
+        // + 加载失败明确原因 + 内存格式 2.1 GB + 架构/模拟器双门控加固。
+        // versionCode 41 = v1.0.6（收尾批）：开启 R8 混淆(minify) + 推理/富文本库保留规则 + 内存不足(<2GB)阻断提示 + 伪粗体加厚。
+        versionCode = 41
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
@@ -79,15 +84,13 @@ android {
            同一套 Compose 代码在 debug 与 release 上的帧率差距可以到 2~3 倍。
            所以「体感卡顿」首先要排除 debug 包因素，测流畅度请用 staging / release。 */
         release {
-            // 回归结论：R8 minify 在 AGP 8.5.2 / R8 8.5.x 下仍触发 ConcurrentModificationException
-            // （minifyReleaseWithR8 FAILED，shaking 期 CME，-dontoptimize 无法规避）。
-            // ef4d505 尝试重开 minify 但并未真正修复，且 proguardFiles 当时未挂上。
-            // 回退为关闭混淆：与 v1.0.3 已发布版本一致的稳定配置，APK 体积略大但不影响功能与发布。
-            // 若日后要重开 minify，需先升级 AGP（至少 8.7.x）或定位 shaking 期 CME 根因，而非仅靠 -dontoptimize。
-            isMinifyEnabled = false
+            // v1.0.6 收尾：开启 R8 混淆（瘦身 + 提高逆向门槛）。
+            // 仍保留 -dontoptimize：规避 AGP 8.5.x / R8 8.5.35 在类合并（class merging，属优化期）的
+            // ConcurrentModificationException；关闭优化后只做 shrink + obfuscate，瘦身与混淆照常生效，
+            // 仅失去内联/合并，对功能与体积影响可忽略。保留规则见 proguard-rules.pro。
+            isMinifyEnabled = true
             isShrinkResources = false
             isDebuggable = false
-            // 保留 proguard 引用（minify 关闭时忽略），便于未来重开时直接生效。
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -175,4 +178,6 @@ dependencies {
     implementation(libs.amap)
     // v1.0.6：笔记系统 Markdown 富文本编辑器（锁定 rc10 兼容 Compose 1.7.x）
     implementation(libs.richeditor)
+    // v1.0.6.5：本地离线推理引擎（llama.cpp 绑定，GGUF；预编译 so 随包分发，无需 NDK 自编译）
+    implementation(libs.inferkt)
 }

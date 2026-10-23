@@ -1,14 +1,17 @@
 [versions]
 agp = "8.5.2"
-kotlin = "2.0.21"
-ksp = "2.0.21-1.0.28"
+# v1.0.6.5：2.0.21 → 2.1.21。Inferkt（llama.cpp KMP 绑定，本地离线推理）要求 2.1.21 metadata。
+kotlin = "2.1.21"
+# v1.0.6.5：KSP 跟随 Kotlin 2.1.21（2.1.21-2.0.1）；gradle.properties 中 ksp.useKSP2=false
+# 强制走 KSP1 引擎，保 Room 2.6.1 / Hilt 的 KSP1 处理器不被 KSP2 破坏。
+ksp = "2.1.21-2.0.1"
 coreKtx = "1.13.1"
 coreSplashscreen = "1.0.1"
 lifecycle = "2.8.5"
 activityCompose = "1.9.2"
 composeBom = "2024.10.01"
 navigationCompose = "2.8.4"
-hilt = "2.51.1"
+hilt = "2.56.2"
 hiltNavigationCompose = "1.2.0"
 room = "2.6.1"
 datastore = "1.1.1"
@@ -19,12 +22,17 @@ serialization = "1.7.3"
 # v1.0.3：9.1.0 → 10.0.600。真实崩溃日志定位：v9.1.0 引擎在 Android 12+（模拟器实测 API 37）
 # 上 GlyphLoader 反射 isHighTextContrastEnabled 失败 → 引擎初始化异常（用户真机上致命闪退）。
 # v10 线是官方兼容性修复渠道，包名 com.amap.api.maps 不变，代码零改动。
-amap = "10.0.600"
+# v1.0.6.5：3dmap 10.0.600 与 search 9.7.1 分包会因 AMapUtilCoreApi/NetProxy 重复类阻断 dex 合并，
+# 改用官方组合包 3dmap-location-search（map 10.0.1000 + loc 6.4.8 + search 9.7.4 单包集成，零冲突）。
+amap = "10.0.1000_loc6.4.8_sea9.7.4"
 material = "1.11.0"
 workmanager = "2.9.1"
-# v1.0.6：笔记系统富文本编辑器。1.0.0-rc10 锁定 Kotlin 2.0.21 / Compose 1.7.0，
-# 与本项目 BOM 2024.10.01 完全对齐（严禁升 BOM，故不取 rc11+ 的 Kotlin 2.1.x 线）。
+# v1.0.6：笔记系统富文本编辑器。1.0.0-rc10 锁定 Compose 1.7.0 与本项目 BOM 2024.10.01 对齐；
+# v1.0.6.5：项目 Kotlin 升 2.1.21（Inferkt 要求）——rc10 为 2.0 metadata，新编译器向后兼容，不受影响。
 richEditor = "1.0.0-rc10"
+# v1.0.6.5：本地离线推理引擎（llama.cpp 的 Kotlin Multiplatform 绑定，Maven Central 发布，
+# 内含 Android 预编译 .so；CPU 推理 GGUF 模型，Qwen2.5-1.5B q4_k_m 量级无压力）
+inferkt = "0.0.2"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -59,12 +67,14 @@ retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = 
 retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version.ref = "retrofit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
-# 高德地图 Android SDK（足迹地图，阶段3 正式接入；此处先引入依赖并预留 manifest key）
+# 高德地图 Android SDK（足迹地图 + POI 搜索，组合包 3dmap-location-search）
 # 注意：库键名不能用 amap-3dmap —— Gradle 会把 '-' 转成访问器里的 '.'，
 # 生成 libs.amap.3dmap，而 '3dmap' 以数字开头不是合法标识符。改用 amap。
-amap = { group = "com.amap.api", name = "3dmap", version.ref = "amap" }
+amap = { group = "com.amap.api", name = "3dmap-location-search", version.ref = "amap" }
 # v1.0.6：笔记系统 Markdown 富文本编辑器（加粗/列表/标题/代码块/图片插入，支持 MD 导入导出）
 richeditor = { group = "com.mohamedrejeb.richeditor", name = "richeditor-compose", version.ref = "richEditor" }
+# v1.0.6.5：本地离线推理（llama.cpp 绑定，GGUF 模型；预编译 so 随包分发，无需 NDK 自编译）
+inferkt = { group = "com.dilivva", name = "inferkt", version.ref = "inferkt" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

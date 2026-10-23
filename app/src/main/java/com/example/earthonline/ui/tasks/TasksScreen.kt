@@ -34,7 +34,6 @@ import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.*
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +64,11 @@ import com.example.earthonline.data.local.entity.TaskEntity
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.ConfettiBurst
 import com.example.earthonline.ui.components.EmptyState
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
-import com.example.earthonline.ui.theme.GlassSurface
+import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.util.AchievementSound
 import com.example.earthonline.util.millisToDayStr
 import kotlinx.coroutines.delay
@@ -706,7 +706,7 @@ private fun TaskRow(
 
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
         TreeGuide(depth = node.depth, ancestorLast = node.ancestorLast, isLast = node.isLast)
-        GlassSurface(
+        AppCard(
             modifier = Modifier
                 .weight(1f)
                 .clickable { if (selectMode) onToggleSelect() else onEdit() }
@@ -730,8 +730,7 @@ private fun TaskRow(
                             cornerRadius = CornerRadius(40f, 40f)
                         )
                     }
-                },
-            shape = RoundedCornerShape(UiDimens.CardRadius)
+                }
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -921,19 +920,19 @@ private fun TaskEditDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
-                OutlinedTextField(
+                GlassTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text("标题") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = "标题", singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
 
                 // 父任务：决定这棵树长什么样。
                 // 这里不用 ExposedDropdownMenuBox —— 它在 AlertDialog 内触摸区域会错位，
                 // 点选项只关闭下拉、不回调（详见 CategoryPicker 的注释）。改用嵌套对话框。
                 if (parentOptions.isNotEmpty() || parentId != null) {
-                    GlassCard(
-                        onClick = { parentPickerOpen = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                AppCard(
+                    onClick = { parentPickerOpen = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -983,9 +982,9 @@ private fun TaskEditDialog(
                     }
                 }
 
-                OutlinedTextField(
+                GlassTextField(
                     value = due ?: "", onValueChange = {}, readOnly = true,
-                    label = { Text("到期日（可选）") },
+                    label = "到期日（可选）",
                     trailingIcon = { IconButton({ showDatePicker = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -993,9 +992,9 @@ private fun TaskEditDialog(
                     TextButton(onClick = { due = null }) { Text("清除到期日") }
                 }
 
-                OutlinedTextField(
+                GlassTextField(
                     value = note, onValueChange = { note = it },
-                    label = { Text("备注") }, modifier = Modifier.fillMaxWidth(), maxLines = 3
+                    label = "备注", modifier = Modifier.fillMaxWidth(), maxLines = 3
                 )
 
                 Text(

@@ -47,6 +47,10 @@ class EarthOnlineApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // v1.0.6.8：把 Application 上下文注入本地推理运行时 —— 加载模型前要用它
+        // 读 ActivityManager 做内存体检（Arm 架构 / 可用内存），挡住一切会 native 崩溃的加载。
+        // 存的是 applicationContext（进程级），无 Activity 泄漏风险。
+        com.example.earthonline.ui.ai.LocalLlmRuntime.bind(this)
         // 高德地图隐私合规：必须在任何 MapView 创建前同意隐私政策，否则新版 SDK 会抛异常导致地图闪退。
         // 放在 Application 启动处一次性同意，覆盖所有地图入口。
         // 参数必须为 (true, true)：表示隐私政策包含高德相关内容声明 + 调整说明；

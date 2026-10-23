@@ -6,6 +6,7 @@ import com.example.earthonline.data.backup.AutoBackupManager
 import com.example.earthonline.data.backup.BackupRepository
 import com.example.earthonline.data.local.datastore.SettingsDataStore
 import com.example.earthonline.data.network.AiConfig
+import com.example.earthonline.data.network.LocalModelConfig
 import com.example.earthonline.data.network.WebDavConfig
 import com.example.earthonline.data.network.UpdateRepository
 import com.example.earthonline.data.network.WebDavService
@@ -14,11 +15,13 @@ import com.example.earthonline.data.photos.MemoryPhoto
 import com.example.earthonline.data.photos.PhotoAlbum
 import com.example.earthonline.data.sync.CloudSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
@@ -69,6 +72,8 @@ class SettingsViewModel @Inject constructor(
     val cardOpacity: Flow<Float> = settings.cardOpacity
     val notify: Flow<Boolean> = settings.notify
     val aiConfigJson: Flow<String> = settings.aiConfig
+    /** 本地模型（离线推理）配置 JSON */
+    val localModelJson: Flow<String> = settings.localModel
     val webdavConfigJson: Flow<String> = settings.webdavConfig
     /** 自动同步开关（启动拉取 / 切后台推送） */
     val autoSync: Flow<Boolean> = settings.autoSync
@@ -97,6 +102,8 @@ class SettingsViewModel @Inject constructor(
         if (txt.isBlank()) emptyList()
         else runCatching { json.decodeFromString(ListSerializer(PhotoAlbum.serializer()), txt) }.getOrDefault(emptyList())
     }
+        // v1.0.6：相册 JSON 解析移出主线程
+        .flowOn(Dispatchers.Default)
 
     /**
      * 当日应显示的壁纸路径（综合 静态壁纸 / 轮换开关 / 相册筛选）：
@@ -113,6 +120,8 @@ class SettingsViewModel @Inject constructor(
             } else wp
         } else wp
     }
+        // v1.0.6：相册 JSON 解析较重，移出主线程，避免首启 / 切壁纸轮换时主线程卡顿
+        .flowOn(Dispatchers.Default)
 
     fun setTheme(v: String) = viewModelScope.launch { settings.setTheme(v) }
     fun setAchSound(v: Boolean) = viewModelScope.launch { settings.setAchSound(v) }
@@ -162,6 +171,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun saveAiConfig(c: AiConfig) = viewModelScope.launch { settings.setAiConfig(json.encodeToString(AiConfig.serializer(), c)) }
+    fun parseLocalModel(s: String): LocalModelConfig =
+        runCatching { json.decodeFromString<LocalModelConfig>(s) }.getOrDefault(LocalModelConfig())
+    fun saveLocalModel(c: LocalModelConfig) = viewModelScope.launch { settings.setLocalModel(json.encodeToString(LocalModelConfig.serializer(), c)) }
     fun saveWebDavConfig(c: WebDavConfig) = viewModelScope.launch { settings.setWebdavConfig(json.encodeToString(WebDavConfig.serializer(), c)) }
 
     fun parseAiConfig(s: String): AiConfig =
@@ -191,8 +203,8 @@ class SettingsViewModel @Inject constructor(
      * 执行顺序（每步都有明确理由）：
      *  ① 先置防拉回标记 —— 本地清空期间绝不能被云端旧备份拉回（切前台/冷启动都会触发拉取）；
      *  ② 勾选删云端时先 DELETE 远端备份（成败都不阻断本地清空，结果体现在返回语里）；
-     *  ③ 本地清空：DB 十表 + 头像原图文件 + 记忆相册图片文件 + DataStore 用户键 + 自动备份快照；
-     *  ④ 保留：主题 / 壁纸 / WebDAV / AI 配置 / 提醒与音效开关等应用设置键。
+     *  ③ 本地清空：DB 十表 + 头像原图文件 + 记忆相册图片文件 + DataStore 用户键（含壁纸五键）+ 壁纸原图文件 + 自动备份快照；
+     *  ④ 保留：主题 / WebDAV / AI 配置 / 提醒与音效开关等应用设置键（壁纸自 v1.0.6 起一并重置为默认）。
      *
      * @param deleteCloud 是否同时删除云端备份（确认框勾选项，默认不勾）
      */
@@ -205,12 +217,22 @@ class SettingsViewModel @Inject constructor(
             r.message
         } else ""
         // ③ 本地清空
-        backupRepo.clearAllData()
-        memoryPhotoStore.clearAllFiles()
-        settings.clearUserDataKeys()
+        backupRepo.clearAllData()      // Room 十表全清（主键级 DELETE，不走 DROP）
+        memoryPhotoStore.clearAllFiles() // 相册图片文件
+        // 先放掉 native 上下文：模型权重的 mmap 页还挂着的话，下面删 filesDir 会删不干净
+        runCatching { com.example.earthonline.ui.ai.LocalLlmRuntime.engine.release() }
+        runCatching { com.example.earthonline.ui.ai.LocalLlmRuntime.activate(com.example.earthonline.ui.ai.MockLlmEngine) }
         autoBackup.clearSnapshots()
+        // ④ 偏好 + 文件系统彻底铲（主题 / 引导状态 / AI 配置 / 壁纸 / 模型目录 / 缓存）
+        val freed = settings.wipeAll()
+        val sizeText = com.example.earthonline.ui.ai.LocalLlmRuntime.formatBytes(freed)
         // 返回语：删云端结果 + 本地清空提示
-        return if (deleteCloud) "$cloudMsg；本地数据已清空" else "本地数据已清空"
+        return buildString {
+            if (deleteCloud) append(cloudMsg).append("；")
+            append("本地数据已全部清空")
+            if (freed > 0) append("，释放 $sizeText")
+            append("。应用将回到首次启动状态")
+        }
     }
 
     /**

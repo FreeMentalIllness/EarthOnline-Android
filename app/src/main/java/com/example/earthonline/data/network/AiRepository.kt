@@ -1,8 +1,16 @@
 package com.example.earthonline.data.network
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import javax.inject.Inject
@@ -37,5 +45,34 @@ class AiRepository @Inject constructor(
             authorization = "Bearer ${config.apiKey}",
             body = ChatRequest(model = config.model, messages = messages)
         )
+    }
+
+    /**
+     * 流式对话（SSE）：逐 token 发射增量文本。
+     * 复用与 [chat] 相同的 OpenAI 兼容接口，仅把 stream 置 true 并手动解析 SSE 行，
+     * 这样上层就能把大模型回答「打字机式」实时拼接到界面，无需等整段返回。
+     */
+    fun streamChat(config: AiConfig, messages: List<ChatMessage>): Flow<String> = flow {
+        val api = apiFor(config.baseUrl)
+        val body = ChatRequest(model = config.model, messages = messages, stream = true)
+        val resp: ResponseBody = api.streamRaw("Bearer ${config.apiKey}", body)
+        val source = resp.source()
+        while (true) {
+            val line = source.readUtf8Line() ?: break
+            if (!line.startsWith("data:")) continue
+            val data = line.substringAfter("data:").trim()
+            if (data == "[DONE]") break
+            runCatching {
+                val root = json.parseToJsonElement(data)
+                if (root is JsonObject) {
+                    val delta = root["choices"]
+                        ?.jsonArray?.firstOrNull()
+                        ?.jsonObject?.get("delta")
+                        ?.jsonObject?.get("content")
+                        ?.jsonPrimitive?.contentOrNull
+                    if (!delta.isNullOrEmpty()) emit(delta)
+                }
+            }
+        }
     }
 }

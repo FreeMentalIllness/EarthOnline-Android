@@ -66,11 +66,14 @@ import com.example.earthonline.data.local.entity.MemoEntity
 import com.example.earthonline.data.local.entity.TaskEntity
 import com.example.earthonline.data.network.AiConfig
 import com.example.earthonline.data.network.AiRepository
+import com.example.earthonline.data.network.LocalModelConfig
+import com.example.earthonline.ui.ai.LocalModelManager
 import com.example.earthonline.data.network.ChatMessage
 import com.example.earthonline.data.repository.ActivityRepository
 import com.example.earthonline.data.repository.ItemRepository
 import com.example.earthonline.data.repository.MemoRepository
 import com.example.earthonline.data.repository.TaskRepository
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.IconChip
 import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.theme.GlassSurface
@@ -224,7 +227,8 @@ class AiQuickHubViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val aiRepo: AiRepository,
     private val settings: SettingsDataStore,
-    private val json: Json
+    private val json: Json,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context
 ) : ViewModel() {
 
     private val _busy = MutableStateFlow(false)
@@ -255,6 +259,9 @@ class AiQuickHubViewModel @Inject constructor(
         }
     }
 
+    private fun parseLocal(raw: String): LocalModelConfig =
+        runCatching { json.decodeFromString<LocalModelConfig>(raw) }.getOrDefault(LocalModelConfig())
+
     /** 缺哪一项就提示哪一项，别让用户猜 */
     private fun missingHint(cfg: AiConfig?): String? = when {
         cfg == null -> "请先在「设置 → 通用 → AI 对话」中配置 Base URL 与 API Key"
@@ -267,6 +274,8 @@ class AiQuickHubViewModel @Inject constructor(
     /**
      * 解析 + 落库。结果通过 [onDone] 回传可直接 Toast 的中文文案。
      * 任何异常都不抛出 —— 快捷入口是「顺手」功能，失败也要安静地把内容留住。
+     * v1.0.6.5：三态开关落地 —— off 直接原文存笔记；local 走本地引擎（未就绪诚实降级）；
+     * cloud 走原有云端 chat/completions。
      */
     fun dispatch(raw0: String, onDone: (String) -> Unit) {
         val raw = raw0.trim()
@@ -274,15 +283,13 @@ class AiQuickHubViewModel @Inject constructor(
         _busy.value = true
         viewModelScope.launch {
             try {
-                val cfg = parseConfig(settings.aiConfig.first())
-                val missing = missingHint(cfg)
-                val intent = if (missing != null) null else recognize(raw, cfg!!)
-                val message = if (intent == null && missing != null) {
-                    fallbackNote(raw, missing)
-                } else if (intent == null) {
-                    fallbackNote(raw, "AI 返回无法解析")
-                } else {
-                    save(intent, raw)
+                val rawJson = settings.aiConfig.first()
+                val mode = runCatching { json.decodeFromString<AiConfig>(rawJson) }.getOrNull()
+                    ?.runMode?.ifBlank { "cloud" } ?: "cloud"
+                val message = when (mode) {
+                    "off" -> fallbackNote(raw, "AI 已关闭（设置 → 通用 → AI 对话）")
+                    "local" -> localIntent(raw)
+                    else -> cloudIntent(raw)
                 }
                 onDone(message)
             } catch (t: Throwable) {
@@ -293,14 +300,73 @@ class AiQuickHubViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 云端识别（OpenAI 兼容 chat/completions）。
+     * @param notice 非空时为「本地模式自动降级云端」的原因，会并入结果与提示文案，
+     *               保证用户知道发生了什么（也用于 local 模式不可用时的兜底路径）。
+     */
+    private suspend fun cloudIntent(raw: String, notice: String? = null): String {
+        val rawJson = settings.aiConfig.first()
+        val cfg = parseConfig(rawJson)
+        val missing = missingHint(cfg)
+        val intent = if (missing != null) null else recognize(raw, cfg!!)
+        return when {
+            missing != null -> fallbackNote(raw, if (notice.isNullOrBlank()) missing else "$notice；$missing")
+            intent == null -> fallbackNote(raw, if (notice.isNullOrBlank()) "AI 返回无法解析" else "$notice；AI 返回无法解析")
+            else -> {
+                val msg = save(intent, raw)
+                if (notice.isNullOrBlank()) msg else "$notice\n$msg"
+            }
+        }
+    }
+
+    /**
+     * 本地模式意图识别：强约束 JSON Prompt（与云端同一份 systemPrompt）→ 本地引擎 →
+     * QuickIntentDecoder 清洗落库。本机不支持 / 引擎未就绪 / 返回无法解析 →
+     * 自动降级云端（云端也没配则诚实兜底为笔记），绝不伪装。
+     */
+    private suspend fun localIntent(raw: String): String {
+        val localCfg = parseLocal(settings.localModel.first())
+        val dir = java.io.File(
+            localCfg.modelDir.ifBlank {
+                LocalModelManager.modelDir(appContext, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME).absolutePath
+            }
+        )
+        /* 加载/推理前先体检：架构、总内存、可用内存任一不过关都不碰 JNI，直接降级云端。
+           native 崩溃（SIGABRT / SIGSEGV / OOM-kill）Java 层拦不住，必须在源头挡住。 */
+        val diag = com.example.earthonline.ui.ai.LocalLlmRuntime.diagnose(dir)
+        if (diag is com.example.earthonline.ui.ai.LocalLlmSupport.Blocked) {
+            return cloudIntent(raw, diag.short)
+        }
+        val engine = com.example.earthonline.ui.ai.LocalLlmRuntime.engine
+        if (!engine.ready) {
+            return cloudIntent(raw, "本地模型未加载（请先导入 GGUF 并加载 llama.cpp 引擎）")
+        }
+        return try {
+            val content = engine.chat(
+                listOf(
+                    ChatMessage("system", QuickIntentDecoder.systemPrompt(todayStr(), weekdayCn())),
+                    ChatMessage("user", raw)
+                )
+            ) { /* 流式增量：快捷中枢一次出结果，无需逐段上屏 */ }
+            val intent = content?.let { QuickIntentDecoder.decode(it, raw) }
+            if (intent == null) cloudIntent(raw, "本地模型返回无法解析")
+            else save(intent, raw)
+        } catch (t: Throwable) {
+            cloudIntent(raw, "本地推理失败：${friendlyError(t)}")
+        }
+    }
+
     /** 唯一识别路径：真实大模型 API。返回 null 表示这条路走不通。 */
     private suspend fun recognize(raw: String, cfg: AiConfig): QuickIntent? {
         val today = todayStr()
         val weekday = weekdayCn()
+        // v1.0.6：本地模式映射到 http://127.0.0.1:<port>，复用云端同一套 chat/completions
+        val effective = LocalModelManager.resolve(cfg, parseLocal(settings.localModel.first()))
         return try {
             val resp = withTimeout(15_000) {
                 aiRepo.chat(
-                    cfg,
+                    effective,
                     listOf(
                         ChatMessage("system", QuickIntentDecoder.systemPrompt(today, weekday)),
                         ChatMessage("user", raw)
@@ -559,16 +625,13 @@ fun AiQuickHubSheet(
                 Spacer(Modifier.height(12.dp))
 
                 /* —— 输入框：弹出即聚焦 + 唤起软键盘；语音走输入法麦克风 —— */
-                OutlinedTextField(
+                GlassTextField(
                     value = input,
                     onValueChange = { input = it.take(200) },
-                    placeholder = {
-                        Text("说点什么…（语音请用输入法键盘上的麦克风）")
-                    },
+                    placeholder = "说点什么…（语音请用输入法键盘上的麦克风）",
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
-                    shape = RoundedCornerShape(18.dp),
                     leadingIcon = {
                         Icon(Icons.Rounded.SmartToy, contentDescription = null, tint = ModuleTints.Ai)
                     },

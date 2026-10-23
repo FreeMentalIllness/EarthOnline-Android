@@ -680,26 +680,28 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * 任务完成 / 成就解锁 / 足迹三类事件合并按时间倒序，取前 16 条。
-     * v1.2.0：日键一律走 localDayOf（本地时区）—— ISO 存的是 UTC，
-     * 直接 take(10) 会把东八区晚上 8 点之后发生的事算成"明天"。
+     * 人生时间轴 = 仅记录「里程碑意义」的重大事件，绝对不放鸡毛蒜皮的流水：
+     *  - 成就解锁（解锁成就本身就是里程碑）；
+     *  - 特殊里程碑动态：相册首次导入 / 彩蛋触发等（业务层写入 kind ∈ MILESTONE_KINDS）；
+     *  - 用户在时间轴手动添加的自定义里程碑（在 toUi 处与自动事件合并）。
+     * v1.0.6：已剔除「常规完成任务」与「日常足迹打卡」—— 这两类属于日常流水，
+     *         归入主页「最近动态」，不再污染人生时间轴。
      */
     private fun Parts.buildTimeline(): List<TimelineItem> {
-        val out = ArrayList<TimelineItem>(
-            doneTaskRows.size + ach.recent.size + loc.recent.size
-        )
-        doneTaskRows.forEach { t ->
-            val time = t.doneAt ?: return@forEach
-            out += TimelineItem(t.id, localDayOf(time) ?: time.take(10), "task", t.title.ifBlank { "任务" }, time)
-        }
+        val out = ArrayList<TimelineItem>(ach.recent.size + 4)
         ach.recent.forEach { a ->
             val time = a.unlockedAt ?: return@forEach
             out += TimelineItem(a.id, localDayOf(time) ?: time.take(10), "ach", a.title.ifBlank { "成就" }, time)
         }
-        loc.recent.forEach { l ->
-            // 足迹本来就是本地日键，直接取前 10 位
-            val day = l.date.take(10)
-            out += TimelineItem(l.id, day, "loc", l.name.ifBlank { "足迹" }, l.date)
+        // 特殊里程碑动态（相册首导 / 彩蛋等），由业务层在对应节点写入这些 kind
+        acts.filter { it.kind in MILESTONE_KINDS }.forEach { act ->
+            out += TimelineItem(
+                act.id,
+                localDayOf(act.time) ?: act.time.take(10),
+                act.kind,
+                act.title,
+                act.time
+            )
         }
         out.sortWith(compareByDescending { it.time })
         return if (out.size > TIMELINE_SHOW) out.subList(0, TIMELINE_SHOW) else out
@@ -714,6 +716,11 @@ class HomeViewModel @Inject constructor(
         )
         /** 最近动态可筛选的自动类型（custom 自定义动态恒显示，不参与勾选） */
         val DEFAULT_FEED_KINDS = setOf("task", "ach", "item", "memo")
+        /**
+         * 人生时间轴「里程碑」动态 kind：相册首次导入 / 彩蛋触发等。
+         * 仅这些特殊事件会进入时间轴，日常流水（task/item/memo）一律不进。
+         */
+        val MILESTONE_KINDS = setOf("milestone", "album", "egg")
         const val MEMO_LIMIT = 5
         const val ACT_LIMIT = 3
         const val TIMELINE_LIMIT = 16

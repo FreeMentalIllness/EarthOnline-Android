@@ -46,6 +46,17 @@ interface AmapWebApi {
         @Query("datatype") datatype: String = "all"
     ): InputTipsResp
 
+    /** 关键字搜索（POI v3）：城市留空 = 全国范围，避免「故宫」这类跨城 POI 被城市过滤掉 */
+    @GET("v3/place/text")
+    suspend fun placeText(
+        @Query("key") key: String,
+        @Query("keywords") keywords: String,
+        @Query("city") city: String = "",
+        @Query("offset") offset: Int = 10,
+        @Query("page") page: Int = 1,
+        @Query("extensions") extensions: String = "base"
+    ): PlaceTextResp
+
     @GET("v3/direction/driving")
     suspend fun driving(
         @Query("key") key: String,
@@ -87,6 +98,31 @@ data class Tip(
     val address: String = "",
     // 高德返回 "经度,纬度"
     val location: String = ""
+)
+
+/**
+ * 关键字搜索（POI v3/place/text）响应。
+ * status="1" 表示成功；"0" 时 [info] 是高德给出的具体原因（如 INVALID_USER_SCODE /
+ * DAILY_QUERY_OVER_LIMIT），必须原样透给用户，否则排查无门。
+ */
+@Serializable
+data class PlaceTextResp(
+    val status: String = "",
+    val info: String = "",
+    val count: String = "0",
+    val pois: List<PoiText> = emptyList()
+)
+
+@Serializable
+data class PoiText(
+    val id: String = "",
+    val name: String = "",
+    val type: String = "",
+    val address: String = "",
+    // 高德返回 "经度,纬度"
+    val location: String = "",
+    val adname: String = "",
+    val cityname: String = ""
 )
 
 @Serializable

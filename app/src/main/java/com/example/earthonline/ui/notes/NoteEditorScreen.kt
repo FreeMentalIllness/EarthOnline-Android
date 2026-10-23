@@ -31,10 +31,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -52,29 +56,27 @@ import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.util.rememberImagePicker
 import com.mohamedrejeb.richeditor.model.RichTextState
-import com.mohamedrejeb.richeditor.model.rememberRichTextState
-import com.mohamedrejeb.richeditor.ui.material3.RichTextEditor
+import com.mohamedrejeb.richeditor.ui.BasicRichTextEditor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.runtime.snapshots.SnapshotStateList
 
 /**
- * 笔记编辑页（v1.0.12 第三版：标题 + 工具栏 + 正文一次到位）。
+ * 笔记编辑页（v1.0.6.5 终版：richeditor-compose rc10 真实富文本）。
  *
- * 本轮解决的三个硬问题：
- *  1. 【新建即完整】标题输入框 / 格式化工具栏 / 正文区同时在场，进来就能写、就能排版；
- *  2. 【绝不显示源码】正文用 richeditor 富文本渲染（WYSIWYG）。载入时先 setMarkdown，
- *     若解析后仍残留 `**` / `<u>` / `##` 等源码标记，再走 HTML 解析兜底，
- *     最后退化为纯文本 —— 任何情况下都不会把 Markdown 源码糊在正文里；
- *  3. 【工具栏恒在】工具栏挂在 Scaffold 的 bottomBar 上并带 imePadding，
- *     键盘弹出时整体上浮贴在键盘之上，不会被遮挡。
- *
- * 存储：markdown 列（跨端兼容）+ text 纯文本列兜底；标题以 `# 标题` 形式存在
- * Markdown 首行，不新增数据库列，升级零迁移。
+ * 本轮按死命令彻底废弃上一版「Markdown 源码 + 透明标记」的手搓方案：
+ *  - 正文唯一真相源是 [RichTextState]（真实富文本对象树），选中文字点 B 后
+ *    文字立刻肉眼可见地变粗，取消选中后文本流连贯 —— 绝无隐藏符号占位或空白；
+ *  - 存储层依旧 Markdown：载入 [RichTextState.setMarkdown]，保存 [RichTextState.toMarkdown]，
+ *    跨端兼容与双写兜底完全不变；
+ *  - 撤销 / 重做：rc10 库内未内建 undo/redo，这里维护 [RichTextState.copy] 快照栈
+ *    （输入停顿 400ms 记一次，格式化动作即时落栈），出栈直接换状态实例；
+ *  - 待办：行首插入 / 切换「- [ ] 」「- [x]」纯文本标记，原文字绝不清空；
+ *  - 列表 / 标题样式走库内 toggleUnorderedList / toggleOrderedList 与 SpanStyle 切换。
  */
 @Composable
 fun NoteEditorRoute(
@@ -96,8 +98,9 @@ fun NoteEditorScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val rich = rememberRichTextState()
 
+    // 正文：真实富文本状态（richeditor rc10）
+    var editorState by remember { mutableStateOf(RichTextState()) }
     var title by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
@@ -105,82 +108,100 @@ fun NoteEditorScreen(
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
     var bodyScale by remember { mutableFloatStateOf(1f) }
-    // v1.0.14：编辑器焦点句柄 —— 点工具栏按钮会把焦点从编辑器挪走，
-    // 必须立刻要回来，否则「无选中时按 B」的待应用样式不会落到后续输入上
     val editorFocus = remember { FocusRequester() }
+    var historyJob by remember { mutableStateOf<Job?>(null) }
 
-    /* ---------- 撤销 / 重做：自建快照栈（richeditor 本版无内置 undo） ---------- */
-    val history = remember { mutableStateListOf<String>() }
+    /* ---------- 撤销 / 重做：RichTextState 快照栈（rc10 无内建 undo/redo） ---------- */
+    val history = remember { SnapshotStateList<RichTextState>() }
     var histIndex by remember { mutableIntStateOf(0) }
-    // v1.0.15：程序化 setHtml（撤销/重做）的时间戳；收集期内命中则跳过记录，
-    // 避免把「撤销/重做」本身当成新快照污染栈（旧实现会让重做越界失效的根因）
-    var lastProgSet by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(id) {
-        if (id.isNotBlank()) {
-            vm.getNote(id)?.let { m ->
-                val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
-                val (t, rest) = splitTitle(md)
-                title = t
-                loadRich(rich, rest)
-                tags = NotesViewModel.tagsOf(m)
-            }
-        }
-        loaded = true
-        lastProgSet = System.currentTimeMillis()
-        history.clear()
-        history.add(rich.toHtml())
-        histIndex = 0
-    }
-
-    // 输入停顿 250ms 记一次快照；程序化 setHtml 的 500ms 内不记录
-    LaunchedEffect(Unit) {
-        snapshotFlow { rich.toHtml() }.debounce(250).collect { html ->
-            if (!loaded) return@collect
-            if (System.currentTimeMillis() - lastProgSet < 500) return@collect
-            while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
-            if (history.last() != html) {
-                history.add(html)
-                if (history.size > 100) history.removeAt(0)
-                histIndex = history.lastIndex
-            }
-        }
-    }
-
-    /* v1.0.15：撤销/重做（死命令）。
-       点击瞬间先把「当前（可能尚未落栈的）状态」压栈，再回退/前进一步 ——
-       无论防抖是否落栈，任意时点点击都必然生效；truncate 保证 redo 分支正确。 */
-    fun snapshotCurrent() {
-        val cur = runCatching { rich.toHtml() }.getOrDefault("")
+    /** 入栈：纯文本与栈顶相同则跳过（避免 undo/redo 后防抖重复入栈污染 redo 分支） */
+    fun pushHistory(s: RichTextState) {
+        if (history.isNotEmpty() && history[histIndex].toText() == s.toText()) return
         while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
-        if (history.getOrNull(histIndex) != cur) {
-            history.add(cur)
-            if (history.size > 100) history.removeAt(0)
-            histIndex = history.lastIndex
-        }
+        history.add(s.copy())
+        if (history.size > 200) history.removeAt(0)
+        histIndex = history.lastIndex
     }
 
     fun undo() {
-        snapshotCurrent()
         if (histIndex > 0) {
             histIndex--
-            lastProgSet = System.currentTimeMillis()
-            runCatching { rich.setHtml(history[histIndex]) }
+            editorState = history[histIndex].copy()
         }
     }
 
     fun redo() {
-        snapshotCurrent()
         if (histIndex < history.lastIndex) {
             histIndex++
-            lastProgSet = System.currentTimeMillis()
-            runCatching { rich.setHtml(history[histIndex]) }
+            editorState = history[histIndex].copy()
         }
     }
 
-    /** v1.0.14：加粗/斜体/下划线/标题统一切换 —— 切换后立刻把焦点还给编辑器 */
-    fun applySpanStyle(style: SpanStyle) {
-        rich.toggleSpanStyle(style)
+    /* ---------- 行首 / 行尾定位（待办前缀插入用，基于纯文本视图） ---------- */
+    fun lineStartOf(text: String, pos: Int): Int {
+        val i = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0))
+        return if (i < 0) 0 else i + 1
+    }
+    fun lineEndOf(text: String, pos: Int): Int {
+        val i = text.indexOf('\n', pos)
+        return if (i < 0) text.length else i
+    }
+
+    /* ---------- 行内样式：真实富文本切换（B / I / U / 标题） ---------- */
+    fun toggleStyle(style: SpanStyle) {
+        editorState.toggleSpanStyle(style)
+        pushHistory(editorState)
+        runCatching { editorFocus.requestFocus() }
+    }
+
+    /**
+     * 加粗样式 = 字重（有 Bold 字重的字体直接真加粗）+「伪粗体（Fake Bold）」合成加粗。
+     *
+     * 两次踩坑的收敛结论（务必保持）：
+     *  ① 只写 fontWeight=FontWeight.Bold 时，无 Bold 字重的国产中文字体族渲染零变化
+     *     （Compose 不做合成加粗）→ 用户反馈「看不出加粗」；
+     *  ② 曾经用 drawStyle=Stroke 做假粗体：Compose 会切换到**描边模式**绘制字形，
+     *     只画轮廓不填充，中文笔画本就仅约 1px，结果整段字变成空心的浅色描边 ——
+     *     视觉上就是「加粗后字体变白看不见」（本次修复的根因）。
+     *
+     * 现在用 SpanStyle.shadow 做伪粗体：同色（[LocalContentColor]，随主题明/暗自动切换）
+     * 的投影向对角线偏移 ~0.9px 并带极小的 0.6 模糊半径，等效于把字形重描一遍加厚，
+     * 既能被任何字体族（含缺 Bold 字重的中文字体）肉眼识别为加粗，又完全不碰原本的文字颜色。
+     * 偏移 + 微模糊双管齐下，比纯 0.6px 横向位移更扎实，不会因设备 DPI 不同而「看不出」。
+     */
+    val BoldStyle = SpanStyle(
+        fontWeight = FontWeight.Bold,
+        shadow = Shadow(
+            color = LocalContentColor.current,
+            offset = Offset(x = 0.9f, y = 0.9f),
+            blurRadius = 0.6f
+        )
+    )
+
+    // 加粗激活态：以「是否带假粗体投影」为准 —— 避免与同为 Bold 字重的标题样式混淆
+    val boldActive = editorState.currentSpanStyle.shadow != null
+    val italicActive = editorState.currentSpanStyle.fontStyle == FontStyle.Italic
+    val underlineActive = editorState.currentSpanStyle.textDecoration == TextDecoration.Underline
+    val headingActive = editorState.currentSpanStyle.fontSize == 20.sp
+
+    /* ---------- 待办：行首插入 / 切换「- [ ] 」「- [x] 」，原文字绝不清空 ---------- */
+    fun toggleTodo() {
+        val text = editorState.toText()
+        val caret = editorState.selection.start.coerceIn(0, text.length)
+        val ls = lineStartOf(text, caret)
+        val le = lineEndOf(text, caret)
+        val line = text.substring(ls, le)
+        val prefixLen = "- [ ] ".length
+        when {
+            line.startsWith("- [ ] ") ->
+                editorState.replaceTextRange(TextRange(ls, ls + prefixLen), "- [x] ")
+            line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
+                editorState.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
+            else ->
+                editorState.addTextAtIndex(ls, "- [ ] ")
+        }
+        pushHistory(editorState)
         runCatching { editorFocus.requestFocus() }
     }
 
@@ -190,7 +211,7 @@ fun NoteEditorScreen(
         tagInput = ""
     }
 
-    /* ---------- 图片 / 附件：复制到私有目录，富文本里以链接态呈现 ---------- */
+    /* ---------- 图片 / 附件：复制到私有目录，正文中以 Markdown 链接文本呈现 ---------- */
     fun importIntoNoteMedia(uri: Uri, fallbackName: String, onDone: (String) -> Unit) {
         scope.launch {
             val path = withContext(Dispatchers.IO) {
@@ -217,40 +238,46 @@ fun NoteEditorScreen(
     }
 
     val pickImage = rememberImagePicker(onPicked = { uri ->
-        importIntoNoteMedia(uri, "image.jpg") { path -> rich.addLink("图片", "file://$path") }
+        importIntoNoteMedia(uri, "image.jpg") { path ->
+            editorState.addTextAfterSelection("![图片](file://$path)")
+            pushHistory(editorState)
+        }
     })
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             importIntoNoteMedia(uri, "file") { path ->
-                rich.addLink("${path.substringAfterLast('_')}", "file://$path")
+                editorState.addTextAfterSelection("[${path.substringAfterLast('_')}]($path)")
+                pushHistory(editorState)
             }
         }
     }
 
-    /* ---------- 待办：行首 ☐ / ☑，再点一次切换勾选态 ---------- */
-    fun toggleTodo() {
-        val txt = rich.toText()
-        val caret = rich.selection.start.coerceIn(0, txt.length)
-        val nl = txt.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
-        val lineStart = if (nl < 0) 0 else nl + 1
-        if (lineStart < txt.length && (txt[lineStart] == '☐' || txt[lineStart] == '☑')) {
-            val next = if (txt[lineStart] == '☐') "☑" else "☐"
-            runCatching { rich.replaceTextRange(TextRange(lineStart, lineStart + 1), next) }
-        } else {
-            runCatching { rich.addTextAtIndex(lineStart, "☐ ") }
+    LaunchedEffect(id) {
+        if (id.isNotBlank()) {
+            vm.getNote(id)?.let { m ->
+                val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
+                val (t, rest) = splitTitle(md)
+                title = t
+                editorState.setMarkdown(rest)
+                tags = NotesViewModel.tagsOf(m)
+            }
         }
+        history.clear()
+        history.add(editorState.copy())
+        histIndex = 0
+        loaded = true
     }
 
     fun save() {
-        val plain = rich.toText().trim()
+        val bodyMarkdown = editorState.toMarkdown().trim()
+        val plain = editorState.toText().trim()
         val t = title.trim()
         if (t.isBlank() && plain.isBlank()) {
             onBack()
             return
         }
         commitTag()
-        val mdBody = rich.toMarkdown().trim()
-        val markdown = if (t.isBlank()) mdBody else "# $t\n\n$mdBody"
+        val markdown = if (t.isBlank()) bodyMarkdown else "# $t\n\n$bodyMarkdown"
         val plainBody = if (t.isBlank()) plain
         else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
         scope.launch {
@@ -261,16 +288,8 @@ fun NoteEditorScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
-        // v1.0.14：本页 inset 清零 —— 键盘/导航栏避让由内容自理，杜绝双重叠加
         contentWindowInsets = WindowInsets(0),
-        /* v1.0.18（死命令 5）：放弃「贴键盘」方案 —— 格式化工具栏直接挂在标题栏正下方，
-           固定在屏幕顶部。无论键盘怎么弹，工具栏恒在顶端，中间绝无空白。
-           （topBar 整体被 windowInsetsTopHeight 之外的状态栏避让覆盖，键盘永远够不到这里。） */
         topBar = {
-            // v1.0.19（死命令 4）复核确认：「编辑笔记/保存/删除」标题栏本身就是纯色硬色块 ——
-            // TopAppBar containerColor = 不透明主题背景色（v1.0.15 落地），且 TopAppBar 自带
-            // statusBars inset，容器色向上延伸盖住状态栏，与 MainScaffold 状态栏实心块
-            // 同色无缝连体，壁纸绝不透出标题区。下方的毛玻璃格式化工具栏保持 v1.0.18 设计不动。
             Column {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -293,24 +312,25 @@ fun NoteEditorScreen(
                         }
                     }
                 )
-                /* v1.0.14：currentSpanStyle 是快照态 —— 点 B 后立即重组，按钮高亮 + 正文即时变粗 */
-                val curSpanStyle = rich.currentSpanStyle
                 EditorFormatBar(
                     modifier = Modifier,
                     canUndo = histIndex > 0,
                     canRedo = histIndex >= 0 && histIndex < history.lastIndex,
-                    boldActive = curSpanStyle.fontWeight == FontWeight.Bold,
-                    italicActive = curSpanStyle.fontStyle == FontStyle.Italic,
-                    underlineActive = curSpanStyle.textDecoration == TextDecoration.Underline,
+                    boldActive = boldActive,
+                    italicActive = italicActive,
+                    underlineActive = underlineActive,
+                    headingActive = headingActive,
+                    bulletActive = editorState.isUnorderedList,
+                    orderedActive = editorState.isOrderedList,
                     onUndo = { undo() },
                     onRedo = { redo() },
-                    onBold = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
-                    onItalic = { applySpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-                    onUnderline = { applySpanStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                    onHeading = { applySpanStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
+                    onBold = { toggleStyle(BoldStyle) },
+                    onItalic = { toggleStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                    onUnderline = { toggleStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
+                    onHeading = { toggleStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
                     onTodo = { toggleTodo() },
-                    onBullet = { rich.toggleUnorderedList() },
-                    onOrdered = { rich.toggleOrderedList() },
+                    onBullet = { editorState.toggleUnorderedList(); pushHistory(editorState) },
+                    onOrdered = { editorState.toggleOrderedList(); pushHistory(editorState) },
                     onImage = { pickImage() },
                     onFile = { pickFile.launch("*/*") },
                     onFontSize = {
@@ -338,19 +358,16 @@ fun NoteEditorScreen(
                 .padding(horizontal = 14.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            /* 标题：进来第一眼就是标题框（对标参考图四的大标题） */
-            OutlinedTextField(
+            GlassTextField(
                 value = title,
                 onValueChange = { title = it.replace("\n", "") },
-                placeholder = { Text("标题") },
+                placeholder = "标题",
                 singleLine = true,
-                textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                shape = RoundedCornerShape(14.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                textStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // 标签：默认收起，避免首屏被标签区挤占
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -378,7 +395,7 @@ fun NoteEditorScreen(
                 }
             }
             if (showTagRow) {
-                OutlinedTextField(
+                GlassTextField(
                     value = tagInput,
                     onValueChange = {
                         if (it.contains(',') || it.contains('，')) {
@@ -389,38 +406,61 @@ fun NoteEditorScreen(
                             tagInput = parts.last()
                         } else tagInput = it
                     },
-                    placeholder = { Text("输入标签，回车确认") },
+                    placeholder = "输入标签，逗号或回车确认",
                     singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { commitTag() }),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            /* 正文区：外层玻璃卡 + 内层高不透明底板 ——
-               壁纸再花，正文底色也稳定，字永远读得清（参考图二的磨砂质感）。 */
             GlassCard(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(UiDimens.CardRadius)
             ) {
-                RichTextEditor(
-                    state = rich,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = (16 * bodyScale).sp,
-                        lineHeight = (28 * bodyScale).sp
-                    ),
-                    placeholder = { Text("写点什么…支持加粗、列表、待办、插图") },
-                    shape = RoundedCornerShape(UiDimens.CardRadius),
-                    modifier = Modifier
+                Box(
+                    Modifier
                         .fillMaxSize()
-                        .focusRequester(editorFocus)
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             RoundedCornerShape(UiDimens.CardRadius)
                         )
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    BasicRichTextEditor(
+                        state = editorState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .focusRequester(editorFocus),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = (16 * bodyScale).sp,
+                            lineHeight = (28 * bodyScale).sp
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            if (editorState.annotatedString.text.isEmpty()) {
+                                Text(
+                                    "写点什么…支持加粗、列表、待办、插图",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            inner()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // 输入停顿 400ms 记一次快照（程序化 undo/redo 与格式化动作即时落栈）
+    LaunchedEffect(Unit) {
+        snapshotFlow { editorState.toText() }.collect {
+            if (loaded) {
+                historyJob?.cancel()
+                historyJob = scope.launch {
+                    delay(400)
+                    pushHistory(editorState)
+                }
             }
         }
     }
@@ -444,60 +484,6 @@ fun NoteEditorScreen(
     }
 }
 
-/**
- * 富文本载入的三级兜底 —— 保证「绝不在正文里显示 Markdown 源码」：
- * ① setMarkdown（正常路径，同库往返）；
- * ② 若仍残留源码标记 → 走 HTML 解析（`<u>` 之类内联标签只有 HTML 通道认）；
- * ③ 再不行 → 纯文本，至少用户看到的是干净文字。
- */
-private fun loadRich(rich: RichTextState, source: String) {
-    if (source.isBlank()) return
-    runCatching { rich.setMarkdown(source) }
-    val probe = runCatching { rich.toText() }.getOrDefault("")
-    val hasResidue = probe.contains("**") ||
-        probe.contains("<u>") || probe.contains("</u>") ||
-        probe.contains("](") || probe.contains("##")
-    if (hasResidue) {
-        val htmlOk = runCatching { rich.setHtml(markdownToHtml(source)) }.isSuccess
-        val after = runCatching { rich.toText() }.getOrDefault("")
-        if (!htmlOk || after.contains("**") || after.contains("<u>")) {
-            runCatching { rich.setText(markdownToPlain(source)) }
-        }
-    }
-}
-
-/**
- * 极简 Markdown → HTML（只服务兜底路径）：标题 / 粗体 / 斜体 / 链接 / 换行。
- * 列表标记降级为「• 」文字 —— 宁可少一层语义，也不让源码露出来。
- */
-private fun markdownToHtml(md: String): String {
-    val sb = StringBuilder()
-    md.lines().forEach { raw ->
-        val line = raw.trimEnd()
-        when {
-            line.isBlank() -> sb.append("<br>")
-            line.startsWith("### ") ->
-                sb.append("<h3>").append(inlineHtml(line.removePrefix("### "))).append("</h3>")
-            line.startsWith("## ") ->
-                sb.append("<h2>").append(inlineHtml(line.removePrefix("## "))).append("</h2>")
-            line.startsWith("# ") ->
-                sb.append("<h1>").append(inlineHtml(line.removePrefix("# "))).append("</h1>")
-            line.startsWith("- ") || line.startsWith("* ") ->
-                sb.append("<p>• ").append(inlineHtml(line.substring(2))).append("</p>")
-            else -> sb.append("<p>").append(inlineHtml(line)).append("</p>")
-        }
-    }
-    return sb.toString()
-}
-
-private fun inlineHtml(text: String): String {
-    var s = text
-    s = s.replace(Regex("\\*\\*(.+?)\\*\\*"), "<b>$1</b>")
-    s = s.replace(Regex("(?<!\\*)\\*(?!\\*)(.+?)\\*(?!\\*)"), "<i>$1</i>")
-    s = s.replace(Regex("\\[([^]]{0,120})]\\(([^)]{0,300})\\)"), "<a href=\"$2\">$1</a>")
-    return s
-}
-
 /** 把首行 `# 标题` 拆出来；没有标题行时 title 为空、正文原样。 */
 private fun splitTitle(md: String): Pair<String, String> {
     val firstLine = md.lineSequence().firstOrNull().orEmpty()
@@ -508,8 +494,8 @@ private fun splitTitle(md: String): Pair<String, String> {
 }
 
 /**
- * 编辑工具栏（对标参考图四）：撤销 / 重做 | B I U H | ☑ 待办 • 列表 1. 有序 | 🖼 图片 📎 附件 | A±
- * 单行横向滚动，恒定可见；全部按钮直接作用于富文本，不插入任何 Markdown 符号。
+ * 编辑工具栏（对标主流 Markdown 编辑器）：撤销 / 重做 | B I U H | ☑ 待办 • 列表 1. 有序 | 图片 附件 | A±。
+ * 单行横向滚动，恒定可见；按钮直接作用于 [RichTextState]（真实富文本，无源码符号）。
  */
 @Composable
 private fun EditorFormatBar(
@@ -519,6 +505,9 @@ private fun EditorFormatBar(
     boldActive: Boolean,
     italicActive: Boolean,
     underlineActive: Boolean,
+    headingActive: Boolean,
+    bulletActive: Boolean,
+    orderedActive: Boolean,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onBold: () -> Unit,
@@ -532,10 +521,6 @@ private fun EditorFormatBar(
     onFile: () -> Unit,
     onFontSize: () -> Unit
 ) {
-    // v1.0.15：键盘贴合 —— 取消纯色填充（改用毛玻璃语言），imePadding() 让工具栏紧贴输入法上沿，
-    // 无突兀色块、无巨大间隙；顶部圆角成面板感，底部圆角融入屏底
-    // v1.0.18（死命令 5）：工具栏固定屏幕顶部（标题栏正下方），不再参与任何键盘避让 ——
-    // 去 imePadding/navigationBarsPadding；下缘圆角成面板收口，上缘与标题栏无缝相接。
     GlassSurface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
@@ -555,11 +540,11 @@ private fun EditorFormatBar(
             ToolIcon(Icons.Rounded.FormatBold, "加粗", true, boldActive, onBold)
             ToolIcon(Icons.Rounded.FormatItalic, "斜体", true, italicActive, onItalic)
             ToolIcon(Icons.Rounded.FormatUnderlined, "下划线", true, underlineActive, onUnderline)
-            ToolIcon(Icons.Rounded.Title, "标题", true, onClick = onHeading)
+            ToolIcon(Icons.Rounded.Title, "标题", true, headingActive, onHeading)
             ToolDivider()
             ToolIcon(Icons.Rounded.CheckBox, "待办", true, onClick = onTodo)
-            ToolIcon(Icons.Rounded.FormatListBulleted, "无序列表", true, onClick = onBullet)
-            ToolIcon(Icons.Rounded.FormatListNumbered, "有序列表", true, onClick = onOrdered)
+            ToolIcon(Icons.Rounded.FormatListBulleted, "无序列表", true, bulletActive, onBullet)
+            ToolIcon(Icons.Rounded.FormatListNumbered, "有序列表", true, orderedActive, onOrdered)
             ToolDivider()
             ToolIcon(Icons.Rounded.Image, "插入图片", true, onClick = onImage)
             ToolIcon(Icons.Rounded.AttachFile, "插入附件", true, onClick = onFile)

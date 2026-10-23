@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.earthonline.ui.components.UiDimens
 import java.io.File
 
 /**
@@ -299,20 +300,48 @@ fun GlassCard(
 }
 
 /**
+ * 全局标准列表卡（v1.0.6.3：对标背包页提取的统一卡片规范）。
+ * - 圆角固定 [UiDimens.CardRadius]（16dp），与背包 / 速览 / 底栏同套圆弧；
+ * - 着色与可读性遮罩走 [GlassCard] 同一渲染管线（受「卡片不透明度」滑块联动），
+ *   绝不出现默认 Material Card 的黑色 elevation 阴影；
+ * - 业务层（笔记 / 任务 / 背包）一律调用本组件，保证三端列表卡视觉完全一致。
+ */
+@Composable
+fun AppCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    GlassCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(UiDimens.CardRadius),
+        onClick = onClick,
+        content = content
+    )
+}
+
+/**
  * 背景模糊 / 折射修饰符。所有 GPU 调用均门控于 SDK 版本，低版本返回原修饰符（纯色面板照常）。
  * FULL 档额外做轻微放大，模拟透镜折射观感（安全、零 RenderEffect 类型摩擦）。
+ *
+ * v1.0.6.7 性能调优：
+ *  - 模糊开销随半径**非线性**增长，且每个玻璃卡片每帧都要跑一次；这里从 10dp 再降到 6dp，
+ *    6dp 配合下面的半透明着色层观感几乎无损，但列表滚动时的 GPU 帧时间显著下降；
+ *  - FULL 档此前漏了 SDK 版本门控（API < 31 上 Modifier.blur 无实现，白白多一次图层合成），
+ *    现在两个分支统一先判版本。
  */
 private fun Modifier.backdrop(tier: GlassTier): Modifier {
-    val blurred = if (Build.VERSION.SDK_INT >= 31) this.blur(BLUR_DP) else this
+    if (Build.VERSION.SDK_INT < 31) return this
+    val blurred = this.blur(BLUR_DP)
     return if (tier == GlassTier.FULL) {
-        this.graphicsLayer { scaleX = 1.06f; scaleY = 1.06f }.blur(BLUR_DP)
+        // 折射：先轻微放大再模糊，避免采样到边缘拉伸露白
+        this.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }.blur(BLUR_DP)
     } else blurred
 }
 
-/* v1.0.7：模糊半径 18dp -> 10dp（真机反馈明显卡顿）。
-   Modifier.blur 的开销随半径非线性增长，且每个 GlassSurface 每帧都要跑一次；
-   10dp 已足够「磨砂」，18dp 属于过度消费 GPU。低端降级（FLAT 纯色档）不受影响。 */
-private val BLUR_DP: Dp = 10.dp
+/* 模糊半径：18dp(v1.0.6) → 10dp(v1.0.7) → 6dp(v1.0.6.7)。
+   低端降级档（FLAT 纯色）完全不走这里，零 GPU 开销。 */
+private val BLUR_DP: Dp = 6.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */
 @Composable

@@ -8,6 +8,7 @@ import android.view.View
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.MarkerOptions
 import com.example.earthonline.data.local.entity.LocationEntity
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.LocationHelper
@@ -48,6 +51,7 @@ import com.example.earthonline.util.LocateError
 import com.example.earthonline.util.LocateResult
 import com.example.earthonline.util.millisToDayStr
 import com.example.earthonline.util.todayStr
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -107,6 +111,16 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     /** 是否正在定位（UI 显示进度，避免「点了没反应」） */
     var locating by remember { mutableStateOf(false) }
 
+    // v1.0.6.4：足迹列表 → 地图联动（点击足迹回地图居中 + 信息气泡）
+    var focusLoc by remember { mutableStateOf<LocationEntity?>(null) }
+    // v1.0.6.5：高德原生 Search SDK POI 搜索（复用清单 Key，无需 Web Key）
+    var showPoi by remember { mutableStateOf(false) }
+    var poiQuery by remember { mutableStateOf("") }
+    var poiLoading by remember { mutableStateOf(false) }
+    var poiResults by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
+    // POI 选中后预填足迹名
+    var pendingName by remember { mutableStateOf("") }
+
     fun moveCameraTo(ll: LatLng, zoom: Float = 15f) {
         mapRef.aMap?.let { runCatching { it.moveCamera(CameraUpdateFactory.newLatLngZoom(ll, zoom)) } }
     }
@@ -164,7 +178,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     }
 
     // 统一重绘：足迹 marker + 当前位置 marker（任一项变化都重画，避免互相覆盖）
-    LaunchedEffect(locations, mapReady, currentLatLng) {
+    // v1.0.6.4：focusLoc 非 null 时把该足迹居中并弹出信息气泡（足迹列表联动跳转）
+    LaunchedEffect(locations, mapReady, currentLatLng, focusLoc) {
         if (!mapReady) return@LaunchedEffect
         val map = mapRef.aMap ?: return@LaunchedEffect
         runCatching {
@@ -177,7 +192,33 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
             currentLatLng?.let {
                 map.addMarker(MarkerOptions().position(it).title("我的位置").snippet("当前定位"))
             }
+            focusLoc?.let { fl ->
+                if (fl.lat != 0.0 || fl.lng != 0.0) {
+                    val ll = LatLng(fl.lat, fl.lng)
+                    val marker = map.addMarker(
+                        MarkerOptions()
+                            .position(ll)
+                            .title(fl.name.ifBlank { "未命名足迹" })
+                            .snippet(listOfNotNull(fl.date.takeIf { it.isNotBlank() }, fl.note).joinToString(" · "))
+                    )
+                    marker?.showInfoWindow()
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(ll, 16f))
+                }
+            }
         }
+    }
+
+    // v1.0.6.4：POI 搜索防抖（350ms 后调高德 inputtips；未配 Web Key 时结果恒为空并提示）
+    LaunchedEffect(poiQuery) {
+        if (poiQuery.isBlank()) {
+            poiResults = emptyList()
+            poiLoading = false
+            return@LaunchedEffect
+        }
+        poiLoading = true
+        delay(350)
+        poiResults = vm.searchPoi(poiQuery.trim())
+        poiLoading = false
     }
 
     // v1.0.2 深度修复：绑定 Activity 生命周期。
@@ -211,6 +252,10 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("足迹地图") },
                 actions = {
+                    // v1.0.6.4：高德 POI 地点搜索（关键字 → 候选列表 → 移动视野 / 一键加足迹）
+                    IconButton(onClick = { showPoi = true }) {
+                        Icon(Icons.Rounded.Search, contentDescription = "搜索地点")
+                    }
                     // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）
                     IconButton(onClick = { showList = true }) {
                         Icon(Icons.Rounded.List, contentDescription = "足迹列表")
@@ -312,7 +357,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                             )
                         }
                     }
-                    LocationList(filteredLocations, vm::deleteLocation)
+                    LocationList(filteredLocations, vm::deleteLocation, onLocate = { })
                 }
             }
 
@@ -328,10 +373,10 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                     shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
                 ) {
-                    OutlinedTextField(
+                    GlassTextField(
                         value = query,
                         onValueChange = { query = it },
-                        placeholder = { Text("搜索足迹名称 / 备注 / 标签 / 日期") },
+                        placeholder = "搜索足迹名称 / 备注 / 标签 / 日期",
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                         trailingIcon = {
@@ -341,7 +386,6 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                                 }
                             }
                         },
-                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -355,7 +399,11 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)
                     ) {
                         Column(Modifier.fillMaxWidth().padding(8.dp)) {
-                            LocationList(filteredLocations, vm::deleteLocation)
+                            LocationList(
+                                filteredLocations,
+                                vm::deleteLocation,
+                                onLocate = { loc -> focusLoc = loc }
+                            )
                         }
                     }
                 }
@@ -364,6 +412,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     }
 
     // v1.0.7：路径点记录页 —— 独立的足迹列表（本地搜索筛选，不依赖高德 Key）
+    // v1.0.6.4：点击某条足迹 → 关闭列表并回地图居中 + 信息气泡
     if (showList) {
         ModalBottomSheet(onDismissRequest = { showList = false }) {
             Column(
@@ -382,15 +431,119 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                LocationList(filteredLocations, vm::deleteLocation)
+                Text(
+                    "点击足迹可在地图上定位并查看详情",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LocationList(
+                    filteredLocations,
+                    vm::deleteLocation,
+                    onLocate = { loc ->
+                        showList = false
+                        focusLoc = loc
+                    }
+                )
+            }
+        }
+    }
+
+    // v1.0.6.5：高德 POI 地点搜索抽屉（原生 Search SDK）—— 关键字 → 候选列表 → 点击移动视野并一键添加足迹
+    if (showPoi) {
+        ModalBottomSheet(onDismissRequest = { showPoi = false }) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "搜索地点",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                GlassTextField(
+                    value = poiQuery,
+                    onValueChange = { poiQuery = it },
+                    placeholder = "输入地点关键字，如「故宫」「星巴克」",
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (poiQuery.isNotEmpty()) {
+                            IconButton(onClick = { poiQuery = "" }) {
+                                Icon(Icons.Rounded.Close, contentDescription = "清空")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (poiLoading) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+                // 错误码透出（如 10009 = Key/SHA1 未绑定或未开通搜索服务）——绝不静默吞掉
+                val poiError by vm.poiError.collectAsStateWithLifecycle()
+                poiError?.let { err ->
+                    Text(
+                        err,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (poiError == null && poiQuery.isNotBlank() && !poiLoading && poiResults.isEmpty()) {
+                    Text(
+                        "没有找到相关地点，换个关键字试试。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(poiResults, key = { "${it.lat},${it.lng},${it.name}" }) { s ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    moveCameraTo(LatLng(s.lat, s.lng))
+                                    pendingLatLng = LatLng(s.lat, s.lng)
+                                    pendingName = s.name
+                                    showPoi = false
+                                    showAdd = true
+                                }
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                s.name.ifBlank { "未命名地点" },
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            val sub = listOf(s.district, s.address)
+                                .filter { it.isNotBlank() }
+                                .joinToString(" · ")
+                            if (sub.isNotBlank()) {
+                                Text(
+                                    sub,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    "搜索由高德 POI 服务提供；点击候选地点：地图移动到该点，并可一键添加为足迹。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 
     if (showAdd) {
         AddLocationDialog(
+            initialName = pendingName,
             initialDate = todayStr(),
-            onDismiss = { showAdd = false; pendingLatLng = null },
+            onDismiss = { showAdd = false; pendingLatLng = null; pendingName = "" },
             onConfirm = { name, date, note, tags ->
                 val ll = pendingLatLng ?: currentLatLng
                 if (ll != null) {
@@ -400,6 +553,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 }
                 showAdd = false
                 pendingLatLng = null
+                pendingName = ""
             }
         )
     }
@@ -408,7 +562,11 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
 /* ===================== 原有：足迹列表 / 添加对话框 ===================== */
 
 @Composable
-private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEntity) -> Unit) {
+private fun LocationList(
+    locations: List<LocationEntity>,
+    onDelete: (LocationEntity) -> Unit,
+    onLocate: (LocationEntity) -> Unit = { }
+) {
     if (locations.isEmpty()) {
         Text("还没有足迹，点击右下角 + 添加。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
@@ -426,7 +584,13 @@ private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEnt
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(Icons.Rounded.Place, null, tint = AmberPrimary)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // 点击文字区 → 回地图居中该足迹 + 信息气泡（删除按钮独立，不冲突）
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .clickable { onLocate(loc) },
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(loc.name.ifBlank { "未命名足迹" }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         if (loc.date.isNotBlank()) {
                             Text(loc.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -446,11 +610,12 @@ private fun LocationList(locations: List<LocationEntity>, onDelete: (LocationEnt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddLocationDialog(
+    initialName: String = "",
     initialDate: String,
     onDismiss: () -> Unit,
     onConfirm: (name: String, date: String, note: String?, tags: List<String>) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
     var date by remember { mutableStateOf(initialDate) }
     var note by remember { mutableStateOf("") }
     var tagsText by remember { mutableStateOf("") }
@@ -461,14 +626,34 @@ private fun AddLocationDialog(
         title = { Text("添加足迹") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it.take(60) }, label = { Text("名称") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(date, {}, readOnly = true, label = { Text("日期") },
+                GlassTextField(
+                    value = name,
+                    onValueChange = { name = it.take(60) },
+                    label = "名称",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                GlassTextField(
+                    value = date,
+                    onValueChange = { },
+                    label = "日期",
+                    readOnly = true,
                     trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Rounded.DateRange, null) } },
-                    modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(note, { note = it }, label = { Text("备注") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(tagsText, { tagsText = it }, label = { Text("标签（逗号分隔）") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                    modifier = Modifier.fillMaxWidth()
+                )
+                GlassTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = "备注",
+                    modifier = Modifier.fillMaxWidth()
+                )
+                GlassTextField(
+                    value = tagsText,
+                    onValueChange = { tagsText = it },
+                    label = "标签（逗号分隔）",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {

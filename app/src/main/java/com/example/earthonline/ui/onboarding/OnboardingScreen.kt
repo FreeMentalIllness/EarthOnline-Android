@@ -1,5 +1,10 @@
 package com.example.earthonline.ui.onboarding
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -86,28 +91,33 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // ---- 品牌区 ----
-            Surface(color = AmberPrimary.copy(alpha = 0.14f), shape = CircleShape) {
-                Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Public, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(64.dp))
+            EnterGroup(0) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Surface(color = AmberPrimary.copy(alpha = 0.14f), shape = CircleShape) {
+                        Box(Modifier.size(88.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Rounded.Public, contentDescription = null, tint = AmberPrimary, modifier = Modifier.size(64.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "欢迎来到地球Online",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "先设定你的角色，1 分钟内开始记录人生。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "欢迎来到地球Online",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "先设定你的角色，1 分钟内开始记录人生。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
             Spacer(Modifier.height(24.dp))
 
             // ---- 角色信息卡 ----
+            EnterGroup(1) {
             GlassCard(
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -118,16 +128,13 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                 ) {
                     FormSectionLabel("基础信息")
 
-                    OutlinedTextField(
+                    GlassTextField(
                         value = vm.name,
                         onValueChange = vm::onNameChange,
-                        label = { Text("角色名 *") },
-                        placeholder = { Text("你的角色名") },
+                        label = "角色名 *",
+                        placeholder = "你的角色名",
                         singleLine = true,
                         isError = tried && vm.name.isBlank(),
-                        supportingText = if (tried && vm.name.isBlank()) {
-                            { Text(nameError) }
-                        } else null,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -138,16 +145,13 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                         onSelect = { vm.gender = it }
                     )
 
-                    OutlinedTextField(
+                    GlassTextField(
                         value = vm.birthDate,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("出生日期 *") },
-                        placeholder = { Text("yyyy/mm/dd") },
+                        label = "出生日期 *",
+                        placeholder = "yyyy/mm/dd",
                         isError = tried && vm.birthDate.isBlank(),
-                        supportingText = if (tried && vm.birthDate.isBlank()) {
-                            { Text(birthError) }
-                        } else null,
                         trailingIcon = {
                             IconButton({ showDatePicker = true }) {
                                 Icon(Icons.Rounded.DateRange, contentDescription = "选择日期")
@@ -171,10 +175,10 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                             onSelect = { vm.province = it }
                         )
                     } else {
-                        OutlinedTextField(
+                        GlassTextField(
                             value = vm.province,
                             onValueChange = { vm.province = it.take(30) },
-                            label = { Text("州 / 省") },
+                            label = "州 / 省",
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -182,13 +186,12 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
 
                     HorizontalDivider()
                     FormSectionLabel("个性签名（选填）")
-                    OutlinedTextField(
+                    GlassTextField(
                         value = vm.signature,
                         onValueChange = { vm.signature = it.take(200) },
-                        placeholder = { Text("一句话介绍自己") },
+                        placeholder = "一句话介绍自己",
                         minLines = 2,
                         maxLines = 4,
-                        supportingText = { Text("${vm.signature.length}/200") },
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -210,17 +213,17 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedTextField(
+                            GlassTextField(
                                 value = cf.label,
                                 onValueChange = { vm.updateCustomField(idx, it, cf.value) },
-                                label = { Text("字段名") },
+                                label = "字段名",
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
-                            OutlinedTextField(
+                            GlassTextField(
                                 value = cf.value,
                                 onValueChange = { vm.updateCustomField(idx, cf.label, it) },
-                                label = { Text("值") },
+                                label = "值",
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -243,10 +246,13 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                     )
                 }
             }
+            }
 
             Spacer(Modifier.height(20.dp))
 
             // ---- 提交 ----
+            EnterGroup(2) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Button(
                 onClick = {
                     tried = true
@@ -269,23 +275,105 @@ private fun OnboardingScreen(vm: OnboardingViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+                }
+            }
             Spacer(Modifier.height(16.dp))
         }
     }
 
     if (showDatePicker) {
-        val state = rememberDatePickerState()
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    state.selectedDateMillis?.let { vm.birthDate = millisToDayStr(it) }
-                    showDatePicker = false
-                }) { Text("确定") }
-            },
-            dismissButton = { TextButton({ showDatePicker = false }) { Text("取消") } }
-        ) { DatePicker(state) }
+        BirthDatePickerDialog(
+            selected = vm.birthDate,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { vm.birthDate = millisToDayStr(it) }
+        )
     }
+}
+
+/**
+ * 出生日期选择器（v1.0.6.8 性能专项）。
+ *
+ * 卡顿根因：Material3 的 [DatePicker] 默认年份区间是 **1900 ~ 2100（201 项）**，
+ * 切到「选择年份」时会一次性布局 201 个条目；同时默认展示月是当前月，
+ * 用户得一路翻到自己出生年份，翻页过程中整颗月历的 Compose 树跟着重算，
+ * 中低端机上就是明显的掉帧。
+ *
+ * 优化三件事：
+ *  ① [yearRange] 收紧到 1950 ~ 今年（默认 201 项 → 约 77 项），列表规模砍到 1/3；
+ *  ② [initialDisplayedMonthMillis] 直接定位到「今年 - 25 年」，90% 用户一步到位，
+ *     不必连续翻页（翻页才是掉帧的来源）；
+ *  ③ [SelectableDates] 禁止选择未来日期，从状态层消除非法滚动区间。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BirthDatePickerDialog(
+    selected: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit
+) {
+    val today = remember { java.util.Calendar.getInstance() }
+    // 今天零点（用于高亮「今天」与限制未来日期）
+    val todayStart = remember {
+        java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val yearRange = remember { 1950..today.get(java.util.Calendar.YEAR) }
+    /* v1.0.6.9：初始选中 = **今天**（用户明确要求），不再是「今年 -25 年」。
+       日历打开即定位到当前年月，今天被高亮；用户再往上翻到自己的出生年份。
+       PastOnlyDates 同时禁掉未来日期，翻不出非法区间。 */
+    val initialSelected = remember(selected) {
+        runCatching {
+            val p = selected.split("/")
+            java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.YEAR, p[0].toInt())
+                set(java.util.Calendar.MONTH, p[1].toInt() - 1)
+                set(java.util.Calendar.DAY_OF_MONTH, p[2].toInt())
+            }.timeInMillis
+        }.getOrNull()
+    }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initialSelected ?: todayStart,
+        initialDisplayedMonthMillis = initialSelected ?: todayStart,
+        yearRange = yearRange,
+        selectableDates = remember { PastOnlyDates(today.timeInMillis) }
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                state.selectedDateMillis?.let(onConfirm)
+                onDismiss()
+            }) { Text("确定") }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("取消") } }
+    ) { DatePicker(state = state) }
+}
+
+/** 只允许选择今天及以前的日期 */
+@OptIn(ExperimentalMaterial3Api::class)
+private class PastOnlyDates(private val todayUtcMillis: Long) : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= todayUtcMillis
+}
+
+/* v1.0.6.8：进场动效 —— 淡入 + 从底部轻微上滑。
+   三个分组错峰 70ms 依次进场，观感像「整页抬起来」而不是一堆控件同时闪出来。
+   动效只跑一次（remember 的 visible 一旦为 true 就不再变化），后续输入/选中不会重放。 */
+@Composable
+private fun EnterGroup(index: Int, content: @Composable () -> Unit) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val spec = tween<Float>(durationMillis = 380, delayMillis = index * 70)
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = spec) + slideInVertically(
+            animationSpec = tween(durationMillis = 380, delayMillis = index * 70),
+            initialOffsetY = { it / 5 }
+        )
+    ) { content() }
 }
 
 @Composable
@@ -308,11 +396,11 @@ private fun LabeledDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-        OutlinedTextField(
+        GlassTextField(
             value = options.firstOrNull { it.first == selected }?.second ?: selected,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
+            label = label,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )

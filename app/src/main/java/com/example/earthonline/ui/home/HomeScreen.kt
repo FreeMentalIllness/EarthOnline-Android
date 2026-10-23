@@ -88,6 +88,7 @@ import com.example.earthonline.util.todayStr
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.ConfettiBurst
 import com.example.earthonline.ui.components.EmptyHint
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SettingsIconButton
 import com.example.earthonline.ui.components.IconChip
@@ -189,6 +190,9 @@ fun HomeScreen(
     var showAddTimeline by remember { mutableStateOf(false) }
     // 主页速览「自定义入口」配置面板（BottomSheet）
     var showQuickEdit by remember { mutableStateOf(false) }
+    // v1.0.6：速览「展开 / 收起」状态上提到主页层级 —— 只有用户主动点「收起」或触发
+    //         特定页面跳转才折叠；点击其它区域 / 其它操作不会导致展开态被重组复位收起。
+    var overviewExpanded by remember { mutableStateOf(false) }
     // v1.0.19：AI 快捷中枢（右下角悬浮 + 按钮 → 液态玻璃底部抽屉）
     var showAiHub by remember { mutableStateOf(false) }
     // v1.0.6 封板：搜索框是否聚焦 —— 聚焦时隐藏 AI 悬浮按钮（键盘顶起后它会压在速览瓦片上）
@@ -263,6 +267,8 @@ fun HomeScreen(
         item(key = "overview", contentType = "overview") {
             OverviewGrid(
                 state = state,
+                expanded = overviewExpanded,
+                onExpandedChange = { overviewExpanded = it },
                 onNavigate = onNavigate,
                 onAccounting = moreActions.onAccounting,
                 onEditEntries = { showQuickEdit = true }
@@ -487,10 +493,10 @@ private fun VoiceFallbackDialog(onDismiss: () -> Unit, onConfirm: (String) -> Un
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                OutlinedTextField(
+                GlassTextField(
                     value = text,
                     onValueChange = { text = it.take(200) },
-                    label = { Text("内容") },
+                    label = "内容",
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3
                 )
@@ -524,10 +530,10 @@ private fun HomeSearchBox(
     onFocusChange: (Boolean) -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
+        GlassTextField(
             value = query,
             onValueChange = onQueryChange,
-            placeholder = { Text("搜索任务 / 物品 / 收藏…") },
+            placeholder = "搜索任务 / 物品 / 收藏…",
             singleLine = true,
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "搜索") },
             trailingIcon = {
@@ -537,7 +543,6 @@ private fun HomeSearchBox(
                     }
                 }
             },
-            shape = RoundedCornerShape(50),
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { onFocusChange(it.isFocused) }
@@ -813,6 +818,8 @@ private fun AvatarWithBadge(
 @Composable
 private fun OverviewGrid(
     state: HomeUiState,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onAccounting: () -> Unit,
     onEditEntries: () -> Unit = {}
@@ -839,8 +846,6 @@ private fun OverviewGrid(
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
-    var expanded by remember { mutableStateOf(false) }
-
     Column(
         // v1.0.7：展开/收起用 spring（带阻尼回弹），不再生硬跳变
         Modifier.animateContentSize(animationSpec = GlassSpringIntSize),
@@ -854,7 +859,7 @@ private fun OverviewGrid(
             // weight 让标题占据剩余宽度：大字号下标题换行也不会把右侧按钮挤出屏幕
             SectionHeader("速览", Modifier.weight(1f), icon = Icons.Rounded.Explore)            // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
             TextButton(
-                onClick = { expanded = !expanded },
+                onClick = { onExpandedChange(!expanded) },
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.height(30.dp)
             ) {
@@ -1355,10 +1360,10 @@ private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -
         title = { Text("添加自定义动态") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                GlassTextField(
                     title, { title = it.take(60) },
-                    label = { Text("事件内容") },
-                    placeholder = { Text("例如：开始一段新旅程") },
+                    label = "事件内容",
+                    placeholder = "例如：开始一段新旅程",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1611,12 +1616,12 @@ private fun AddTimelineDialog(
         title = { Text("添加里程碑") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(title, { title = it.take(40) }, label = { Text("标题") },
+                GlassTextField(title, { title = it.take(40) }, label = "标题",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(day, {}, readOnly = true, label = { Text("日期") },
+                GlassTextField(day, {}, readOnly = true, label = "日期",
                     trailingIcon = { IconButton({ showDate = true }) { Icon(Icons.Rounded.DateRange, null) } },
                     modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(note, { note = it.take(200) }, label = { Text("备注（可选）") },
+                GlassTextField(note, { note = it.take(200) }, label = "备注（可选）",
                     modifier = Modifier.fillMaxWidth())
             }
         },

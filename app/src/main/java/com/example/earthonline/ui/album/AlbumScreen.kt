@@ -53,6 +53,7 @@ import com.example.earthonline.data.photos.MemoryPhoto
 import com.example.earthonline.data.photos.PhotoAlbum
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyState
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.launch
@@ -388,9 +389,9 @@ private fun AlbumChipRow(
             onDismissRequest = { showCreate = false },
             title = { Text("新建相册") },
             text = {
-                OutlinedTextField(
+                GlassTextField(
                     value = name, onValueChange = { name = it.take(24) },
-                    label = { Text("相册名称") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                    label = "相册名称", singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
@@ -639,10 +640,10 @@ private fun AlbumDetailDialog(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(12.dp))
                 )
-                OutlinedTextField(
+                GlassTextField(
                     value = note, onValueChange = { note = it.take(120) },
-                    label = { Text("当年的话（可选）") },
-                    placeholder = { Text("例如：大二那年和室友一起去的") },
+                    label = "当年的话（可选）",
+                    placeholder = "例如：大二那年和室友一起去的",
                     modifier = Modifier.fillMaxWidth(), maxLines = 3
                 )
                 val cur = albums.firstOrNull { it.id == currentAlbumId }
@@ -785,8 +786,8 @@ private fun AlbumManageDialog(
             onDismissRequest = { renameTarget = null },
             title = { Text("重命名相册") },
             text = {
-                OutlinedTextField(renameText, { renameText = it.take(24) },
-                    label = { Text("名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                GlassTextField(renameText, { renameText = it.take(24) },
+                    label = "名称", singleLine = true, modifier = Modifier.fillMaxWidth())
             },
             confirmButton = {
                 TextButton(enabled = renameText.isNotBlank(), onClick = {

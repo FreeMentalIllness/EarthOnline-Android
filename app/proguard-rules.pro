@@ -1,56 +1,87 @@
-# 保留 Application 子类与 Hilt 生成的入口
+# ─────────────────────────────────────────────────────────────
+# EarthOnline R8 混淆保留规则（v1.0.6 收尾：开启 minify）
+# 关键原则：关闭 R8 优化（规避 AGP 8.5.x / R8 8.5.35 在类合并期的
+# ConcurrentModificationException），仅做 shrink + obfuscate，
+# 既瘦身又避免误删运行时必需的反射/原生类。
+# ─────────────────────────────────────────────────────────────
+-dontoptimize
+-ignorewarnings
+
+# 保留注解 / 泛型签名 / 内部类信息：kotlinx.serialization、Room、Hilt 反射都依赖
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, AnnotationDefault
+-keepattributes SourceFile, LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# ── 应用入口与 Hilt ──
 -keep class com.example.earthonline.EarthOnlineApp { *; }
 -keep class * implements dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper
+-keep class dagger.hilt.** { *; }
+-keep class javax.inject.** { *; }
+-keepclassmembers class * {
+    @dagger.hilt.android.lifecycle.HiltViewModel <init>(...);
+}
+# Hilt 生成的 *_Hilt* / hilt_aggregated_deps 等由 Hilt processor 自带规则保留；
+# 这里兜底防止 R8 误删 ViewModel 子类
+-keep class com.example.earthonline.ui.**.*ViewModel { *; }
 
-# Room
--keep class * extends androidx.room.RoomDatabase
+# ── 本地离线推理引擎（llama.cpp / Inferkt）：JNI 与 KMP 绑定，必须整包保留 ──
+-keep class com.dilivva.** { *; }
+-keep class **.inferkt.** { *; }
+-dontwarn com.dilivva.**
+-dontwarn **.inferkt.**
+# 原生方法声明所在类（防止 R8 重命名导致 JNI FindClass/GetMethodID 失败）
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
+# ── 笔记富文本编辑器（richeditor-compose rc10）──
+-keep class com.mohamedrejeb.richeditor.** { *; }
+-dontwarn com.mohamedrejeb.**
+
+# ── Room ──
+-keep class * extends androidx.room.RoomDatabase { *; }
 -keep @androidx.room.Entity class *
+-keep class com.example.earthonline.data.local.entity.** { *; }
 
-# 高德 SDK
+# ── 高德地图 SDK ──
 -keep class com.amap.api.** { *; }
 -keep class com.loc.** { *; }
 -keep class com.autonavi.** { *; }
 -keep class * implements java.io.Serializable
-
-# 只接入了 3dmap，未引入定位 SDK（定位走 Android 原生 LocationManager）。
-# 3dmap 内部引用 com.amap.api.location.*，R8 会报 Missing class 并中断构建，这里忽略。
 -dontwarn com.amap.api.location.**
 -dontwarn com.autonavi.**
 
-# R8 8.5.35 的优化期类合并（class merging）在合并 Hilt/WorkManager 生成代码时会触发内部
-# ConcurrentModificationException（shaking.M）。直接关闭优化即可绕过该工具 bug，
-# 代码瘦身（shrinking）仍生效，仅失去内联/合并，APK 体积略增但可正常构建。
--dontoptimize
-# R8 严格模式下缺失类会直接失败；其余第三方缺失项按警告处理
--ignorewarnings
-
-# kotlinx.serialization
--keepattributes *Annotation*, InnerClasses
--dontnote kotlinx.serialization.**
-
-# Retrofit / OkHttp
+# ── 网络（Retrofit / OkHttp）──
 -dontwarn okhttp3.**
 -dontwarn retrofit2.**
-
-# Hilt / Dagger
--keep class dagger.hilt.** { *; }
--keep class javax.inject.** { *; }
--keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper
-
-# kotlinx.serialization（保留实体字段名与 @Serializable 注解）
+-dontwarn okio.**
+-keep class retrofit2.** { *; }
 -keepattributes Signature
--keepattributes RuntimeVisibleAnnotations, AnnotationDefault
--keep class kotlinx.serialization.** { *; }
--keep class com.example.earthonline.data.local.entity.** { *; }
+-keepattributes *Annotation*
 -keep class com.example.earthonline.data.network.** { *; }
 -keep class com.example.earthonline.data.model.** { *; }
+
+# ── kotlinx.serialization（@Serializable 实体保留字段名）──
+-dontnote kotlinx.serialization.**
+-keep class kotlinx.serialization.** { *; }
 -keepclassmembers class * {
     @kotlinx.serialization.Serializable <fields>;
 }
 
-# Coil
+# ── Coil 图片加载 ──
 -dontwarn coil.**
 -keep class coil.** { *; }
 
-# 到期提醒：Worker / 调度器 / 广播接收器（Hilt + WorkManager 反射引用，显式保留防 R8 误删）
+# ── WorkManager / 到期提醒 Worker（Hilt + 反射引用）──
+-dontwarn androidx.work.**
 -keep class com.example.earthonline.reminder.** { *; }
+
+# ── Compose / Lifecycle（R8 误删告警抑制，规则由库自带，这里仅静音）──
+-dontwarn androidx.compose.**
+-dontwarn androidx.lifecycle.**
+-dontwarn kotlinx.coroutines.**
+
+# ── Kotlin 协程 / 反射基础 ──
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class kotlin.Metadata { *; }

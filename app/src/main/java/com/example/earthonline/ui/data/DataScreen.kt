@@ -12,6 +12,7 @@ import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.components.BarItem
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -229,12 +230,10 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        items(dayTasks.size) { i ->
-                            val t = dayTasks[i]
+                        items(dayTasks, key = { "t_${it.id}" }, contentType = { "task" }) { t ->
                             Text(t.title.ifBlank { "任务" }, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
                         }
-                        items(dayActs.size) { i ->
-                            val a = dayActs[i]
+                        items(dayActs, key = { "a_${it.id}" }, contentType = { "act" }) { a ->
                             Text("• ${a.title}", style = MaterialTheme.typography.bodySmall, maxLines = 2)
                         }
                     }

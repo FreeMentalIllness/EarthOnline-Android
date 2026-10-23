@@ -31,6 +31,7 @@ import com.example.earthonline.data.local.entity.ActivityEntity
 import com.example.earthonline.data.repository.ActivityRepository
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.util.nowIso
@@ -243,10 +244,10 @@ private fun AddActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
         title = { Text("添加自定义动态") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                GlassTextField(
                     title, { title = it.take(60) },
-                    label = { Text("事件内容") },
-                    placeholder = { Text("例如：开始一段新旅程") },
+                    label = "事件内容",
+                    placeholder = "例如：开始一段新旅程",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

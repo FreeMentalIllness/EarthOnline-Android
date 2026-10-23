@@ -26,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.EmptyHint
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MeterBar
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SectionHeader
@@ -193,17 +194,17 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
             title = { Text("新增自定义成就") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    GlassTextField(
                         value = editTitle,
                         onValueChange = { editTitle = it },
-                        label = { Text("标题") },
+                        label = "标题",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    GlassTextField(
                         value = editDesc,
                         onValueChange = { editDesc = it },
-                        label = { Text("描述（可选）") },
+                        label = "描述（可选）",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )

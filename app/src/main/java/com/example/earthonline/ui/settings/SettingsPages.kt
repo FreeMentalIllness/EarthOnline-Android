@@ -44,6 +44,7 @@ import com.example.earthonline.util.ImageStore
 import com.example.earthonline.util.openUrlInBrowser
 import com.example.earthonline.util.rememberImagePicker
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.CropShape
 import com.example.earthonline.ui.components.ImageCropperDialog
@@ -238,11 +239,11 @@ fun AppearanceRoute(
                             onExpandedChange = { albumMenu = it },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            OutlinedTextField(
+                            GlassTextField(
                                 value = albumName,
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("轮换来源相册") },
+                                label = "轮换来源相册",
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = albumMenu) },
                                 modifier = Modifier.menuAnchor().fillMaxWidth()
                             )
@@ -304,6 +305,7 @@ fun GeneralRoute(
     // v1.0.3：通知栏快捷记录开关
     val quickNotif by vm.quickNotif.collectAsStateWithLifecycle(initialValue = false)
     val aiConfigJson by vm.aiConfigJson.collectAsStateWithLifecycle(initialValue = "")
+    val localModelJson by vm.localModelJson.collectAsStateWithLifecycle(initialValue = "")
 
     var showAiConfig by remember { mutableStateOf(false) }
 
@@ -364,8 +366,9 @@ fun GeneralRoute(
     if (showAiConfig) {
         AiConfigDialog(
             initial = vm.parseAiConfig(aiConfigJson),
+            localModel = vm.parseLocalModel(localModelJson),
             onDismiss = { showAiConfig = false }
-        ) { vm.saveAiConfig(it); showAiConfig = false }
+        ) { cfg, local -> vm.saveAiConfig(cfg); vm.saveLocalModel(local); showAiConfig = false }
     }
 
     Scaffold(

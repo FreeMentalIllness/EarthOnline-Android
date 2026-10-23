@@ -97,8 +97,9 @@ class ProfileViewModel @Inject constructor(
     val canSave: Boolean
         get() = name.isNotBlank()
 
-    /** 用库内行初始化编辑态；仅在库数据变化时调用，避免覆盖用户输入 */
-    fun load(p: ProfileEntity) {
+    /** 用库内行初始化编辑态；仅在库数据变化时调用，避免覆盖用户输入。
+     *  v1.0.6：自定义字段 JSON 解析较重（字段多时），移出主线程，避免首启填资料页卡顿 */
+    suspend fun load(p: ProfileEntity) {
         loaded = p
         name = p.name
         avatarKey = p.avatarKey
@@ -109,9 +110,11 @@ class ProfileViewModel @Inject constructor(
         birthDate = p.birthDate
         avatarPath = p.avatarPath
         avatarData = p.avatarData
-        customFields = runCatching {
-            Json.decodeFromString<List<CustomField>>(p.customFieldsJson)
-        }.getOrDefault(emptyList())
+        customFields = withContext(Dispatchers.Default) {
+            runCatching {
+                Json.decodeFromString<List<CustomField>>(p.customFieldsJson)
+            }.getOrDefault(emptyList())
+        }
 
         /* v1.0.0 旧数据迁移：库里只有字节、没有文件路径时（v1.0.0 之前存的头像），
            把那份字节原样落成文件并回填 avatarPath。
