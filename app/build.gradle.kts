@@ -61,7 +61,11 @@ android {
         // messageAIHelper 的 libMNN.so + liblocalllm.so 预编译栈，仅 arm64-v8a），Qwen2.5-1.5B
         // 在真机可直接跑；模型导入接受 MNN 格式（llm.mnn+llm.mnn.weight）并逐条目显示解压进度；
         // n_ctx 锁 1024、生成封顶 512 token 防 8GB 机型 OOM；非 arm64 / 模拟器自动降级云端。
-        versionCode = 52
+        // versionCode 53 = v1.0.6（死磕细节·动效体验批）：全局按压回弹 BouncyClickable（卡片/列表项/入口按下缩 0.98 极低阻尼弹回）；
+        // 全站弹窗由居中 AlertDialog 统一改为 ModalBottomSheet 底部弹簧上浮（skipPartiallyExpanded 干脆到位）；
+        // 导航转场分两支——Tab 间淡入+微垂直位移、二级页右侧推入/平滑推出；列表滚动中玻璃模糊全局降级为纯半透明底色（保 60FPS），
+        // 停止恢复；FAB 接入 bouncyPress 视觉回弹。
+        versionCode = 53
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

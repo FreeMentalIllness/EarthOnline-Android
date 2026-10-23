@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.tasks
 
+import com.example.earthonline.ui.components.bouncyPress
+
 import com.example.earthonline.ui.theme.GlassCard
 import android.content.Intent
 import androidx.compose.animation.core.LinearEasing
@@ -67,6 +69,7 @@ import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.components.TrackScrollBlur
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.util.AchievementSound
@@ -185,6 +188,7 @@ fun TasksScreen(
 
     // ————— v1.0.3 长按拖拽排序：仅允许在同级兄弟间交换（不破坏任务树结构） —————
     val listState = rememberLazyListState()
+    TrackScrollBlur(listState)
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
 
@@ -204,7 +208,8 @@ fun TasksScreen(
                 onClick = { addParentId = null; showAdd = true },
                 containerColor = AmberPrimary,
                 // v1.0.6 封板：全套 FAB 统一圆形（M3 默认是 16dp 圆角方块，与主页圆形按钮不一致）
-                shape = CircleShape
+                shape = CircleShape,
+                modifier = Modifier.bouncyPress()
             ) { Icon(Icons.Rounded.Add, contentDescription = "新增任务") }
         }
     ) { padding ->

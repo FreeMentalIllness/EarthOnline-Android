@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.backpack
 
+import com.example.earthonline.ui.components.bouncyPress
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -62,6 +64,8 @@ import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.components.TrackScrollBlur
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.ui.theme.GlassSurface
@@ -134,7 +138,8 @@ fun BackpackScreen(
                 onClick = { if (tab == 0) showItem = true else showCollection = true },
                 containerColor = AmberPrimary,
                 // v1.0.6 封板：统一圆形，跟主页 AI 按钮一个形状语言
-                shape = CircleShape
+                shape = CircleShape,
+                modifier = Modifier.bouncyPress()
             ) { Icon(Icons.Rounded.Add, contentDescription = "新增") }
         }
     ) { padding ->
@@ -303,7 +308,10 @@ private fun ItemsPane(
                 ) { ItemGridTile(it, onEdit = { onEditItem(it) }, onDelete = { vm.deleteItem(it.id) }) }
             }
         } else {
+            val bpListState = rememberLazyListState()
+            TrackScrollBlur(bpListState)
             LazyColumn(
+                state = bpListState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项
@@ -509,7 +517,10 @@ private fun CollectionsPane(
                 ) { CollectionGridTile(it, vm, context, onOpen = { onOpenCollection(it) }, onEdit = { onEditCollection(it) }) }
             }
         } else {
+            val bpListState = rememberLazyListState()
+            TrackScrollBlur(bpListState)
             LazyColumn(
+                state = bpListState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = UiDimens.ListPad),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 // v1.0.7：底部预留 88dp —— 右下角悬浮「+」不再遮挡列表最后一项

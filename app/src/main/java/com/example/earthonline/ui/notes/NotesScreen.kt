@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.notes
 
+import com.example.earthonline.ui.components.AnimatedAlertDialog
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -31,6 +33,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.components.TrackScrollBlur
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.launch
@@ -154,7 +158,10 @@ fun NotesScreen(
                         )
                     }
                 } else {
+                    val notesListState = rememberLazyListState()
+                    TrackScrollBlur(notesListState)
                     LazyColumn(
+                        state = notesListState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp
@@ -178,7 +185,7 @@ fun NotesScreen(
     }
 
     toDelete?.let { id ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { toDelete = null },
             title = { Text("删除这条笔记？") },
             text = { Text("删除后可在回收站保留 30 天，之后彻底清除。") },

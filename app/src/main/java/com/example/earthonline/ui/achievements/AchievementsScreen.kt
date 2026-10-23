@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.achievements
 
+import com.example.earthonline.ui.components.bouncyPress
+
 import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -74,7 +76,8 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
             FloatingActionButton(
                 onClick = { showAdd = true },
                 containerColor = AmberPrimary,
-                shape = CircleShape
+                shape = CircleShape,
+                modifier = Modifier.bouncyPress()
             ) { Icon(Icons.Rounded.Add, "新增手动成就") }
         }
     ) { padding ->

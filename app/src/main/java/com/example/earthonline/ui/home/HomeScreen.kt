@@ -95,6 +95,8 @@ import com.example.earthonline.ui.components.IconChip
 import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.TagChip
+import com.example.earthonline.ui.components.TrackScrollBlur
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.UserAvatar
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -217,7 +219,10 @@ fun HomeScreen(
                 )
             }
         }
+    val homeListState = rememberLazyListState()
+    TrackScrollBlur(homeListState)
     LazyColumn(
+        state = homeListState,
         // v1.0.20：键盘让位已上收到 MainScaffold（bottomBar 高度与 IME 取大者）——
         // 这里不再叠 imePadding，消除「键盘上方巨大空白断层」。
         modifier = Modifier.fillMaxSize(),

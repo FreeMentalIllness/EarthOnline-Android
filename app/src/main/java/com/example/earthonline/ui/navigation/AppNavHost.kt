@@ -3,7 +3,9 @@ package com.example.earthonline.ui.navigation
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -36,6 +38,18 @@ import com.example.earthonline.ui.notes.NoteEditorRoute
 import androidx.navigation.NavType
 
 /**
+ * 底部 Tab 路由（与 [bottomNavItems] 保持一致）：这些路由之间的切换视为「Tab 切换」，
+ * 转场用淡入 + 极轻微垂直位移；其余路由（二级页）之间的切换视为「入栈 / 出栈」，
+ * 走标准右侧推入 / 平滑推出。
+ */
+private val TAB_ROUTES = setOf(
+    Screen.Home.route,
+    Screen.Tasks.route,
+    Screen.Backpack.route,
+    Screen.Notes.route
+)
+
+/**
  * @param moreActions 右上角设置按钮的行为（导航 / 记账下载框），由 MainScaffold 统一注入
  * @param achVm 成就 VM（由 MainScaffold 创建并共享）。必须复用同一实例 ——
  *              它可以挂在 NavBackStackEntry 上，但那样会与框架层那份并存，
@@ -54,21 +68,36 @@ fun AppNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        /* v1.0.7：页面切换过渡升级为「横向推入 + 淡入」的连续动画。
-           参照参考项目的转场质感：新页从右侧半屏处推入、旧页同步左移淡出，
-           返回时方向反转；推入幅度控制在半屏、时长 300ms ——
-           推满整屏会「晃」，太慢又会让人觉得「点了要等」。 */
+        /* 转场规范（死磕细节批）：
+           - Tab 间切换：淡入 + 极轻微垂直位移（交叉淡变，翻页不抢眼）；
+           - 进入 / 返回二级页：从右侧推入 / 平滑推出（标准栈式位移，推满整屏）。 */
         enterTransition = {
-            fadeIn(tween(220)) + slideInHorizontally(tween(300)) { it / 2 }
+            if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
+                fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 10 }
+            } else {
+                fadeIn(tween(200)) + slideInHorizontally(tween(300)) { it }
+            }
         },
         exitTransition = {
-            fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it / 2 }
+            if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
+                fadeOut(tween(200)) + slideOutVertically(tween(260)) { -it / 10 }
+            } else {
+                fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { -it }
+            }
         },
         popEnterTransition = {
-            fadeIn(tween(220)) + slideInHorizontally(tween(300)) { -it / 2 }
+            if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
+                fadeIn(tween(220)) + slideInVertically(tween(260)) { -it / 10 }
+            } else {
+                fadeIn(tween(200)) + slideInHorizontally(tween(300)) { -it }
+            }
         },
         popExitTransition = {
-            fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { -it / 2 }
+            if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
+                fadeOut(tween(200)) + slideOutVertically(tween(260)) { it / 10 }
+            } else {
+                fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it }
+            }
         }
     ) {
         composable(Screen.Home.route) {

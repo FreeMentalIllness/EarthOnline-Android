@@ -73,6 +73,15 @@ object AppInfo {
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
         Triple(
+            "1.0.6.5", "2026-10-23", listOf(
+                "全局按压回弹：卡片 / 列表项 / 入口统一接入 BouncyClickable——按下缩到 0.98 倍、松手极低阻尼弹回 1.0，跟手且有果冻感，彻底废弃默认 Ripple",
+                "弹窗全面底部上浮：全站弹窗由居中 AlertDialog 改为 ModalBottomSheet，skipPartiallyExpanded 干脆到位、内置弹簧滑出，像果冻一样 Q 弹",
+                "导航转场分级：底部 Tab 间切换为淡入 + 极轻微垂直位移；进入 / 返回二级页为标准右侧推入 / 平滑推出",
+                "列表滚动防卡顿：滚动过程中玻璃模糊全局降级为纯半透明底色（GPU 零高斯开销），滑动停止自动恢复，确保 60FPS 跟手",
+                "悬浮按钮（FAB）接入按压回弹视觉反馈"
+            )
+        ),
+        Triple(
             "1.0.6.4", "2026-10-23", listOf(
                 "本地离线推理新增 MNN 引擎（移植自开源 messageAIHelper 的预编译 libMNN.so 栈，仅 arm64-v8a）：arm64 真机可直接本地运行 Qwen2.5-1.5B，内存更省、对 Qwen 有专项优化",
                 "模型导入现支持 MNN 格式（llm.mnn + llm.mnn.weight），解压时逐条目显示「正在解压：文件名 (进度%)」，800MB 大包不再误判卡死",

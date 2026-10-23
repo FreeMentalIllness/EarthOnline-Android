@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.map
 
+import com.example.earthonline.ui.components.bouncyPress
+
 import com.example.earthonline.ui.theme.GlassCard
 import android.Manifest
 import android.content.Intent
@@ -285,7 +287,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 FloatingActionButton(onClick = {
                     pendingLatLng = mapRef.aMap?.cameraPosition?.target ?: currentLatLng
                     showAdd = true
-                }) { Icon(Icons.Rounded.Add, null) }
+                }, modifier = Modifier.bouncyPress()) { Icon(Icons.Rounded.Add, null) }
             }
         }
     ) { padding ->

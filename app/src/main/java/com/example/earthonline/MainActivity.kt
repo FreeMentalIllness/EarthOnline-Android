@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.example.earthonline.ui.components.AnimatedAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -195,7 +195,7 @@ private fun InspireDialog(
         memos = runCatching { memoRepo.observeRecent(10).first() }.getOrElse { emptyList() }
     }
 
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("跨端灵感接力") },
         text = {
@@ -289,7 +289,7 @@ private fun StartupUpdateDialog(
         if (canInstall && url != null) installer.download(url)
     }
 
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("发现新版本 v${update.version}") },
         text = {

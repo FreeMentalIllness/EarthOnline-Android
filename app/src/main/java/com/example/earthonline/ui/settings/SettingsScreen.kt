@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.settings
 
+import com.example.earthonline.ui.components.AnimatedAlertDialog
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -197,7 +199,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
         PrivacyPolicyDialog(onDismiss = { showPrivacy = false })
     }
     if (showDanger) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { showDanger = false },
             title = { Text("清除所有数据？") },
             text = {
@@ -228,7 +230,7 @@ fun SettingsScreen(vm: SettingsViewModel, moreActions: MoreMenuActions) {
  */
 @Composable
 private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("隐私政策") },
         text = {

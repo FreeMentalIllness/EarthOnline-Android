@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -267,35 +268,17 @@ fun MeterBar(
 }
 
 /**
- * 弹窗进场动画：从 0.94 倍缩放 + 全透明渐入到原尺寸。
+ * 弹窗统一改为底部上浮（ModalBottomSheet）—— 取代原先居中 AlertDialog。
  *
- * 直接给 AlertDialog 套 graphicsLayer 而不是另起一个 Dialog：
- * 这样不用改任何调用点的结构，也不会破坏 AlertDialog 自带的返回键 / 外部点击关闭语义。
- * 动画只跑一次（visible 置 true 后不再变），不会在内容重组时反复触发。
- */
-fun Modifier.dialogEnter(durationMs: Int = 240): Modifier = composed {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.94f,
-        animationSpec = tween(durationMillis = durationMs),
-        label = "dialogScale"
-    )
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = durationMs),
-        label = "dialogAlpha"
-    )
-    this.graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
-}
-
-/**
- * 带进场动画的 AlertDialog —— 签名与 Material3 的 AlertDialog 对齐（常用参数子集），
- * 因此全项目的 `AlertDialog(...)` 可以原地替换成 `AnimatedAlertDialog(...)`。
+ * 为什么这样改：死磕细节批要求「废弃生硬 AlertDialog，全局走 ModalBottomSheet + 弹簧动画」。
+ * 这里直接复用 [ModalBottomSheet]（内置弹簧滑出，skipPartiallyExpanded 让它干脆到位、不卡半屏，
+ * 视觉上像果冻一样 Q 弹），并把 AlertDialog 的 title/text/buttons 槽位在底部容器内重排：
+ * 标题在上、正文居中、按钮区右对齐（dismiss 在左、confirm 在右，沿用用户习惯）。
  *
- * 为什么不逐个弹窗手写动画：18 处调用点，逐处加一遍必然漏，且以后新增弹窗又会漏。
- * 收敛到一个包装函数，新增弹窗只要沿用它就是有动画的。
+ * 签名与 Material3 AlertDialog 对齐（常用参数子集），因此全项目 40+ 处 `AnimatedAlertDialog(...)`
+ * 调用点**原地生效**，无需逐个改；原本裸用 `AlertDialog` 的少数几处也改为调用本函数即可。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnimatedAlertDialog(
     onDismissRequest: () -> Unit,
@@ -310,19 +293,38 @@ fun AnimatedAlertDialog(
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     properties: DialogProperties = DialogProperties()
 ) {
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        modifier = modifier.dialogEnter(),
-        confirmButton = confirmButton,
-        dismissButton = dismissButton,
-        icon = icon,
-        title = title,
-        text = text,
+        modifier = modifier,
+        sheetState = sheetState,
         shape = shape,
         containerColor = containerColor,
         tonalElevation = tonalElevation,
-        properties = properties
-    )
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 24.dp)
+        ) {
+            icon?.let { Box(Modifier.padding(bottom = 12.dp)) { it() } }
+            title?.let {
+                Box(Modifier.padding(bottom = if (text != null) 10.dp else 0.dp)) { it() }
+            }
+            text?.let { Box(Modifier.fillMaxWidth()) { it() } }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = if (title != null || text != null) 20.dp else 0.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                dismissButton?.let { it() }
+                if (dismissButton != null) Spacer(Modifier.width(8.dp))
+                confirmButton()
+            }
+        }
+    }
 }
 
 /** 小标签（分类 / 状态等），全页统一外观 */

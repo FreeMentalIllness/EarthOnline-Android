@@ -2,6 +2,8 @@
 
 package com.example.earthonline.ui.album
 
+import com.example.earthonline.ui.components.bouncyPress
+
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -160,7 +162,8 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
             FloatingActionButton(
                 onClick = { pickPhotos() },
                 containerColor = AmberPrimary,
-                shape = CircleShape
+                shape = CircleShape,
+                modifier = Modifier.bouncyPress()
             ) {
                 if (importing) CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
                 else Icon(Icons.Rounded.Add, contentDescription = "批量导入照片")
@@ -317,7 +320,7 @@ fun AlbumRoute(moreActions: MoreMenuActions, vm: AlbumViewModel = hiltViewModel(
 
     // v1.0.7：批量删除确认
     if (batchDeleteConfirm) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { batchDeleteConfirm = false },
             title = { Text("删除 ${batchSel.value.size} 张照片？") },
             text = { Text("照片原图会一并删除，此操作不可恢复。") },
@@ -385,7 +388,7 @@ private fun AlbumChipRow(
     }
 
     if (showCreate) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { showCreate = false },
             title = { Text("新建相册") },
             text = {
@@ -782,7 +785,7 @@ private fun AlbumManageDialog(
 
     // 重命名
     renameTarget?.let { album ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { renameTarget = null },
             title = { Text("重命名相册") },
             text = {
@@ -800,7 +803,7 @@ private fun AlbumManageDialog(
 
     // 删除确认
     deleteTarget?.let { album ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("删除相册「${album.name}」？") },
             text = { Text("照片不会丢失，会回到「未分类」。此操作可重新创建相册恢复归类。）") },

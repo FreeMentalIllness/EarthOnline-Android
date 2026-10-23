@@ -1,5 +1,7 @@
 package com.example.earthonline.ui.notes
 
+import com.example.earthonline.ui.components.AnimatedAlertDialog
+
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -466,7 +468,7 @@ fun NoteEditorScreen(
     }
 
     if (showDelete) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { showDelete = false },
             title = { Text("删除这条笔记？") },
             text = { Text("删除后可在回收站保留 30 天。") },

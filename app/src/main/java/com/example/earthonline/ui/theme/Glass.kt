@@ -5,9 +5,7 @@ import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.earthonline.ui.components.UiDimens
+import com.example.earthonline.ui.components.bouncyClickable
 import java.io.File
 
 /**
@@ -72,6 +71,14 @@ const val CARD_OPAQUE_THRESHOLD = 0.995f
  *   保障低端机与旧机型绝对流畅。业务层无需感知，由框架在 [MainScaffold] 统一注入。
  */
 val LocalLiquidGlass = compositionLocalOf { true }
+
+/**
+ * v1.0.6.5（死磕细节批）：列表滚动模糊降级 —— 全局模糊半径状态。
+ * 列表滑动中由 [com.example.earthonline.ui.components.TrackScrollBlur] 把它临时置 0，
+ * 玻璃卡据此跳过壁纸模糊采样、降级为纯半透明底色，GPU 零高斯开销，保滚动 60FPS；
+ * 滑动停止自动恢复。列表外的玻璃卡（详情页、弹窗、底栏等）读到的仍是满模糊，观感不变。
+ */
+val glassScrollBlurRadius = androidx.compose.runtime.mutableFloatStateOf(6f)
 
 enum class GlassTier { FULL, BLUR, FLAT }
 
@@ -122,10 +129,14 @@ fun GlassSurface(
     val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
+    // v1.0.6.5：滚动模糊降级 —— 滑动时 glassScrollBlurRadius 被置 0，玻璃卡跳过壁纸模糊采样，
+    // 直接走纯半透明底色（blurOff），GPU 零高斯开销，确保列表快速滚动 60FPS 跟手。
+    val scrollBlurDp = glassScrollBlurRadius.floatValue
+    val blurOff = scrollBlurDp <= 0.5f
     // v1.0.19：卡片不透明度拉满（100% 纯色档）时跳过壁纸模糊采样 ——
     // 纯色底下采样结果完全被盖住，纯属 GPU 浪费；跳过后卡片走零采样纯色渲染。
     val cardOpaque = (tintOverride ?: 0f) >= CARD_OPAQUE_THRESHOLD
-    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque
+    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque && !blurOff
 
     /* 着色层改用「上深下浅」的竖向渐变。
        - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
@@ -154,11 +165,8 @@ fun GlassSurface(
             // 方形直角，液态玻璃质感全局一致。
             .clip(shape)
             .then(
-                if (onClick != null) Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
-                    onClick = onClick
-                ) else Modifier
+                if (onClick != null) Modifier.bouncyClickable(onClick = onClick)
+                else Modifier
             )
     ) {
         /* ⚠️ 装饰层一律用 matchParentSize()，绝不能用 fillMaxSize()。
@@ -176,7 +184,7 @@ fun GlassSurface(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .backdrop(tier)
+                    .backdrop(tier, Dp(scrollBlurDp))
                     .background(Color.Transparent)
             ) {
                 AsyncImage(
@@ -335,18 +343,20 @@ fun AppCard(
  *  - FULL 档此前漏了 SDK 版本门控（API < 31 上 Modifier.blur 无实现，白白多一次图层合成），
  *    现在两个分支统一先判版本。
  */
-private fun Modifier.backdrop(tier: GlassTier): Modifier {
+private fun Modifier.backdrop(tier: GlassTier, blurDp: Dp = GLASS_BLUR_RADIUS_DP): Modifier {
     if (Build.VERSION.SDK_INT < 31) return this
-    val blurred = this.blur(BLUR_DP)
+    val radius = blurDp.coerceAtLeast(0.dp)
+    val blurred = this.blur(radius)
     return if (tier == GlassTier.FULL) {
         // 折射：先轻微放大再模糊，避免采样到边缘拉伸露白
-        this.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }.blur(BLUR_DP)
+        this.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }.blur(radius)
     } else blurred
 }
 
 /* 模糊半径：18dp(v1.0.6) → 10dp(v1.0.7) → 6dp(v1.0.6.7)。
-   低端降级档（FLAT 纯色）完全不走这里，零 GPU 开销。 */
-private val BLUR_DP: Dp = 6.dp
+   低端降级档（FLAT 纯色）完全不走这里，零 GPU 开销。
+   v1.0.6.5：对外暴露为 GLASS_BLUR_RADIUS_DP，供 [glassScrollBlurRadius] 默认与滚动降级复用同一数值。 */
+val GLASS_BLUR_RADIUS_DP: Dp = 6.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */
 @Composable
