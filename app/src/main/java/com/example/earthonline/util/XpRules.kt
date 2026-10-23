@@ -38,19 +38,9 @@ object XpRules {
     ): Int = tasksDone * TASK_DONE + achievements * ACHIEVEMENT +
         memos * MEMO + locations * LOCATION + items * ITEM + photos * PHOTO
 
-    /**
-     * 连续记录加成（v1.0.3）：连续记录天数带来的额外经验，
-     * 体现「坚持本身就有价值」。阈值刻意放低 —— 3 天就有第一笔奖励，
-     * 不要让用户等到一周之后才感受到成长。
-     */
-    fun streakBonus(streakDays: Int): Int = when {
-        streakDays >= 60 -> 120
-        streakDays >= 30 -> 50
-        streakDays >= 14 -> 30
-        streakDays >= 7 -> 20
-        streakDays >= 3 -> 5
-        else -> 0
-    }
+    /* 连击 / 连续加成机制已废弃（终极重构 · 工程三 死命令）。
+       原 streakBonus() 是死代码（从未计入 totalXp），且「短时间内连点」不该获得
+       额外收益 —— 成长只由真实累计行为决定，故整体移除，不再保留。 */
 
     /**
      * 等级称号（v1.0.3）：简单化 —— 不搞花哨命名，用户没自定义时

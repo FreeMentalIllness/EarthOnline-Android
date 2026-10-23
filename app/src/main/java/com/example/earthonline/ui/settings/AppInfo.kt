@@ -73,6 +73,17 @@ object AppInfo {
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
         Triple(
+            "1.0.6.6", "2026-10-23", listOf(
+                "全局组件系统：新增 Design Tokens（间距 / 圆角 / 无黑边高光）与 EO 组件族（EOGlassCard / EOInput 胶囊输入框 / EOBottomSheet / EOConfirmDialog / EOEmptyState），业务页不再硬编码样式",
+                "破坏性操作保护：删除 / 清空 / 断开接入等不可逆操作统一强制走 EOConfirmDialog 二次确认，带不可撤销警示",
+                "任务备注升级：复用笔记的富文本编辑器，支持加粗 / 斜体等 Markdown 语法，与笔记完全同源",
+                "游戏化重构：新建 GamificationEngine 统一「行为 → XP → 等级」换算，等级进度条改为平滑增长动画，获得经验时飘出 +XP 微动效",
+                "**废弃连击机制**：不再奖励短时间内连点，成长只由真实累计行为决定",
+                "背包收藏页新增「游戏数据」模块：配置 Steam ID / API Key 后，游戏库以收藏卡片形式展示（含总时长 / 最近两周），未配置时显示诚实引导",
+                "AI 模块闭环：上下文窗口收敛至 512 防内存溢出；800MB 模型解压改为前台服务，通知栏实时显示解压进度且切后台不被系统回收"
+            )
+        ),
+        Triple(
             "1.0.6.5", "2026-10-23", listOf(
                 "全局按压回弹：卡片 / 列表项 / 入口统一接入 BouncyClickable——按下缩到 0.98 倍、松手极低阻尼弹回 1.0，跟手且有果冻感，彻底废弃默认 Ripple",
                 "弹窗全面底部上浮：全站弹窗由居中 AlertDialog 改为 ModalBottomSheet，skipPartiallyExpanded 干脆到位、内置弹簧滑出，像果冻一样 Q 弹",

@@ -52,8 +52,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import com.mohamedrejeb.richeditor.model.RichTextState
+import com.mohamedrejeb.richeditor.ui.BasicRichTextEditor
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.style.TextAlign
@@ -70,6 +74,7 @@ import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.design.EOConfirmDialog
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.util.AchievementSound
@@ -164,22 +169,20 @@ fun TasksScreen(
 
     val doneCount = remember(filtered) { filtered.count { it.status == "done" } }
 
-    // ————— v1.0.3 庆祝三件套：勾选完成时轻震动 + 琥珀光晕 + 清脆音效，连击时光效渐强 —————
+    // ————— 庆祝三件套：勾选完成时轻震动 + 琥珀光晕 + 清脆音效 —————
+    // 终极重构 · 工程三（死命令）：**连击（combo）机制已废弃** —— 光晕不再随
+    // 「短时间内连点」递增，成长只由真实累计行为决定，不鼓励无意义连点刷收益。
     val haptic = LocalHapticFeedback.current
     val ctx = LocalContext.current
     var celebrateId by remember { mutableStateOf<String?>(null) }
-    var combo by remember { mutableStateOf(0) }
+    // 待确认删除的任务 id（红线：破坏性操作必须走 EOConfirmDialog 二次确认）
+    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
 
     fun celebrate(taskId: String) {
-        combo += 1
         celebrateId = taskId
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         // 复用成就音效播放器（SoundPool 低延迟，且跟随设置里的音效开关）
         AchievementSound.play(ctx)
-    }
-    // 连击窗口：4 秒内继续勾选则光效渐强，超时清零（不做惩罚性设计）
-    LaunchedEffect(combo) {
-        if (combo > 0) { delay(4_000); combo = 0 }
     }
     LaunchedEffect(celebrateId) {
         // 950ms = 撒花动画（900ms）+ 50ms 余量，光晕/撒花共用该窗口
@@ -477,7 +480,6 @@ fun TasksScreen(
                             node = node,
                             collapsed = collapsed.value.contains(node.task.id),
                             celebrate = celebrateId == node.task.id,
-                            combo = combo,
                             selectMode = selectMode,
                             selected = node.task.id in selected.value,
                             onToggleSelect = {
@@ -497,7 +499,8 @@ fun TasksScreen(
                             onSetProgress = { vm.setProgress(node.task, it) },
                             onEdit = { editing = node.task },
                             onAddChild = { addParentId = node.task.id; showAdd = true },
-                            onDelete = { vm.deleteCascade(node.task.id) }
+                            // 红线：不直接删除，先弹破坏性确认
+                            onDelete = { pendingDeleteId = node.task.id }
                         )
                         }
                         }
@@ -509,7 +512,21 @@ fun TasksScreen(
 
         // v1.0.4 撒花庆祝：完成任务的粒子迸发，覆盖层不拦截点击（Canvas 无触摸处理）
         if (celebrateId != null) {
-            ConfettiBurst(burstKey = celebrateId, combo = combo)
+            ConfettiBurst(burstKey = celebrateId)
+        }
+
+        // 红线（终极重构 · 工程一）：所有破坏性操作强制走 EOConfirmDialog 二次确认，
+        // 业务页严禁直接执行删除。id 先局部捕获，避免确认回调执行时状态已被清空。
+        val deleteId = pendingDeleteId
+        if (deleteId != null) {
+            EOConfirmDialog(
+                title = "删除任务",
+                message = "该任务及其全部子任务都会被移入回收站，30 天内可在回收站恢复。",
+                confirmLabel = "移入回收站",
+                destructive = true,
+                onConfirm = { vm.deleteCascade(deleteId) },
+                onDismiss = { pendingDeleteId = null }
+            )
         }
     }
 
@@ -685,7 +702,6 @@ private fun TaskRow(
     node: TaskNode,
     collapsed: Boolean,
     celebrate: Boolean,
-    combo: Int,
     selectMode: Boolean = false,
     selected: Boolean = false,
     onToggleSelect: () -> Unit = {},
@@ -700,11 +716,11 @@ private fun TaskRow(
     val hasChildren = node.children.isNotEmpty()
     val done = t.status == "done"
 
-    // v1.0.3：完成庆祝的琥珀光晕（连击时光晕强度递增，封顶避免过曝）
+    // 完成庆祝的琥珀光晕（固定强度 —— 连击机制已废弃，不再随连点递增）
     val glow = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(celebrate) {
         if (celebrate) {
-            glow.snapTo((0.55f + combo * 0.12f).coerceAtMost(0.95f))
+            glow.snapTo(0.75f)
             glow.animateTo(0f, androidx.compose.animation.core.tween(650))
         }
     }
@@ -885,7 +901,14 @@ private fun TaskEditDialog(
     onDelete: (() -> Unit)? = null
 ) {
     var title by remember { mutableStateOf(initialTitle) }
-    var note by remember { mutableStateOf(initialNote ?: "") }
+    // 终极重构 · 工程二：任务备注**复用笔记的富文本组件**（richeditor-compose），
+    // 支持加粗 / 斜体等 Markdown 语法，所见即所得。
+    // 存储层依旧是 Markdown 字符串，直接复用现有 `note` 列 —— **零 Room 迁移**；
+    // 与笔记完全同源（载入 setMarkdown / 保存 toMarkdown），跨端契约不破坏。
+    val noteRich = remember { RichTextState() }
+    LaunchedEffect(Unit) {
+        if (!initialNote.isNullOrBlank()) runCatching { noteRich.setMarkdown(initialNote) }
+    }
     var due by remember { mutableStateOf(initialDue) }
     var status by remember { mutableStateOf(initialStatus) }
     var parentId by remember { mutableStateOf(initialParentId) }
@@ -904,7 +927,10 @@ private fun TaskEditDialog(
                     if (submitted || title.isBlank()) return@TextButton
                     submitted = true
                     onSubmit(
-                        title.trim(), due, note.takeIf { it.isNotBlank() }, status, parentId
+                        title.trim(), due,
+                        runCatching { noteRich.toMarkdown() }.getOrDefault("")
+                            .trim().takeIf { it.isNotBlank() },
+                        status, parentId
                     )
                 },
                 enabled = title.isNotBlank() && !submitted
@@ -997,9 +1023,40 @@ private fun TaskEditDialog(
                     TextButton(onClick = { due = null }) { Text("清除到期日") }
                 }
 
-                GlassTextField(
-                    value = note, onValueChange = { note = it },
-                    label = "备注", modifier = Modifier.fillMaxWidth(), maxLines = 3
+                // 终极重构 · 工程二：备注 = 富文本（复用笔记编辑器），存 Markdown
+                Text(
+                    "备注",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = { noteRich.toggleSpanStyle(SpanStyle(fontWeight = FontWeight.Bold)) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text("B", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(
+                        onClick = { noteRich.toggleSpanStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text("I", style = MaterialTheme.typography.labelLarge, fontStyle = FontStyle.Italic)
+                    }
+                }
+                BasicRichTextEditor(
+                    state = noteRich,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    decorationBox = { inner ->
+                        if (noteRich.annotatedString.text.isEmpty()) {
+                            Text("备注…支持加粗 / 斜体", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        inner()
+                    }
                 )
 
                 Text(

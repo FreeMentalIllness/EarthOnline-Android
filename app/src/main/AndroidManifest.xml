@@ -22,6 +22,12 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <!-- 终极重构 · 工程四：本地模型导入前台服务。
+         模型包动辄 800MB，解压要几分钟；放进前台服务可提升进程优先级，
+         避免切后台被系统回收导致解压半途而废，同时在通知栏实时显示解压进度。
+         Android 14（API 34）起必须为前台服务声明具体类型，这里用 dataSync。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- v1.0.1：外部链接跳转（记账下载 / 检查更新 / 语音输入）需要「看得见」系统里的浏览器。
          Android 11（API 30）起有 **包可见性（package visibility）** 限制：
@@ -120,5 +126,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/overview_widget_info" />
         </receiver>
+
+        <!-- 终极重构 · 工程四：本地模型（MNN / GGUF）导入前台服务。
+             800MB 级解压期间提升进程优先级，并在通知栏实时显示解压进度；
+             exported=false（仅本应用内部启动），foregroundServiceType=dataSync（API 34+ 必需）。 -->
+        <service
+            android:name=".ui.ai.ModelImportService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

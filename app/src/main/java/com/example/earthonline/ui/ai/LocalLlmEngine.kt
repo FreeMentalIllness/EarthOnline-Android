@@ -105,17 +105,22 @@ object LlamaCppEngine : LocalLlmEngine {
 
     /**
      * 上下文窗口。**必须 ≥ prompt + 生成长度，否则 llama.cpp 的 KV cache 会越界写**。
-     * v1.0.6.12（Redmi Note 12 Pro / 8GB 专项）：2048 → **1024**。
-     *  - KV cache 随 n_ctx 线性增长，1024 直接砍半（约省 25MB+），配合权重 mmap，
-     *    天玑 1080 这类中端机连续对话不再有内存悬崖；
-     *  - 1024 配合「2 轮历史截断 + 768 token prompt 预算 + 动态生成预算」刚好自洽，
+     * v1.0.6.12（Redmi Note 12 Pro / 8GB 专项）：2048 → 1024。
+     * **终极重构 · 工程四（死命令）：1024 → 512。**
+     *  - 死命令要求 n_ctx = 512 防 OOM：KV cache 随 n_ctx 线性增长，512 相比 1024
+     *    再砍半，中低端机（6~8GB）加载 1.5B 权重后仍有充足余量，彻底消除内存悬崖；
+     *  - 512 配合「2 轮历史截断 + 384 token prompt 预算 + 动态生成预算（≤160）」
      *    数学上不可能越界（见 nPredictFor / buildQwenPrompt）；
-     *  - 死命令红线：**绝不允许超过 2048**。
+     *  - 死命令红线：**绝不允许超过 2048**（现为 512，远在红线内）。
      */
-    private const val CONTEXT_SIZE = 1024
+    private const val CONTEXT_SIZE = 512
 
-    /** 单次生成上限（还要与 prompt 长度一起做动态预算，见 [nPredictFor]） */
-    private const val MAX_TOKENS = 256
+    /**
+     * 单次生成上限（还要与 prompt 长度一起做动态预算，见 [nPredictFor]）。
+     * 终极重构：256 → **160** —— 512 窗口下 prompt 预算 384，剩余须给生成留足余量，
+     * 160 是「够说完一句话」与「绝不越界」的平衡点。
+     */
+    private const val MAX_TOKENS = 160
 
     /** 提示词占用的 token 预算上限：留 1/4 窗口给系统提示与安全余量 */
     private const val PROMPT_TOKEN_BUDGET = (CONTEXT_SIZE * 3) / 4

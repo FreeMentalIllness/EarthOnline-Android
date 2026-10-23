@@ -65,7 +65,13 @@ android {
         // 全站弹窗由居中 AlertDialog 统一改为 ModalBottomSheet 底部弹簧上浮（skipPartiallyExpanded 干脆到位）；
         // 导航转场分两支——Tab 间淡入+微垂直位移、二级页右侧推入/平滑推出；列表滚动中玻璃模糊全局降级为纯半透明底色（保 60FPS），
         // 停止恢复；FAB 接入 bouncyPress 视觉回弹。
-        versionCode = 53
+        // versionCode 54 = v1.0.6（终极重构批）：① 全局 Design Tokens + EO 组件族
+        // （EOGlassCard / EOInput / EOBottomSheet / EOConfirmDialog / EOEmptyState），破坏性操作强制二次确认；
+        // ② 业务连贯：任务备注复用笔记富文本（Markdown 存储，零迁移）、彻底清空含 DataStore/壁纸/模型、
+        // 诚实空状态与 AI 未配置引导；③ 游戏化：GamificationEngine 统一 XP→等级换算、**废弃连击机制**、
+        // 等级进度条平滑增长 + 飘出 +XP 微动效、背包收藏页新增 Steam 游戏数据模块；
+        // ④ AI 闭环：n_ctx 收敛 512 防 OOM、800MB 解压改前台服务（通知栏进度 + 进程保活）。
+        versionCode = 54
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

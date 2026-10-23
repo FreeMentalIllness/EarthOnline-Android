@@ -126,6 +126,19 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
          * 进入对话页能看见完整脉络。
          */
         val AI_CHAT_HISTORY = stringPreferencesKey("ai_chat_history")
+        /**
+         * 终极重构 · 工程三：Steam 64 位 ID（背包「收藏 → 游戏数据」模块）。
+         * 空串 = 未配置（UI 必须显示「未配置」引导，绝不伪造数据）。
+         */
+        val STEAM_ID = stringPreferencesKey("steam_id")
+        /** Steam Web API Key（与 Steam ID 成对配置，二者缺一即未配置） */
+        val STEAM_API_KEY = stringPreferencesKey("steam_api_key")
+        /**
+         * Steam 游戏库缓存（原始 JSON）。
+         * 这是**外部可重建数据** —— 清缓存不影响用户资产，故落 DataStore 而非 Room，
+         * 避免为一份可重新拉取的数据做数据库迁移。
+         */
+        val STEAM_GAMES_CACHE = stringPreferencesKey("steam_games_cache")
     }
 
     val onboardingDone: Flow<Boolean> = ds.data.map { it[ONBOARDING_DONE] ?: false }
@@ -262,6 +275,34 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** v1.0.6（融合重构）：AI 对话全局历史原始 JSON（空串 = 无历史） */
     val aiChatHistoryJson: Flow<String> = ds.data.map { it[AI_CHAT_HISTORY] ?: "" }
     suspend fun setAiChatHistoryJson(v: String) = ds.edit { it[AI_CHAT_HISTORY] = v }
+
+    // ————— 终极重构 · 工程三：Steam 游戏数据 —————
+
+    /** Steam 64 位 ID（空 = 未配置） */
+    val steamId: Flow<String> = ds.data.map { it[STEAM_ID] ?: "" }
+    suspend fun setSteamId(v: String) = ds.edit { it[STEAM_ID] = v.trim() }
+
+    /** Steam Web API Key（空 = 未配置） */
+    val steamApiKey: Flow<String> = ds.data.map { it[STEAM_API_KEY] ?: "" }
+    suspend fun setSteamApiKey(v: String) = ds.edit { it[STEAM_API_KEY] = v.trim() }
+
+    /**
+     * Steam 是否已配置：**ID 与 API Key 二者都非空**才算已配置。
+     * 诚实原则：只要有任一缺失就返回 false，UI 必须据此显示「未配置」引导，
+     * 绝不允许在缺参数时渲染出「已就绪 / 0 款游戏」这种伪造状态。
+     */
+    val steamConfigured: Flow<Boolean> = ds.data.map {
+        !it[STEAM_ID].isNullOrBlank() && !it[STEAM_API_KEY].isNullOrBlank()
+    }
+
+    /** Steam 游戏库缓存 JSON（空串 = 从未拉取成功） */
+    val steamGamesCache: Flow<String> = ds.data.map { it[STEAM_GAMES_CACHE] ?: "" }
+    suspend fun setSteamGamesCache(v: String) = ds.edit { it[STEAM_GAMES_CACHE] = v }
+    suspend fun clearSteam() = ds.edit {
+        it.remove(STEAM_ID)
+        it.remove(STEAM_API_KEY)
+        it.remove(STEAM_GAMES_CACHE)
+    }
 
     /**
      * 清空「用户数据键」，保留应用设置键。与 Web 端 resetAllData 的键语义对齐：

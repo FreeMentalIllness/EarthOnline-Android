@@ -435,7 +435,7 @@ private fun LevelUpOverlay(
             },
         contentAlignment = Alignment.Center
     ) {
-        ConfettiBurst(burstKey = "levelup-$level", combo = 1)
+        ConfettiBurst(burstKey = "levelup-$level")
         Surface(
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(24.dp),

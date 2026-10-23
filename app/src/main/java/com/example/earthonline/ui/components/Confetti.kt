@@ -22,7 +22,9 @@ import androidx.compose.ui.platform.LocalDensity
  * 覆盖层只画不摸：Canvas 不消费触摸事件，不影响下方内容的任何交互。
  *
  * @param burstKey 一次庆祝的标识（非 null 即触发一次迸发；变化即重放）
- * @param combo    连击强度：粒子随连击放大，封顶 1.4x 防过曝
+ *
+ * 终极重构 · 工程三：原 `combo` 参数（连击放大粒子）已**废弃移除** ——
+ * 撒花强度恒定，不再奖励「短时间内连点」，成长只由真实累计行为决定。
  */
 private data class ConfettiParticle(
     val vx: Float,      // 水平初速（单位时间占屏宽比例，正 = 向右）
@@ -34,7 +36,7 @@ private data class ConfettiParticle(
 )
 
 @Composable
-fun ConfettiBurst(burstKey: String?, combo: Int) {
+fun ConfettiBurst(burstKey: String?) {
     if (burstKey == null) return
     var progress by remember(burstKey) { mutableStateOf(0f) }
     LaunchedEffect(burstKey) {
@@ -70,8 +72,8 @@ fun ConfettiBurst(burstKey: String?, combo: Int) {
         val t = progress * 0.9f + 0.001f
         val cx = size.width / 2f
         val cy = size.height * 0.30f
-        // 连击强度：每次连击粒子放大 12%，封顶 1.4x 防过曝
-        val scale = (1f + 0.12f * (combo - 1).coerceAtLeast(0)).coerceAtMost(1.4f)
+        // 连击机制已废弃：粒子尺寸恒定（原为随 combo 放大 12%，封顶 1.4x）
+        val scale = 1f
         particles.forEach { p ->
             val x = cx + p.vx * t * size.width * 0.5f
             val y = cy + (p.vy * (t + p.seed) + 0.5f * p.g * t * t) * size.height

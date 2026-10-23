@@ -28,6 +28,9 @@ import com.example.earthonline.ui.ai.LocalLlmRuntime
 import com.example.earthonline.ui.ai.LocalLlmSupport
 import com.example.earthonline.ui.ai.LocalModelManager
 import com.example.earthonline.ui.ai.MockLlmEngine
+import com.example.earthonline.ui.ai.ModelImportProgress
+import com.example.earthonline.ui.ai.ModelImportService
+import kotlinx.coroutines.flow.first
 import com.example.earthonline.ui.ai.ModelDownloader
 import com.example.earthonline.ui.ai.ModelVariant
 import com.example.earthonline.ui.components.AnimatedAlertDialog
@@ -342,17 +345,22 @@ private fun LocalModelPanel(
         }.getOrNull() ?: "model.zip"
         scope.launch {
             loadMsg = "正在导入并解包模型…"
-            val result = withContext(Dispatchers.IO) {
-                // 解压进度回调：逐条目显示「正在解压：<文件名> (xx%)」，800MB 大包不再误判卡死
-                LocalModelManager.importModelPackage(context, uri, name) { entry, written, total ->
-                    loadMsg = if (total > 0) {
-                        val pct = ((written * 100) / total).coerceIn(0, 100)
-                        "正在解压：$entry ($pct%)"
-                    } else {
-                        "正在解压：$entry"
+            /* 终极重构 · 工程四：800MB 级解压交给**前台服务**执行 ——
+               提升进程优先级，切后台不会被系统杀，通知栏实时显示进度，
+               界面退出再回来也能接着拿到结果，绝不会出现「进度条卡死像崩了」。
+               UI 侧只观察 ModelImportProgress，不再自己跑解压协程。 */
+            val progressJob = launch {
+                ModelImportProgress.label.collect { entry ->
+                    if (entry.isNotBlank()) {
+                        loadMsg = "正在解压：$entry (${ModelImportProgress.percent.value}%)"
                     }
                 }
             }
+            ModelImportService.start(context, uri, name)
+            val result = withContext(Dispatchers.IO) {
+                ModelImportProgress.result.first { it != null }
+            }!!
+            progressJob.cancel()
             when (result) {
                 is LocalModelManager.ModelImportResult.Ok -> {
                     val (ok, msg) = LocalModelManager.validateModelDir(result.modelDir)

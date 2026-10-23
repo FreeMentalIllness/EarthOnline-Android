@@ -65,6 +65,7 @@ import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.steam.SteamGamesSection
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
@@ -489,6 +490,14 @@ private fun CollectionsPane(
             onSelect = { cat = it }
         )
         ViewModeToggle(grid = grid, onToggle = { grid = !grid })
+        // 终极重构 · 工程三：收藏页「游戏数据」模块 —— Steam 游戏库作为特殊收藏品卡片化展示。
+        // 未配置 / 拉取失败时组件内部会显示诚实的引导态，绝不伪造数据。
+        SteamGamesSection(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = UiDimens.ListPad)
+                .padding(top = 8.dp)
+        )
         if (filtered.isEmpty()) {
             if (collections.isEmpty()) {
                 EmptyState(
