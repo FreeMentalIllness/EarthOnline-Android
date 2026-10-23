@@ -403,7 +403,7 @@ class AiQuickHubViewModel @Inject constructor(
         }
         val engine = com.example.earthonline.ui.ai.LocalLlmRuntime.engine
         if (!engine.ready) {
-            return cloudIntent(raw, "本地模型未加载（请先导入 GGUF 并加载 llama.cpp 引擎）")
+            return cloudIntent(raw, "本地模型未加载（请先导入 MNN / GGUF 模型并加载本地引擎）")
         }
         return try {
             val content = engine.chat(

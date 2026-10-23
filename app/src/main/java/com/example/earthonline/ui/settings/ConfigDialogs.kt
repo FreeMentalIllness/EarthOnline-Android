@@ -343,7 +343,15 @@ private fun LocalModelPanel(
         scope.launch {
             loadMsg = "正在导入并解包模型…"
             val result = withContext(Dispatchers.IO) {
-                LocalModelManager.importModelPackage(context, uri, name)
+                // 解压进度回调：逐条目显示「正在解压：<文件名> (xx%)」，800MB 大包不再误判卡死
+                LocalModelManager.importModelPackage(context, uri, name) { entry, written, total ->
+                    loadMsg = if (total > 0) {
+                        val pct = ((written * 100) / total).coerceIn(0, 100)
+                        "正在解压：$entry ($pct%)"
+                    } else {
+                        "正在解压：$entry"
+                    }
+                }
             }
             when (result) {
                 is LocalModelManager.ModelImportResult.Ok -> {
@@ -372,7 +380,7 @@ private fun LocalModelPanel(
         /* v1.0.6.9：正文里不再出现「使用说明」文字按钮 —— 说明入口只保留弹窗标题栏
            右上角那一个 i 图标，避免同一功能出现两处、把版面顶长。 */
         Text(
-            "离线模型 · llama.cpp",
+            "离线模型 · MNN / llama.cpp",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             maxLines = 1
@@ -408,7 +416,10 @@ private fun LocalModelPanel(
         // v1.0.6.14（死命令 #3 主线程守护）：hasGguf 是文件系统遍历，原写法在组合期主线程同步执行；
         // 改为 produceState + IO 协程回填，目录变化时自动重查
         val fileReady by produceState(false, modelDirResolved) {
-            value = withContext(Dispatchers.IO) { LocalModelManager.hasGguf(modelDirResolved) }
+            // v1.0.6 MNN 移植：GGUF 或 MNN 权重任一存在即视为模型文件就绪
+            value = withContext(Dispatchers.IO) {
+                LocalModelManager.hasGguf(modelDirResolved) || LocalModelManager.hasMnn(modelDirResolved)
+            }
         }
         val statusText = when {
             // 只有真的 ready 才敢说「已加载」
@@ -692,9 +703,9 @@ private fun LocalModelGuide(onDismiss: () -> Unit) {
                 )
 
                 GuideSection("二、准备模型文件") {
-                    GuideBullet("格式", "GGUF（不支持 MNN，已废弃）")
-                    GuideBullet("规格", "标准 1.5B（约 1GB，统一档位）")
-                    GuideBullet("来源", "在线下载，或电脑下载后传 .gguf / .zip 导入")
+                    GuideBullet("格式", "MNN（.mnn，推荐）或 GGUF（.gguf）")
+                    GuideBullet("规格", "Qwen2.5-1.5B（MNN 约 800MB~1GB / GGUF 约 1GB）")
+                    GuideBullet("来源", "电脑下载 qwen2.5-1.5b-mnn.zip 或 .gguf 后，从文件导入")
                 }
 
                 GuideSection("三、三步跑起来") {

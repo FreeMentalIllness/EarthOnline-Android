@@ -115,7 +115,9 @@ class EarthOnlineApp : Application(), Configuration.Provider {
                     ?: com.example.earthonline.ui.ai.LocalModelManager
                         .modelDir(this, com.example.earthonline.ui.ai.ModelDownloader.MODEL_NAME).absolutePath
             )
-            if (!com.example.earthonline.ui.ai.LocalModelManager.hasGguf(dir)) return
+            // v1.0.6 MNN 移植：GGUF 或 MNN 权重任一存在才尝试自动加载
+            if (!com.example.earthonline.ui.ai.LocalModelManager.hasGguf(dir) &&
+                !com.example.earthonline.ui.ai.LocalModelManager.hasMnn(dir)) return
             val diag = com.example.earthonline.ui.ai.LocalLlmRuntime.diagnose(dir)
             if (diag is com.example.earthonline.ui.ai.LocalLlmSupport.Blocked) return
             val engine = com.example.earthonline.ui.ai.LocalLlmRuntime.engineFor(dir)

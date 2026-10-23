@@ -73,6 +73,14 @@ object AppInfo {
      */
     val changelog: List<Triple<String, String, List<String>>> = listOf(
         Triple(
+            "1.0.6.4", "2026-10-23", listOf(
+                "本地离线推理新增 MNN 引擎（移植自开源 messageAIHelper 的预编译 libMNN.so 栈，仅 arm64-v8a）：arm64 真机可直接本地运行 Qwen2.5-1.5B，内存更省、对 Qwen 有专项优化",
+                "模型导入现支持 MNN 格式（llm.mnn + llm.mnn.weight），解压时逐条目显示「正在解压：文件名 (进度%)」，800MB 大包不再误判卡死",
+                "本地推理内存防护：上下文窗口锁 1024、单次生成封顶 512 token，防中端 8GB 机型 OOM 闪退；非 arm64 设备 / 模拟器自动降级云端，绝不崩",
+                "GGUF（llama.cpp）引擎保留为可用格式，与 MNN 并存"
+            )
+        ),
+        Triple(
             "1.0.6.3", "2026-10-23", listOf(
                 "AI Tool Calling：AI 对话从「能看」升级到「能改」——可自动创建任务、完成任务、新建笔记，本地数据库真实落库，执行过程与结果全程可见",
                 "AI 工具执行与手动操作完全同口径：最近动态、经验值流水同步记录；删除类破坏性操作不对 AI 开放，最多丢一条重复任务、绝不丢数据",

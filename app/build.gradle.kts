@@ -57,7 +57,11 @@ android {
         // versionCode 49 = v1.0.6（全维沉浸巡检批）：首启出生日期字段整体可点（原 readOnly 字段点击弹无效键盘，真实用户困惑点，修复为全字段点击直接弹日期选择器）。
         // versionCode 50 = v1.0.6（巡检 P1 修复批）：DataStore 加 ReplaceFileCorruptionHandler —— 偏好文件损坏（低存储写入中断等）从「每次启动必崩的无限循环」修复为「回退空偏好自动重建」，最多丢偏好、绝不闪退。
         // versionCode 51 = v1.0.6（Tool Calling 终版批）：AI 对话支持 OpenAI 兼容 tools —— 模型可调用本地工具 create_task / complete_task / create_note（Room 落库 + 动态/XP 流水同口径），结果回传生成最终回复；服务端不支持 tools 时自动剥掉重试，绝不崩溃。首启引导右上角新增「跳过」。
-        versionCode = 51
+        // versionCode 52 = v1.0.6（MNN 引擎移植批）：本地离线推理新增 MNN 引擎（移植自开源
+        // messageAIHelper 的 libMNN.so + liblocalllm.so 预编译栈，仅 arm64-v8a），Qwen2.5-1.5B
+        // 在真机可直接跑；模型导入接受 MNN 格式（llm.mnn+llm.mnn.weight）并逐条目显示解压进度；
+        // n_ctx 锁 1024、生成封顶 512 token 防 8GB 机型 OOM；非 arm64 / 模拟器自动降级云端。
+        versionCode = 52
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

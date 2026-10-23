@@ -25,11 +25,17 @@
 # 这里兜底防止 R8 误删 ViewModel 子类
 -keep class com.example.earthonline.ui.**.*ViewModel { *; }
 
-# ── 本地离线推理引擎（llama.cpp / Inferkt）：JNI 与 KMP 绑定，必须整包保留 ──
+# ── 本地离线推理引擎（llama.cpp / Inferkt + MNN）：JNI 与 KMP 绑定，必须整包保留 ──
 -keep class com.dilivva.** { *; }
 -keep class **.inferkt.** { *; }
 -dontwarn com.dilivva.**
 -dontwarn **.inferkt.**
+
+# MNN 引擎 JNI 桥（移植自 messageAIHelper，包名被预编译 liblocalllm.so 符号锁定，
+# 类名 / native 方法名一个字符都不能改，否则 JNI 解析失败 → 加载即崩）
+-keep class com.example.qqaihelper.localllm.LocalLlmEngine { *; }
+-dontwarn com.example.qqaihelper.**
+
 # 原生方法声明所在类（防止 R8 重命名导致 JNI FindClass/GetMethodID 失败）
 -keepclasseswithmembernames class * {
     native <methods>;

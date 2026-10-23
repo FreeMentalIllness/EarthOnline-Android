@@ -13,10 +13,10 @@ import kotlinx.coroutines.withContext
 /**
  * 本地模型（离线推理）管理器（v1.0.6.6）。
  *
- * 模型格式按死命令切换为 **GGUF**（llama.cpp / Inferkt 引擎）：
+ * 模型格式支持 **GGUF（llama.cpp / Inferkt）** 与 **MNN（libMNN.so，移植自 messageAIHelper）**：
  *  - 在线下载：魔搭 Qwen 官方 GGUF 仓库直链（[ModelDownloader]，断点续传 + 进度条）；
- *  - 本地导入：.gguf 单文件，或 .zip 压缩包（自动解包，兼容含 GGUF 的任意结构，
- *    也兼容 MNN 插件包结构仅作预存 —— MNN 引擎按死命令放弃，导入后提示改用 GGUF）；
+ *  - 本地导入：.gguf 单文件，或 .zip 压缩包（自动解包，兼容含 GGUF / MNN 权重的任意结构，
+ *    逐条目上报解压进度）；MNN 格式（llm.mnn + llm.mnn.weight）由 MnnEngine 直接加载；
  *  - 落盘位置：App 沙盒 filesDir/mnn_models/<safeName>/，不进备份 JSON。
  */
 object LocalModelManager {
@@ -84,12 +84,16 @@ object LocalModelManager {
      *  ③ 其它扩展名 —— 明确拒绝「格式不支持」。
      * 解包后定位权重：
      *  - 找到 `.gguf` → [Ok]（llama.cpp 引擎可直接加载）；
-     *  - 只找到 `.mnn`(+`.mnn.weight`) → [Fail] 明确告知「当前引擎是 llama.cpp，仅支持 GGUF，
-     *    该 MNN 模型无法在本端运行」（不误导用户以为加载成功）；
+     *  - 找到 `.mnn`(+`.mnn.weight`) → [Ok]（MnnEngine / libMNN.so 可直接加载，arm64 真机）；
      *  - 什么都没有 → [Fail]「模型结构不完整」。
      * 整个复制 / 解包在 IO 协程执行，并申请 SAF 长期读权限；任何异常都转成可读 [Fail] 原因。
      */
-    suspend fun importModelPackage(ctx: Context, uri: Uri, displayName: String): ModelImportResult = runCatching {
+    suspend fun importModelPackage(
+        ctx: Context,
+        uri: Uri,
+        displayName: String,
+        onProgress: (entryName: String, written: Long, total: Long) -> Unit = { _, _, _ -> }
+    ): ModelImportResult = runCatching {
         withContext(Dispatchers.IO) {
             takePersistable(ctx, uri)
             val safeName = displayName.substringBeforeLast('.')
@@ -117,7 +121,13 @@ object LocalModelManager {
             }
 
             if (lower.endsWith(".zip")) {
-                // ② zip：解包（防 zip-slip），统计解出的文件数
+                // ② zip：解包（防 zip-slip），逐条目上报「正在解压：<条目名> (xx%)」，
+                // 避免 800MB+ 大包解压时用户以为卡死（移植自 messageAIHelper 的 PluginManager 进度回调）。
+                val zipSizeBytes = runCatching {
+                    resolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)
+                        ?.use { c -> if (c.moveToFirst()) c.getLong(0) else -1L } ?: -1L
+                }.getOrDefault(-1L)
+                var written = 0L
                 val extracted = runCatching {
                     resolver.openInputStream(uri)?.use { input ->
                         ZipInputStream(input).use { zip ->
@@ -134,6 +144,9 @@ object LocalModelManager {
                                     target.parentFile?.mkdirs()
                                     target.outputStream().use { zip.copyTo(it) }
                                     count++
+                                    written += target.length().coerceAtLeast(0L)
+                                    // 解压进度 UI：当前条目名 + 已写字节 / 总字节（总字节未知时仅显示条目名）
+                                    onProgress(entry.name, written, zipSizeBytes)
                                 }
                                 zip.closeEntry()
                                 entry = zip.nextEntry
@@ -148,10 +161,8 @@ object LocalModelManager {
                 // 递归定位核心权重
                 return@withContext when (val w = findCoreWeight(dir)) {
                     "gguf" -> ModelImportResult.Ok(dir)
-                    "mnn" -> ModelImportResult.Fail(
-                        "检测到 MNN 格式（.mnn）。当前本地引擎是 llama.cpp，仅支持 GGUF 格式，" +
-                            "该模型无法在本端运行。请改用 Qwen2.5 的 GGUF（q4_k_m）文件。"
-                    )
+                    // v1.0.6 MNN 移植：MNN 格式（llm.mnn + llm.mnn.weight）现在可运行，接受导入
+                    "mnn" -> ModelImportResult.Ok(dir)
                     else -> ModelImportResult.Fail("压缩包内未找到 .gguf 或 .mnn 权重文件，模型结构不完整")
                 }
             }
@@ -202,8 +213,10 @@ object LocalModelManager {
             return true to "GGUF 校验通过：${gguf.name}（${gguf.length() / 1024 / 1024} MB），llama.cpp 引擎可加载"
         }
         if (hasMnn(dir)) {
-            return false to "检测到 MNN 格式模型：MNN 官方未发布 Android 推理 AAR，本地引擎已切换为 llama.cpp（GGUF）。" +
-                "请下载或导入 Qwen2.5-1.5B 的 GGUF 格式（已放弃 MNN 格式）。"
+            // v1.0.6 MNN 移植：llm.mnn + llm.mnn.weight 现由 MnnEngine（libMNN.so）直接加载
+            val w = dir.walkTopDown().firstOrNull { it.isFile && it.name == "llm.mnn.weight" && it.length() > 0 }
+            val mb = (w?.length() ?: 0L) / 1024 / 1024
+            return true to "MNN 模型校验通过（权重 ${mb} MB），MNN 引擎可加载（arm64 真机）"
         }
         return false to "模型目录中未找到可用模型（需要 .gguf 文件）"
     }

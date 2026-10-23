@@ -596,9 +596,14 @@ object LocalLlmRuntime {
             Log.w(TAG, "engineFor: 模拟器环境（${Build.FINGERPRINT}）→ 强制 Mock")
             return MockLlmEngine
         }
-        return if (modelDir.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }.orEmpty().isNotEmpty())
-            LlamaCppEngine
-        else MockLlmEngine
+        return when {
+            // MNN 模型（llm.mnn + llm.mnn.weight）优先：v1.0.6 移植自 messageAIHelper 的 MNN 栈，
+            // 对 Qwen2.5 有专项优化、内存更省，作为 arm64 真机的首选本地引擎。
+            LocalModelManager.hasMnn(modelDir) -> MnnEngine
+            // 否则若有 GGUF，回落 llama.cpp（Inferkt）引擎
+            modelDir.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }.orEmpty().isNotEmpty() -> LlamaCppEngine
+            else -> MockLlmEngine
+        }
     }
 
     /** 当前设备是否提供 arm64-v8a 原生库运行能力 */
@@ -706,9 +711,16 @@ object LocalLlmRuntime {
             )
         }
         val need = modelDir
-            ?.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }
-            ?.maxByOrNull { it.length() }
-            ?.let { requiredBytesFor(it.length()) }
+            ?.let { dir ->
+                val gguf = dir.listFiles { f -> f.isFile && f.extension.equals("gguf", true) }
+                    .orEmpty().maxByOrNull { it.length() }?.length() ?: 0L
+                // MNN 权重（llm.mnn.weight）通常占模型体积的绝大部分，一并计入内存预算
+                val mnnW = dir.walkTopDown()
+                    .firstOrNull { it.isFile && it.name == "llm.mnn.weight" && it.length() > 0 }
+                    ?.length() ?: 0L
+                maxOf(gguf, mnnW)
+            }
+            ?.let { requiredBytesFor(it) }
             ?: MIN_AVAILABLE_BYTES
         if (avail in 1 until need) {
             val reason = if (avail < MIN_AVAILABLE_BYTES)
