@@ -63,9 +63,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
+import coil3.compose.AsyncImage
 import com.example.earthonline.ui.achievements.AchievementUnlockHost
 import com.example.earthonline.ui.achievements.AchievementViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
@@ -178,14 +176,9 @@ fun MainScaffold(
         if (!wallpaperVisible) {
             null
         } else {
-            val w = with(density) { screenW.dp.roundToPx() }
-            val h = with(density) { screenH.dp.roundToPx() }
-            ImageRequest.Builder(context)
-                .data(File(effectiveWallpaper))
-                .size(w, h)
-                .precision(Precision.INEXACT)
-                .crossfade(false)
-                .build()
+            // v2.0.0（Coil 3）：全屏壁纸直接传 File，由 Coil 3 按控件约束采样；
+            // 不再手写 ImageRequest（Coil 3 的 size/precision 签名与 2.x 不同源）。
+            File(effectiveWallpaper)
         }
     }
 

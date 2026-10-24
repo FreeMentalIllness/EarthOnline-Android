@@ -41,6 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlin.math.min
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.column.columnChart
+import com.patrykandpatrick.vico.core.entry.entryModelOf
 
 data class DonutSlice(val label: String, val value: Int, val color: Color)
 data class BarItem(val label: String, val value: Int)
@@ -570,4 +575,45 @@ fun MetricTile(
             )
         }
     }
+}
+
+/**
+ * v2.0.0：Vico 柱状图 —— 替代手写 Canvas 柱状图的「工业级」实现。
+ *
+ * 为什么换：旧 BarChart 是纯 Canvas 手绘（自己算比例、画柱、画均值线），
+ * 坐标轴刻度、边界留白、手势滚动都要自己维护；Vico 提供完整坐标系、
+ * 自适应刻度、滚动 / 缩放与 Material3 主题接入，跨机型一致且零自绘逻辑。
+ *
+ * 数据为空时不出图（交给调用方的空状态文案），避免 0 值柱把坐标系压扁。
+ */
+@Composable
+fun VicoBarChart(
+    values: List<Float>,
+    modifier: Modifier = Modifier,
+    color: Color = AmberPrimary,
+    chartHeight: androidx.compose.ui.unit.Dp = 150.dp
+) {
+    if (values.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth().height(chartHeight),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "\u6682\u65e0\u6570\u636e",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+    val model = remember(values) { entryModelOf(*values.map { it.coerceAtLeast(0f) }.toTypedArray()) }
+    // columnChart() 走 currentChartStyle（未显式 ProvideChartStyle 时回落 Vico 默认配色），
+    // 不手写 LineComponent / Shader —— 避免与 Vico 1.x 的 Component API 版本耦合。
+    Chart(
+        chart = columnChart(),
+        model = model,
+        modifier = modifier.fillMaxWidth().height(chartHeight),
+        startAxis = rememberStartAxis(),
+        bottomAxis = rememberBottomAxis()
+    )
 }

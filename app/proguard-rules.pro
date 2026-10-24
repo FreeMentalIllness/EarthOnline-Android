@@ -91,3 +91,26 @@
 # ── Kotlin 协程 / 反射基础 ──
 -keep class kotlin.Metadata { *; }
 -keepclassmembers class kotlin.Metadata { *; }
+
+# ── v2.0.0：Haze 液态玻璃（RenderEffect / RuntimeShader 反射路径）──
+-keep class dev.chrisbanes.haze.** { *; }
+-dontwarn dev.chrisbanes.haze.**
+
+# ── v2.0.0：Coil 3 图片加载（KMP 版，ServiceLoader 注册组件）──
+-keep class coil3.** { *; }
+-dontwarn coil3.**
+-keep class coil3.compose.** { *; }
+
+# ── v2.0.0：Vico 图表（core 层大量反射 + 自定义 Component）──
+-keep class com.patrykandpatrick.vico.** { *; }
+-dontwarn com.patrykandpatrick.vico.**
+
+# ── v2.0.0：Reorderable 拖拽排序 ──
+-keep class sh.calvin.reorderable.** { *; }
+-dontwarn sh.calvin.reorderable.**
+
+# ── v2.0.0：Calendar / Accompanist ──
+-keep class com.kizitonwose.calendar.** { *; }
+-dontwarn com.kizitonwose.calendar.**
+-keep class com.google.accompanist.permissions.** { *; }
+-dontwarn com.google.accompanist.permissions.**

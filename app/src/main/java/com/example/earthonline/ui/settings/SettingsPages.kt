@@ -1,5 +1,11 @@
+@file:OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
+
 package com.example.earthonline.ui.settings
 
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.shouldShowRationale
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.AmberPrimary
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -339,20 +345,27 @@ fun GeneralRoute(
 
     // 记录权限请求的发起方（到期提醒 / 快捷记录），回调里据此分别处理
     var pendingQuickNotif by remember { mutableStateOf(false) }
+    /** v2.0.0：到期提醒开关也在等通知权限 */
+    var pendingNotify by remember { mutableStateOf(false) }
 
-    val postNotifLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
+    /* v2.0.0：通知权限 Compose 化（Accompanist Permissions）。
+       授权状态直接是一个可观察的 State，拿到授权后由副作用统一收口，
+       不再需要「记住是谁发起的 + 在 launcher 回调里分发」这种易错写法。 */
+    val notifPermission = rememberPermissionState(android.Manifest.permission.POST_NOTIFICATIONS)
+    LaunchedEffect(notifPermission.status) {
+        if (notifPermission.status.isGranted) {
             if (pendingQuickNotif) {
                 vm.setQuickNotif(true)
-            } else {
+                pendingQuickNotif = false
+            } else if (pendingNotify) {
                 vm.setNotify(true)
                 ReminderScheduler.schedule(context)
+                pendingNotify = false
             }
-            pendingQuickNotif = false
-        } else {
+        } else if (pendingQuickNotif || pendingNotify) {
             scope.launch { snackbar.showSnackbar("未授予通知权限，无法开启该功能") }
+            pendingQuickNotif = false
+            pendingNotify = false
         }
     }
 
@@ -361,7 +374,7 @@ fun GeneralRoute(
             if (Build.VERSION.SDK_INT >= 33) {
                 when (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)) {
                     PackageManager.PERMISSION_GRANTED -> vm.setQuickNotif(true)
-                    else -> { pendingQuickNotif = true; postNotifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+                    else -> { pendingQuickNotif = true; notifPermission.launchPermissionRequest() }
                 }
             } else {
                 vm.setQuickNotif(true)
@@ -379,7 +392,7 @@ fun GeneralRoute(
                         vm.setNotify(true)
                         ReminderScheduler.schedule(context)
                     }
-                    else -> postNotifLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    else -> { pendingNotify = true; notifPermission.launchPermissionRequest() }
                 }
             } else {
                 vm.setNotify(true)
@@ -884,7 +897,8 @@ fun AboutRoute(
                    下面各版本再依次列出，长列表不再是一眼望不到头的纯文字流。 */
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     var lastSegment = ""
-                    AppInfo.changelog.forEach { (ver, date, items) ->
+                    // v2.0.0：编年史按版本号递增存储，展示时倒序（最新的在最上面）
+                    AppInfo.changelog.asReversed().forEach { (ver, date, items) ->
                         val segment = ver.substringBeforeLast('.')
                         if (segment != lastSegment) {
                             lastSegment = segment

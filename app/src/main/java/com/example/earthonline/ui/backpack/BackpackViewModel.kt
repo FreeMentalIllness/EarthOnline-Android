@@ -89,6 +89,14 @@ class BackpackViewModel @Inject constructor(
 
     fun deleteItem(id: String) = viewModelScope.launch { itemRepo.delete(id) }
 
+    /** v2.0.0：设置 / 清除物品自定义封面（封面图已复制到沙盒，只存路径） */
+    fun setItemCover(target: ItemEntity, path: String?) =
+        viewModelScope.launch { itemRepo.update(target.copy(coverPath = path)) }
+
+    /** v2.0.0：设置 / 清除收藏自定义封面 */
+    fun setCollectionCover(target: CollectionEntity, path: String?) =
+        viewModelScope.launch { collectionRepo.update(target.copy(coverPath = path)) }
+
     /**
      * v1.0.4：编辑已有物品。此前条目保存后只能删除重建（点击卡片无响应），
      * 现在卡片可点开编辑对话框，仅覆盖名称 / 类型 / 故事 / 分类四个字段，

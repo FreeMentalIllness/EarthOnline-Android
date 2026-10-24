@@ -184,8 +184,15 @@ android {
         // ④ 笔记待办改真实复选框：独立待办区 + Compose 原生 Checkbox（点击打勾/取消 + 删除线），
         //    存储仍为标准 "- [ ]/- [x] " Markdown 行（跨端契约零改动），编辑态绝无「□」字符；
         // ⑤ 堆叠卡片尺寸自适应：大/中/小三档切换（DataStore 持久化），全卡统一宽高比例。
-        versionCode = 64
-        versionName = "1.0.6"
+        // versionCode 65 = v2.0.0（八库全量重构 + Bug 修复批）：
+        // ① 新建笔记闪退根治（空块列表下 coerceIn(0, -1) 抛 IllegalArgumentException）
+        // ② 主页日历换 kizitonwose/Calendar（可点日期 / 月份切换 / 自定义标记）
+        // ③ 背包物品与收藏支持自定义封面（Photo Picker + 沙盒持久化 + 默认占位图）
+        // ④ 更新日志按 v1.0.0 → v2.0.0 全量补全并分段展示
+        // ⑤ 八库接入：Haze / Coil3 / Calendar / Vico / Reorderable / Accompanist-Permissions
+        //    + 自研 spring 物理按压反馈（compose-symphony 不存在于 Maven Central，见说明）
+        versionCode = 65
+        versionName = "2.0.0"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
@@ -249,6 +256,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // v2.0.0：kizitonwose/Calendar 强依赖 java.time（LocalDate / YearMonth / DayOfWeek），
+        // 而 minSdk 24 起才有 java.time（API 26 才完整），必须开脱糖，否则低版本机型直接 NoClassDefFoundError。
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions { jvmTarget = "17" }
@@ -295,7 +305,11 @@ dependencies {
     implementation(libs.room.ktx)
 
     implementation(libs.datastore)
+    // v2.0.0：图片加载统一 Coil 3（coil3.* 包名）+ OkHttp 网络取图（Steam 封面等远端图）
     implementation(libs.coil)
+    implementation(libs.coil.network)
+    // v2.0.0：java.time 脱糖（Calendar 库前置条件）
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     // 到期提醒：WorkManager（后台检查）+ Hilt Worker 注入
     implementation(libs.workmanager)
@@ -318,4 +332,12 @@ dependencies {
     // vc64：Haze —— 全局液态玻璃（blur + tint + noise），取代手写 AGSL / RenderEffect 实现。
     // 版本锁 1.3.1（对齐本项目 Compose 1.7.x），升级前务必先看 libs.versions.toml 里的兼容说明。
     implementation(libs.haze)
+    // v2.0.0：主页日历（可点击 / 月份切换 / 自定义标记），替换手绘月历
+    implementation(libs.calendar.compose)
+    // v2.0.0：数据图表（记账柱状图 + 数据中心趋势图）
+    implementation(libs.vico.compose.m3)
+    // v2.0.0：主页速览图标拖拽排序（Lazy 布局长按拖拽）
+    implementation(libs.reorderable)
+    // v2.0.0：权限申请 Compose 化（定位 / 通知），替代手写 ActivityResultLauncher
+    implementation(libs.accompanist.permissions)
 }

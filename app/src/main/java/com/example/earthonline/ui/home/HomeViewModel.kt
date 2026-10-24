@@ -144,6 +144,8 @@ data class HomeUiState(
     val stackCards: Set<String> = DEFAULT_STACK_CARDS,
     /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，1.0 = 基准高度） */
     val stackScale: Float = 1f,
+    /** v2.0.0：主页速览入口的拖拽排序（id 列表，空 = 默认顺序） */
+    val entryOrder: List<String> = emptyList(),
     /**
      * v1.0.6.6 主页日历卡：**带到期日的未完成任务**（日程即"有到期日的任务"）。
      * 已在 ViewModel 里过滤好，UI 只管渲染（月历打点 + 当天清单）。
@@ -246,6 +248,8 @@ private data class Parts(
     val stackCards: Set<String> = DEFAULT_STACK_CARDS,
     /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，1.0 = 基准高度） */
     val stackScale: Float = 1f,
+    /** v2.0.0：主页速览入口的拖拽排序（id 列表，空 = 默认顺序） */
+    val entryOrder: List<String> = emptyList(),
     /** v1.0.6.6：主页日历卡数据源 —— 带到期日且未完成的任务 */
     val scheduled: List<TaskEntity> = emptyList(),
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
@@ -368,6 +372,12 @@ class HomeViewModel @Inject constructor(
     /** vc64：主页卡片堆叠平滑缩放（取代 vc63 三档预设） */
     private val stackScaleFlow: Flow<Float> = settingsDs.homeStackScale
 
+    /** v2.0.0：主页速览入口拖拽排序（逗号串 → id 列表；空串 = 默认顺序） */
+    private val entryOrderFlow: Flow<List<String>> = settingsDs.homeEntryOrder.map { txt ->
+        if (txt.isBlank()) emptyList()
+        else txt.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
     /** v1.0.3：自定义称号 */
     private val customTitleFlow: Flow<String> = settingsDs.customTitle
 
@@ -399,6 +409,7 @@ class HomeViewModel @Inject constructor(
             .combine(quickEntriesFlow) { parts, quick -> parts.copy(quickEntries = quick) }
             .combine(stackCardsFlow) { parts, stack -> parts.copy(stackCards = stack) }
             .combine(stackScaleFlow) { parts, scale -> parts.copy(stackScale = scale) }
+            .combine(entryOrderFlow) { parts, order -> parts.copy(entryOrder = order) }
             .combine(scheduledFlow) { parts, sched -> parts.copy(scheduled = sched) }
             .combine(bundleFlow) { parts, bundle -> parts.copy(bundle = bundle) }
             .combine(customTitleFlow) { parts, title -> parts.copy(customTitle = title) }
@@ -476,6 +487,11 @@ class HomeViewModel @Inject constructor(
     /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，滑块可停任意值，DataStore 持久化） */
     fun setStackScale(scale: Float) {
         viewModelScope.launch { settingsDs.setHomeStackScale(scale) }
+    }
+
+    /** v2.0.0：保存主页速览入口的拖拽排序（id 顺序，DataStore 持久化） */
+    fun setEntryOrder(ids: List<String>) {
+        viewModelScope.launch { settingsDs.setHomeEntryOrder(ids.joinToString(",")) }
     }
 
     fun setStackCards(cards: Set<String>) {
@@ -668,6 +684,7 @@ class HomeViewModel @Inject constructor(
             quickEntries = quickEntries,
             stackCards = stackCards,
             stackScale = stackScale,
+            entryOrder = entryOrder,
             // v1.0.6.6：主页轻量日历卡的数据源（带到期日的未完成任务）
             calendarTasks = scheduled,
             // ————— v1.0.3 情绪价值与成长 —————

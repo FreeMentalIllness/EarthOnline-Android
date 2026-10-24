@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.example.earthonline.data.model.CustomField
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.CropShape
@@ -296,7 +296,7 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
             title = { Text("人生分享卡片") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    coil.compose.AsyncImage(
+                    coil3.compose.AsyncImage(
                         model = file,
                         contentDescription = "分享卡片预览",
                         modifier = Modifier

@@ -1,0 +1,104 @@
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 35
+
+This Android Gradle plugin (8.5.2) was tested up to compileSdk = 34.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 35.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 35 is available.
+
+For more information refer to the compatibility table:
+https://d.android.com/r/tools/api-level-support
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=35
+to this project's gradle.properties.
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+> Task :app:mergeReleaseResources UP-TO-DATE
+> Task :app:packageReleaseResources UP-TO-DATE
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksRelease UP-TO-DATE
+> Task :app:processReleaseMainManifest UP-TO-DATE
+> Task :app:processReleaseManifest UP-TO-DATE
+> Task :app:processReleaseManifestForPackage UP-TO-DATE
+> Task :app:processReleaseResources UP-TO-DATE
+> Task :app:javaPreCompileRelease UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:mergeReleaseArtProfile UP-TO-DATE
+> Task :app:mergeReleaseStartupProfile UP-TO-DATE
+> Task :app:mergeReleaseShaders UP-TO-DATE
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseAssets UP-TO-DATE
+> Task :app:compressReleaseAssets UP-TO-DATE
+> Task :app:extractReleaseVersionControlInfo UP-TO-DATE
+> Task :app:optimizeReleaseResources UP-TO-DATE
+> Task :app:collectReleaseDependencies UP-TO-DATE
+> Task :app:sdkReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningRelease UP-TO-DATE
+> Task :app:writeReleaseAppMetadata UP-TO-DATE
+> Task :app:writeReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:kspReleaseKotlin
+> Task :app:compileReleaseKotlin
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/ai/AiScreen.kt:130:44 'val Icons.Rounded.Send: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.Send.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/backpack/BackpackScreen.kt:323:13 'fun TrackScrollBlur(listState: LazyListState): Unit' is deprecated. v1.0.6.6 起液态玻璃常驻，滚动不再降级模糊；本调用已无操作.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/backpack/BackpackScreen.kt:405:41 'val Icons.Rounded.ViewList: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ViewList.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/backpack/BackpackScreen.kt:439:43 'val Icons.Rounded.MenuBook: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.MenuBook.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/backpack/BackpackScreen.kt:535:13 'fun TrackScrollBlur(listState: LazyListState): Unit' is deprecated. v1.0.6.6 起液态玻璃常驻，滚动不再降级模糊；本调用已无操作.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/backpack/BackpackScreen.kt:969:44 'val Icons.Rounded.OpenInNew: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.OpenInNew.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/components/ImageCropper.kt:343:51 'static fun newInstance(p0: InputStream, p1: Boolean): BitmapRegionDecoder?' is deprecated. Deprecated in Java.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/data/CalendarSection.kt:82:64 Condition is always 'true'.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/home/AllActivitiesScreen.kt:123:44 'val Icons.Rounded.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ArrowBack.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/home/HomeScreen.kt:1406:41 'val Icons.Rounded.PlaylistAddCheck: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.PlaylistAddCheck.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/home/HomeScreen.kt:1559:45 'val Icons.Rounded.PlaylistAddCheck: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.PlaylistAddCheck.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/map/MapScreen.kt:261:44 'val Icons.Rounded.List: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.List.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/notes/NoteEditorScreen.kt:618:48 'val Icons.Rounded.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ArrowBack.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/notes/NoteEditorScreen.kt:986:36 'val Icons.Rounded.Undo: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.Undo.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/notes/NoteEditorScreen.kt:987:36 'val Icons.Rounded.Redo: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.Redo.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/notes/NoteEditorScreen.kt:995:36 'val Icons.Rounded.FormatListBulleted: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.FormatListBulleted.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/onboarding/OnboardingScreen.kt:438:33 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/profile/ProfileScreen.kt:447:33 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/profile/ProfileScreen.kt:465:33 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/recyclebin/RecycleBinScreen.kt:74:44 'val Icons.Rounded.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ArrowBack.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/settings/SettingsPages.kt:276:53 'fun Modifier.menuAnchor(): Modifier' is deprecated. Use overload that takes MenuAnchorType and enabled parameters.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/settings/SettingsPages.kt:1014:37 'fun LinearProgressIndicator(progress: Float, modifier: Modifier = ..., color: Color = ..., trackColor: Color = ..., strokeCap: StrokeCap = ...): Unit' is deprecated. Use the overload that takes `progress` as a lambda.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/steam/SteamGamesSection.kt:124:44 'val Icons.Rounded.ArrowBack: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ArrowBack.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/tasks/TasksScreen.kt:400:46 'val Icons.Rounded.ListAlt: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.ListAlt.
+w: file:///D:/AI/app/EarthOnline-Android/app/src/main/java/com/example/earthonline/ui/tasks/TasksScreen.kt:1261:44 'val Icons.Rounded.List: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Rounded.List.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:hiltAggregateDepsRelease
+> Task :app:hiltJavaCompileRelease
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:transformReleaseClassesWithAsm
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:mergeReleaseGeneratedProguardFiles
+> Task :app:expandReleaseArtProfileWildcards
+> Task :app:minifyReleaseWithR8
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 8m 12s
+52 actionable tasks: 18 executed, 34 up-to-date

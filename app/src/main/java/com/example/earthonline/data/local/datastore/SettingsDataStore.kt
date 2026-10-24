@@ -88,6 +88,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         val HOME_STACK_SIZE = intPreferencesKey("home_stack_size")
         /** vc64：主页卡片堆叠**平滑缩放**（0.6~1.6，1.0 = 基准高度 356dp），取代三档预设 */
         val HOME_STACK_SCALE = floatPreferencesKey("home_stack_scale")
+        /** v2.0.0：主页速览入口的拖拽排序（逗号分隔的 id 串，空 = 用默认顺序） */
+        val HOME_ENTRY_ORDER = stringPreferencesKey("home_entry_order")
 
         /** v1.0.6.9：笔记分类文件夹（JSON 列表 {id,name,createdAt}；先建分类再建笔记的层级结构） */
         val NOTE_FOLDERS = stringPreferencesKey("note_folders")
@@ -253,6 +255,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
      * 内部内容按比例让位，绝不变形。
      * 旧档位自动迁移：0（小）→ 0.78、2（大）→ 1.25、其余 → 1.0。
      */
+    /** v2.0.0：主页速览入口拖拽排序（逗号分隔 id 串） */
+    val homeEntryOrder: Flow<String> = ds.data.map { it[HOME_ENTRY_ORDER] ?: "" }
     val homeStackScale: Flow<Float> = ds.data.map { prefs ->
         val legacy = prefs[HOME_STACK_SIZE]
         val v = prefs[HOME_STACK_SCALE] ?: when (legacy) {
@@ -265,6 +269,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     suspend fun setHomeStackScale(v: Float) = ds.edit {
         it[HOME_STACK_SCALE] = v.coerceIn(0.6f, 1.6f)
     }
+
+    suspend fun setHomeEntryOrder(v: String) = ds.edit { it[HOME_ENTRY_ORDER] = v }
 
     /** 保留旧读口（兼容既有调用），一律映射到新的缩放值 */
     val homeStackSize: Flow<Int> = ds.data.map {

@@ -120,8 +120,20 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
 }
 
 /**
+ * v2.0.0：物品与收藏的「自定义封面」（DB 8 -> 9）。
+ * 两张表各加一列可空 TEXT，旧行全部为 NULL（= 未上传，UI 回落默认占位图），
+ * 跨端 JSON 导出因此多两个可选字段，WebDAV 按主键合并语义不受影响。
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `items` ADD COLUMN `coverPath` TEXT")
+        db.execSQL("ALTER TABLE `collections` ADD COLUMN `coverPath` TEXT")
+    }
+}
+
+/**
  * 主数据库（对应 HTML 的单一主存档键 `earth_data`，本端归一化为多表）。
- * version=8；迁移链 MIGRATION_1_2 … MIGRATION_7_8
+ * version=9；迁移链 MIGRATION_1_2 … MIGRATION_8_9
  *（fallbackToDestructiveMigration 仅作无匹配迁移时的兜底）。
  */
 @Database(
@@ -137,7 +149,7 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         BagCategoryEntity::class,
         XpEventEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -167,7 +179,7 @@ abstract class AppDatabase : RoomDatabase() {
                     DB_NAME
                 ).addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9
                 )
                 .fallbackToDestructiveMigration()
                 .build()

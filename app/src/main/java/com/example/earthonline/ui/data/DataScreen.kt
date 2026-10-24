@@ -33,6 +33,7 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.DonutChart
+import com.example.earthonline.ui.components.VicoBarChart
 import com.example.earthonline.ui.components.DonutSlice
 import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.navigation.Screen
@@ -192,12 +193,18 @@ fun DataScreen(vm: StatsViewModel, moreActions: MoreMenuActions) {
                 GlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(UiDimens.CardRadius)) {
                     Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         SectionHeader("任务分类分布")
-                        BarChart(
-                            items = byCat.map { BarItem(categoryLabels[it.first] ?: it.first, it.second) },
-                            emptyLabel = "还没有任务分类数据",
-                            emptyHint = "添加并归类任务后，这里会显示各分类的占比骨架",
-                            skeletonCount = 5
+                        // v2.0.0：分类分布改用 Vico 柱状图（见 ui/components/Charts.kt）
+                        VicoBarChart(
+                            values = byCat.map { it.second.toFloat() },
+                            chartHeight = 150.dp
                         )
+                        if (byCat.isEmpty()) {
+                            Text(
+                                "还没有任务分类数据",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }

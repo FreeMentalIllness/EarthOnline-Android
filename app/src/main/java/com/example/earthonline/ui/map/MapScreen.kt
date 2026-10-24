@@ -1,5 +1,11 @@
+@file:OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
+
 package com.example.earthonline.ui.map
 
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.shouldShowRationale
 import com.example.earthonline.ui.components.bouncyPress
 
 import com.example.earthonline.ui.theme.GlassCard
@@ -165,9 +171,16 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
         }
     }
 
-    // 授权回调：拿到权限立即定位；被拒则明确告知去哪里开启
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) locate(false)
+    /* v2.0.0：权限申请 Compose 化（Accompanist Permissions）—— 替代手写
+       ActivityResultLauncher：状态本身可被组合观察，授权 / 拒绝都能直接驱动 UI，
+       不再需要「发起方 + 回调」两段式接力。 */
+    val locPermission = rememberPermissionState(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    // 只有「我们主动发起过申请」才对结果做出反应，避免进入页面就被无端提示
+    var locRequested by remember { mutableStateOf(false) }
+    LaunchedEffect(locPermission.status.isGranted) {
+        if (!locRequested) return@LaunchedEffect
+        locRequested = false
+        if (locPermission.status.isGranted) locate(false)
         else scope.launch { snackbar.showSnackbar("未授予定位权限，可在系统设置中开启") }
     }
 
@@ -269,7 +282,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 SmallFloatingActionButton(
                     onClick = {
                         if (LocationHelper.hasPermission(context)) locate(false)
-                        else permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        else if (locPermission.status.isGranted) locate(false)
+                        else { locRequested = true; locPermission.launchPermissionRequest() }
                     }
                 ) {
                     if (locating) {

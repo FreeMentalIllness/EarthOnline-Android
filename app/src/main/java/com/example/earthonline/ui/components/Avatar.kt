@@ -20,9 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.size.Precision
+import coil3.compose.AsyncImage
 import com.example.earthonline.ui.theme.AmberPrimary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -69,17 +67,11 @@ fun UserAvatar(
 
     val f = file
     if (f != null) {
-        val request = remember(f, px) {
-            ImageRequest.Builder(context)
-                .data(f)
-                // 只要这么大：Coil 据此算 inSampleSize，按目标尺寸解码
-                .size(px)
-                .precision(Precision.INEXACT)
-                .crossfade(true)
-                .build()
-        }
+        // v2.0.0（Coil 3）：直接把 File 当 model —— Coil 3 的 AsyncImage 会根据
+        // 控件约束（Modifier.size）自动解析采样尺寸，不再需要手写 ImageRequest 的
+        // size/precision/crossfade（Coil 3 默认开启 crossfade）。
         AsyncImage(
-            model = request,
+            model = f,
             contentDescription = "头像",
             // Crop 才能填满圆形：默认 Fit 会把非正方形头像按比例塞进圆圈，
             // 上下（或左右）留出两条透明带，看起来像「头像没填满」。
@@ -90,16 +82,8 @@ fun UserAvatar(
         // v1.0.4：旧版数据库字节数据同样按控件尺寸采样。此前裸传 ByteArray 会让 Coil
         // 按原始尺寸解码（几百 KB 的 JPEG 解出 4000px 位图），既费内存，也没有跟文件
         // 路径一致的清晰度表现；.size(px) + INEXACT 与上方文件分支完全同参。
-        val bytesRequest = remember(avatarData, px) {
-            ImageRequest.Builder(context)
-                .data(avatarData)
-                .size(px)
-                .precision(Precision.INEXACT)
-                .crossfade(true)
-                .build()
-        }
         AsyncImage(
-            model = bytesRequest,
+            model = avatarData,
             contentDescription = "头像",
             contentScale = ContentScale.Crop,
             modifier = modifier.size(size).clip(CircleShape)

@@ -140,7 +140,9 @@ data class ItemEntity(
     val description: String? = null,
     val category: String? = null,        // 自定义分类 id 或空
     val createdAt: String = "",           // YYYY-MM-DD
-    val deletedAt: String? = null         // v1.0.5 回收站：软删时间 ISO；null=未删除
+    val deletedAt: String? = null,        // v1.0.5 回收站：软删时间 ISO；null=未删除
+    /** v2.0.0：自定义封面（filesDir/covers 下的绝对路径）；空 = 未上传，UI 显示默认占位图 */
+    val coverPath: String? = null
 )
 
 /** 成就（自动 + 手动；对应 HTML state.achievements） */
@@ -170,7 +172,9 @@ data class CollectionEntity(
     val fileMetaJson: String? = null,    // {name,mime,size} 元信息 JSON
     val fileUri: String? = null,         // 沙盒内持久化文件的 Uri（替代 HTML 会话内 Blob）
     val createdAt: String = "",           // YYYY-MM-DD
-    val deletedAt: String? = null         // v1.0.5 回收站：软删时间 ISO；null=未删除
+    val deletedAt: String? = null,        // v1.0.5 回收站：软删时间 ISO；null=未删除
+    /** v2.0.0：自定义封面（filesDir/covers 下的绝对路径）；空 = 未上传，UI 显示默认占位图 */
+    val coverPath: String? = null
 )
 
 /** 足迹地图坐标（对应 HTML state.locations） */

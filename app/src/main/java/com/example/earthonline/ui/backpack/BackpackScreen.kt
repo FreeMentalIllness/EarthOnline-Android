@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.LocalLibrary
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Tune
@@ -49,7 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import java.io.File
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -105,6 +106,28 @@ fun BackpackScreen(
     // v1.0.8：单击收藏 = 直接打开/预览；无附件的收藏则弹预览卡。长按 = 进入编辑。
     var previewCollection by remember { mutableStateOf<CollectionEntity?>(null) }
     val context = LocalContext.current
+    // v2.0.0：自定义封面 —— 记录「正在给谁换封面」，拿到图后落盘并写回实体
+    var coverItem by remember { mutableStateOf<ItemEntity?>(null) }
+    var coverCollection by remember { mutableStateOf<CollectionEntity?>(null) }
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) { coverItem = null; coverCollection = null; return@rememberLauncherForActivityResult }
+        coverItem?.let { item ->
+            copyCoverImage(context, uri, item.id)?.let { path -> vm.setItemCover(item, path) }
+            coverItem = null
+        }
+        coverCollection?.let { c ->
+            copyCoverImage(context, uri, c.id)?.let { path -> vm.setCollectionCover(c, path) }
+            coverCollection = null
+        }
+    }
+    // 一旦指定了目标就立刻唤起系统照片选择器（Android Photo Picker，无需存储权限）
+    LaunchedEffect(coverItem, coverCollection) {
+        if (coverItem != null || coverCollection != null) {
+            coverPicker.launch(
+                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        }
+    }
 
     /** 单击收藏：有附件直接调起系统打开；无附件（纯文字/笔记）则弹预览卡 */
     fun openCollection(c: CollectionEntity) {
@@ -195,6 +218,9 @@ fun BackpackScreen(
             categories = itemCats,
             onCreateCategory = { vm.addCategory(SCOPE_ITEM, it) },
             onDismiss = { editItem = null },
+            coverPath = target.coverPath,
+            onPickCover = { coverItem = target },
+            onClearCover = { vm.setItemCover(target, null) },
             onSubmit = { n, d, c -> vm.updateItem(target, n, "", d, c); editItem = null }
         )
     }
@@ -213,6 +239,9 @@ fun BackpackScreen(
             categories = collectionCats,
             onCreateCategory = { vm.addCategory(SCOPE_COLLECTION, it) },
             onDismiss = { editCollection = null },
+            coverPath = target.coverPath,
+            onPickCover = { coverCollection = target },
+            onClearCover = { vm.setCollectionCover(target, null) },
             // v1.0.8：编辑态内允许「替换文件」—— 选了新文件就替换，不选则沿用原附件
             onSubmit = { t, n, c, uri -> vm.replaceCollectionFile(target, t, n, c, uri); editCollection = null }
         )
@@ -424,6 +453,8 @@ private fun ItemCard(item: ItemEntity, onDelete: (String) -> Unit, onEdit: () ->
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // v2.0.0：自定义封面（未上传时显示默认占位图）
+            CoverThumb(coverPath = item.coverPath)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.name, style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -782,7 +813,11 @@ private fun ItemDialog(
     onCreateCategory: (String) -> Unit,
     onDismiss: () -> Unit,
     onSubmit: (name: String, desc: String?, category: String?) -> Unit,
-    initial: ItemEntity? = null
+    initial: ItemEntity? = null,
+    /** v2.0.0：自定义封面（空 = 未上传，显示默认占位图） */
+    coverPath: String? = null,
+    onPickCover: () -> Unit = {},
+    onClearCover: () -> Unit = {}
 ) {
     // v1.0.4：initial 非空 = 编辑模式，预填当前值
     var name by remember { mutableStateOf(initial?.name ?: "") }
@@ -806,6 +841,7 @@ private fun ItemDialog(
         title = { Text(if (initial == null) "新增物品" else "编辑物品") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CoverPickerRow(coverPath = coverPath, onPick = onPickCover, onClear = onClearCover)
                 GlassTextField(value = name, onValueChange = { name = it }, label = "名称",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 // v1.0.6：取消「实物 / 虚拟」分类，物品不再做类型二分
@@ -833,7 +869,11 @@ private fun CollectionDialog(
     onDismiss: () -> Unit,
     onSubmit: (title: String, note: String?, category: String?, fileUri: Uri?) -> Unit,
     initial: CollectionEntity? = null
-) {
+,
+    /** v2.0.0：自定义封面（空 = 未上传，显示默认占位图） */
+    coverPath: String? = null,
+    onPickCover: () -> Unit = {},
+    onClearCover: () -> Unit = {}) {
     // v1.0.4：initial 非空 = 编辑模式（附件只读展示，不提供替换）
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var note by remember { mutableStateOf(initial?.note ?: "") }
@@ -870,6 +910,7 @@ private fun CollectionDialog(
         title = { Text(if (initial == null) "新增收藏" else "编辑收藏") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                CoverPickerRow(coverPath = coverPath, onPick = onPickCover, onClear = onClearCover)
                 GlassTextField(value = title, onValueChange = { title = it }, label = "标题",
                     singleLine = true, modifier = Modifier.fillMaxWidth())
                 GlassTextField(value = note, onValueChange = { note = it }, label = "备注",
@@ -1032,5 +1073,73 @@ private fun RowScope.TabToggleButton(label: String, selected: Boolean, onClick: 
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/* ───────────────── v2.0.0：自定义封面 ───────────────── */
+
+/**
+ * 把用户选中的图**原样复制**进沙盒（filesDir/covers/<id>.jpg）并返回绝对路径。
+ * 只存路径、不存 Uri：Uri 在重启 / 卸载重装后可能失效，路径是自己管的，永远可读。
+ */
+private fun copyCoverImage(context: android.content.Context, uri: android.net.Uri, id: String): String? =
+    runCatching {
+        val dir = java.io.File(context.filesDir, "covers")
+        if (!dir.exists()) dir.mkdirs()
+        val dst = java.io.File(dir, "$id.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            dst.outputStream().use { out -> input.copyTo(out) }
+        }
+        dst.absolutePath
+    }.getOrNull()
+
+/** 列表 / 详情里的封面缩略图；未上传时显示默认占位图（矢量图标，绝不是豆腐块 emoji）。 */
+@Composable
+private fun CoverThumb(coverPath: String?, size: androidx.compose.ui.unit.Dp = 48.dp) {
+    val file = coverPath?.takeIf { it.isNotBlank() }?.let { java.io.File(it) }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (file != null && file.exists()) {
+            AsyncImage(
+                model = file,
+                contentDescription = "封面",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Rounded.Image,
+                contentDescription = "默认封面",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(size * 0.5f)
+            )
+        }
+    }
+}
+
+/** 编辑弹窗里的「自定义封面」一行：缩略图 + 选择 / 移除。 */
+@Composable
+private fun CoverPickerRow(coverPath: String?, onPick: () -> Unit, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        CoverThumb(coverPath = coverPath, size = 56.dp)
+        Column(Modifier.weight(1f)) {
+            Text("自定义封面", style = MaterialTheme.typography.labelLarge)
+            Text(
+                if (coverPath.isNullOrBlank()) "未上传，当前显示默认占位图" else "已设置封面",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        TextButton(onClick = onPick) { Text("选择") }
+        if (!coverPath.isNullOrBlank()) TextButton(onClick = onClear) { Text("移除") }
     }
 }

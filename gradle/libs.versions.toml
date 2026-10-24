@@ -15,7 +15,10 @@ hilt = "2.56.2"
 hiltNavigationCompose = "1.2.0"
 room = "2.6.1"
 datastore = "1.1.1"
-coil = "2.7.0"
+# v2.0.0：图片加载统一升到 Coil 3（KMP 版，包名 coil3.*）。
+# ⚠️ 锁 3.0.0：3.1+ 起要求 Compose 1.8 / Kotlin 2.1 以上的新 metadata，与本项目
+#    BOM 2024.10.01（Compose 1.7.x）组合会触发 foundation 版本回退冲突。
+coil = "3.0.0"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
 serialization = "1.7.3"
@@ -39,6 +42,24 @@ inferkt = "0.0.2"
 #    会直接引发「编译期 API 缺失 / metadata 版本不兼容」的连锁崩（AGP、KSP、Room、Hilt 全要跟着升）。
 #    1.3.1 的 POM 明确对齐 Compose 1.7.3 + Kotlin 2.1.0，与本项目栈完全同源。
 haze = "1.3.1"
+
+# ── v2.0.0「八库重构批」统一版本管理 ──
+# 2. 日历：kizitonwose/Calendar（java.time 驱动，需要 coreLibraryDesugaring）
+#    ⚠️ 锁 2.6.1：其 POM 对齐 Compose 1.7.5 / Kotlin 2.0.20，与本项目 BOM 2024.10.01 同源。
+#    2.7+ 起逐步抬到 Compose 1.8/1.9，会连带撕扯 foundation/runtime。
+calendar = "2.6.1"
+# 3. 数据图表：Vico（compose-m3 = Material3 主题适配层）
+#    ⚠️ 锁 1.16.0：1.x 的 Chart/chart/columnChart/rememberBottomAxis 经典 API；
+#    2.x 起整体换成 CartesianChartHost + ModelProducer，与 1.7.x 组合编译面更大。
+vico = "1.16.0"
+# 4. 拖拽排序：Reorderable（Lazy 系布局长按拖拽）
+#    ⚠️ 锁 2.5.1：对齐 Compose 1.7.0；3.x 要求 Compose 1.9+。
+reorderable = "2.5.1"
+# 5. 权限：Accompanist Permissions（Compose 原生 rememberPermissionState）
+#    ⚠️ 锁 0.37.3：Accompanist 最后一条对齐 Compose 1.7.x 的正式线（0.38+ 已随 Accompanist 归档停更）。
+accompanist = "0.37.3"
+# 6. java.time 脱糖（minSdk 24 用不了 java.time.LocalDate，Calendar 库强依赖）
+desugarJdkLibs = "2.1.4"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -68,7 +89,13 @@ datastore = { group = "androidx.datastore", name = "datastore-preferences", vers
 workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
 # Hilt 对 WorkManager Worker 的注入支持（自有版本线，与 hilt 主版本解耦）
 hiltWork = { group = "androidx.hilt", name = "hilt-work", version = "1.2.0" }
-coil = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+coil = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-network = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+calendar-compose = { group = "com.kizitonwose.calendar", name = "compose", version.ref = "calendar" }
+vico-compose-m3 = { group = "com.patrykandpatrick.vico", name = "compose-m3", version.ref = "vico" }
+reorderable = { group = "sh.calvin.reorderable", name = "reorderable-android", version.ref = "reorderable" }
+accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version.ref = "retrofit" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

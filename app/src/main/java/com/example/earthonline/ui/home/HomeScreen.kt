@@ -19,6 +19,15 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.kizitonwose.calendar.compose.HorizontalCalendar
+import com.kizitonwose.calendar.compose.rememberCalendarState
+import com.kizitonwose.calendar.core.DayPosition
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyGridState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -44,10 +53,10 @@ import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
-import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ChatBubbleOutline
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
@@ -175,6 +184,7 @@ fun HomeRoute(
         onQuickEntriesChange = vm::setQuickEntries,
         onStackCardsChange = vm::setStackCards,
         onStackScaleChange = vm::setStackScale,
+        onReorderEntries = vm::setEntryOrder,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -207,6 +217,8 @@ fun HomeScreen(
     onStackCardsChange: (Set<String>) -> Unit = {},
     /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，滑块任意值，DataStore 持久化） */
     onStackScaleChange: (Float) -> Unit = {},
+    /** v2.0.0：主页速览入口拖拽排序结果（id 顺序，DataStore 持久化） */
+    onReorderEntries: (List<String>) -> Unit = {},
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -310,7 +322,8 @@ fun HomeScreen(
                 onExpandedChange = { overviewExpanded = it },
                 onNavigate = onNavigate,
                 onAccounting = moreActions.onAccounting,
-                onEditEntries = { showQuickEdit = true }
+                onEditEntries = { showQuickEdit = true },
+                onReorderEntries = onReorderEntries
             )
         }
 
@@ -1251,112 +1264,144 @@ private fun ActsFeedPure(
 }
 
 /**
- * v1.0.6.8（死命令 #3）：堆叠区「日程」纯展示版 —— 只渲染本月月历 + 当天安排，
- * 无月份切换、无按钮；点击整卡由堆叠容器统一跳转任务页。
+ * v2.0.0：堆叠区「日程」卡 —— 换用 kizitonwose/Calendar，彻底根治「日期不可点」。
+ *
+ * 旧 Bug 根因：v1.0.6.8 起这张卡是「纯展示版」—— 手绘 7×N 网格里每个日期 Box
+ * 只配了 background，压根没有 clickable，整张卡由堆叠容器统一跳任务页，
+ * 于是用户点任何一天都毫无反应（看起来像日历坏了）。
+ *
+ * 现在：① 每个日期独立可点（选中态 / 今天态 / 有安排的日子打琥珀圆点标记）
+ *       ② 左右箭头平滑切换月份（animateScrollToMonth），也可左右滑动翻月
+ *       ③ 选中日期下方实时列出当天安排（复用同一份 tasks 数据源）。
  */
 @Composable
 private fun CalendarCardPure(tasks: List<TaskEntity>) {
-    val base = remember { java.util.Calendar.getInstance() }
-    val year = base.get(java.util.Calendar.YEAR)
-    val month = base.get(java.util.Calendar.MONTH)
+    val today = remember { java.time.LocalDate.now() }
+    var selected by remember { mutableStateOf<java.time.LocalDate?>(today) }
     val busyDays = remember(tasks) {
         tasks.mapNotNull { it.dueDate?.take(10)?.takeIf { d -> d.isNotBlank() } }.toSet()
     }
-    val todayKey = remember {
-        val c = java.util.Calendar.getInstance()
-        String.format(
-            java.util.Locale.US, "%04d-%02d-%02d",
-            c.get(java.util.Calendar.YEAR),
-            c.get(java.util.Calendar.MONTH) + 1,
-            c.get(java.util.Calendar.DAY_OF_MONTH)
-        )
+    val calState = rememberCalendarState(
+        startMonth = java.time.YearMonth.now().minusMonths(36),
+        endMonth = java.time.YearMonth.now().plusMonths(36),
+        firstVisibleMonth = java.time.YearMonth.now(),
+        // 固定周一起排（中文习惯），同时让表头「一…日」永远与列对齐
+        firstDayOfWeek = java.time.DayOfWeek.MONDAY
+    )
+    val scope = rememberCoroutineScope()
+    val visibleMonth = calState.firstVisibleMonth.yearMonth
+    val dayTasks = remember(selected, tasks) {
+        val k = selected?.toString().orEmpty()
+        if (k.isBlank()) emptyList() else tasks.filter { it.dueDate?.take(10) == k }
     }
-    val todayList = remember(tasks) { tasks.filter { it.dueDate?.take(10) == todayKey } }
-    val first = remember(year, month) {
-        java.util.Calendar.getInstance().apply { set(year, month, 1) }
-    }
-    val daysInMonth = base.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
-    val firstDow = (first.get(java.util.Calendar.DAY_OF_WEEK) - java.util.Calendar.MONDAY + 7) % 7
-    val rows = (firstDow + daysInMonth + 6) / 7
 
     GlassCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad)) {
-            SectionHeader(
-                text = "日程 · ${month + 1}月",
-                icon = Icons.Rounded.CalendarMonth,
-                chipColor = ModuleTints.Tasks
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth()) {
-                listOf("一", "二", "三", "四", "五", "六", "日").forEach { w ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            w,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SectionHeader(
+                    text = "\u65e5\u7a0b",
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Rounded.CalendarMonth,
+                    chipColor = ModuleTints.Tasks
+                )
+                IconButton(
+                    onClick = { scope.launch { calState.animateScrollToMonth(visibleMonth.minusMonths(1)) } },
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(Icons.Rounded.ChevronLeft, contentDescription = "\u4e0a\u4e2a\u6708", modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    "${visibleMonth.year}\u5e74${visibleMonth.monthValue}\u6708",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = { scope.launch { calState.animateScrollToMonth(visibleMonth.plusMonths(1)) } },
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Icon(Icons.Rounded.ChevronRight, contentDescription = "\u4e0b\u4e2a\u6708", modifier = Modifier.size(18.dp))
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                for (r in 0 until rows) {
+            Spacer(Modifier.height(6.dp))
+            HorizontalCalendar(
+                state = calState,
+                calendarScrollPaged = true,
+                modifier = Modifier.fillMaxWidth(),
+                monthHeader = { _ ->
                     Row(Modifier.fillMaxWidth()) {
-                        for (c in 0..6) {
-                            val idx = r * 7 + c - firstDow
+                        listOf("\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5").forEach { w ->
                             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                if (idx in 0 until daysInMonth) {
-                                    val key = String.format(
-                                        java.util.Locale.US, "%04d-%02d-%02d",
-                                        year, month + 1, idx + 1
-                                    )
-                                    val isToday = key == todayKey
-                                    val busy = key in busyDays
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                when {
-                                                    isToday -> AmberPrimary
-                                                    busy -> AmberPrimary.copy(alpha = 0.14f)
-                                                    else -> Color.Transparent
-                                                }
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            "${idx + 1}",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = when {
-                                                isToday -> Color.White
-                                                busy -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-                                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
-                                            },
-                                            fontWeight = if (isToday || busy) FontWeight.Bold else FontWeight.Normal
-                                        )
+                                Text(
+                                    w,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                },
+                dayContent = { day ->
+                    if (day.position != DayPosition.MonthDate) {
+                        Box(Modifier.size(34.dp))
+                    } else {
+                        val key = day.date.toString()
+                        val isToday = day.date == today
+                        val busy = key in busyDays
+                        val isSel = day.date == selected
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isSel -> AmberPrimary
+                                        isToday -> AmberPrimary.copy(alpha = 0.20f)
+                                        else -> Color.Transparent
                                     }
+                                )
+                                .clickable { selected = day.date },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                day.date.dayOfMonth.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSel || isToday) FontWeight.Bold else FontWeight.Normal,
+                                color = when {
+                                    isSel -> Color.White
+                                    busy -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.90f)
+                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
                                 }
+                            )
+                            if (busy && !isSel) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 3.dp)
+                                        .size(4.dp)
+                                        .clip(CircleShape)
+                                        .background(AmberPrimary)
+                                )
                             }
                         }
                     }
                 }
-            }
+            )
             Spacer(Modifier.height(8.dp))
             Text(
-                "今天（${month + 1}月${base.get(java.util.Calendar.DAY_OF_MONTH)}日）",
+                if (selected == today) "\u4eca\u5929\uff08${visibleMonth.monthValue}\u6708${today.dayOfMonth}\u65e5\uff09"
+                else "${selected?.monthValue ?: today.monthValue}\u6708${selected?.dayOfMonth ?: today.dayOfMonth}\u65e5",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(4.dp))
-            if (todayList.isEmpty()) {
+            if (dayTasks.isEmpty()) {
                 Text(
-                    "今天没有安排，安心过一天。",
+                    "\u8fd9\u4e00\u5929\u6ca1\u6709\u5b89\u6392\uff0c\u5b89\u5fc3\u8fc7\u4e00\u5929\u3002",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                todayList.take(3).forEach { t ->
+                dayTasks.take(3).forEach { t ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1390,7 +1435,9 @@ private fun OverviewGrid(
     onExpandedChange: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onAccounting: () -> Unit,
-    onEditEntries: () -> Unit = {}
+    onEditEntries: () -> Unit = {},
+    /** v2.0.0：拖拽排序结果回调（速览展开区长按瓦片拖动排序） */
+    onReorderEntries: (List<String>) -> Unit = {}
 ) {
     val context = LocalContext.current
     // v1.0.6.11（死命令 #1）：记账未安装目标 App 时，弹出来源选择弹窗（网盘 + GitHub）
@@ -1426,6 +1473,17 @@ private fun OverviewGrid(
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
+    /* v2.0.0：拖拽排序（Reorderable）—— 展开区瓦片可长按拖动改顺序，
+       顺序以 id 列表持久化到 DataStore；空顺序 = 用默认排列。 */
+    var sortMode by remember { mutableStateOf(false) }
+    var orderedIds by remember { mutableStateOf(listOf<String>()) }
+    LaunchedEffect(moreEntries.size, state.entryOrder) {
+        val saved = state.entryOrder.filter { id -> moreEntries.any { it.id == id } }
+        val rest = moreEntries.map { it.id }.filter { it !in saved }
+        orderedIds = saved + rest
+    }
+
+
     Column(
         // v1.0.7：展开/收起用 spring（带阻尼回弹），不再生硬跳变
         Modifier.animateContentSize(animationSpec = GlassSpringIntSize),
@@ -1438,6 +1496,24 @@ private fun OverviewGrid(
         ) {
             // weight 让标题占据剩余宽度：大字号下标题换行也不会把右侧按钮挤出屏幕
             SectionHeader("速览", Modifier.weight(1f), icon = Icons.Rounded.Explore)            // v1.0.7：右上角「展开 / 收起」按钮，替换原「自定义」；自定义入口收进展开区
+            // v2.0.0：排序开关（进入后瓦片变为长按可拖动）
+            if (expanded) {
+                TextButton(
+                    onClick = {
+                        sortMode = !sortMode
+                        if (!sortMode) onReorderEntries(orderedIds)
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
+                ) {
+                    Text(
+                        if (sortMode) "完成" else "排序",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (sortMode) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
             TextButton(
                 onClick = { onExpandedChange(!expanded) },
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -1496,6 +1572,19 @@ private fun OverviewGrid(
                 fadeOut(tween(180))
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sortMode) {
+                    SortableEntryGrid(
+                        entries = orderedIds.mapNotNull { id -> moreEntries.firstOrNull { it.id == id } },
+                        cols = cols,
+                        onOrderChange = { orderedIds = it },
+                        onCommit = { onReorderEntries(it) }
+                    )
+                    Text(
+                        "长按瓦片拖动即可排序",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val gap = 10.dp
                     val tileW = (maxWidth - gap * (cols - 1)) / cols
@@ -1515,6 +1604,7 @@ private fun OverviewGrid(
                             }
                         }
                     }
+                }
                 }
                 // 自定义入口（原右上角按钮，收进展开区）
                 TextButton(
@@ -2131,6 +2221,72 @@ private fun MemoRow(text: String, type: String, time: String, onDelete: () -> Un
             )
             IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                 Icon(Icons.Rounded.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+/**
+ * v2.0.0：速览入口的**可拖拽排序网格**（Reorderable）。
+ *
+ * 为什么必须换掉 FlowRow 才能拖拽：FlowRow 没有 Lazy 布局的 item 索引信息，
+ * 拿不到「拖到第几个」；Reorderable 依赖 Lazy* 的 itemInfo 做位移计算。
+ * 这里用固定列数 + 固定高度（行数 × 瓦片高）的 LazyVerticalGrid 承载，
+ * userScrollEnabled = false，避免与外层主页 LazyColumn 抢滚动。
+ */
+@Composable
+private fun SortableEntryGrid(
+    entries: List<HomeEntry>,
+    cols: Int,
+    onOrderChange: (List<String>) -> Unit,
+    onCommit: (List<String>) -> Unit
+) {
+    var ids by remember { mutableStateOf(entries.map { it.id }) }
+    LaunchedEffect(entries.map { it.id }.joinToString()) {
+        val cur = ids.filter { id -> entries.any { it.id == id } }
+        val rest = entries.map { it.id }.filter { it !in cur }
+        ids = cur + rest
+    }
+    val shown = ids.mapNotNull { id -> entries.firstOrNull { it.id == id } }
+    val gridState = rememberLazyGridState()
+    val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+        val l = ids.toMutableList()
+        if (from.index in l.indices && to.index in l.indices) {
+            l.add(to.index, l.removeAt(from.index))
+            ids = l
+            onOrderChange(l)
+        }
+    }
+    val rows = ((shown.size + cols - 1) / cols).coerceAtLeast(1)
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(cols),
+        state = gridState,
+        userScrollEnabled = false,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height((rows * 84).dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(shown, key = { it.id }) { entry ->
+            ReorderableItem(
+                state = reorderState,
+                key = entry.id
+            ) { isDragging ->
+                WaffleTile(
+                    icon = entry.icon,
+                    label = entry.label,
+                    tint = entry.tint,
+                    modifier = Modifier
+                        .longPressDraggableHandle(
+                            onDragStopped = { onCommit(ids) }
+                        )
+                        .graphicsLayer {
+                            scaleX = if (isDragging) 1.06f else 1f
+                            scaleY = if (isDragging) 1.06f else 1f
+                            alpha = if (isDragging) 0.92f else 1f
+                        }
+                ) { /* 排序态只排不跳，避免手滑误入二级页 */ }
             }
         }
     }

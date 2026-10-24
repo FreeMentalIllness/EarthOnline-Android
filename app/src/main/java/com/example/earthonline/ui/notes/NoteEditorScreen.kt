@@ -298,8 +298,13 @@ fun NoteEditorScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 正文 = 块列表（唯一真相源）
-    val blocks = remember { mutableStateListOf<NoteBlock>() }
+    /* 正文 = 块列表（唯一真相源）
+       v2.0.0（新建笔记闪退根治）：**初始就带一个空块**，绝不从空列表起步。
+       根因：首帧组合里 blocks 还是空的（LaunchedEffect 要下一帧才填），此时凡出现
+       `focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))` 都会变成 coerceIn(0, -1)
+       —— Kotlin 对空区间直接抛 IllegalArgumentException（Cannot coerce value to an
+       empty range），于是「新建笔记」一点就崩；编辑已有笔记同理，只是时序不同罢了。 */
+    val blocks = remember { mutableStateListOf(NoteBlock(id = 1L)) }
     var title by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
@@ -398,7 +403,7 @@ fun NoteEditorScreen(
 
     /** 工具栏「待办」：当前块 ↔ 任务块互转（绝不是插入字符标记） */
     fun toggleTaskBlock() {
-        val i = focusedIndex.coerceIn(0, blocks.lastIndex)
+        val i = focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))
         val b = blocks[i]
         blocks[i] = if (b.kind == BlockKind.TASK) b.copy(kind = BlockKind.TEXT) else b.copy(kind = BlockKind.TASK)
         pendingFocus = b.id to b.value.selection.min
@@ -406,7 +411,7 @@ fun NoteEditorScreen(
     }
 
     fun setKind(kind: BlockKind) {
-        val i = focusedIndex.coerceIn(0, blocks.lastIndex)
+        val i = focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))
         val b = blocks[i]
         blocks[i] = b.copy(kind = if (b.kind == kind) BlockKind.TEXT else kind)
         pendingFocus = b.id to b.value.selection.min
@@ -426,7 +431,7 @@ fun NoteEditorScreen(
     )
 
     fun toggleSpan(style: SpanStyle, detect: (SpanStyle) -> Boolean) {
-        val i = focusedIndex.coerceIn(0, blocks.lastIndex)
+        val i = focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))
         val b = blocks[i]
         val sel = b.value.selection
         val from: Int
@@ -472,7 +477,7 @@ fun NoteEditorScreen(
         pushHistory()
     }
 
-    fun currentBlock(): NoteBlock? = blocks.getOrNull(focusedIndex.coerceIn(0, blocks.lastIndex))
+    fun currentBlock(): NoteBlock? = blocks.getOrNull(focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0)))
 
     fun activeStyle(detect: (SpanStyle) -> Boolean): Boolean {
         val b = currentBlock() ?: return false
@@ -491,7 +496,7 @@ fun NoteEditorScreen(
 
     /** 在当前块光标处插入纯文本（图片 / 附件） */
     fun insertText(txt: String) {
-        val i = focusedIndex.coerceIn(0, blocks.lastIndex)
+        val i = focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))
         val b = blocks[i]
         val at = b.value.selection.min.coerceIn(0, b.value.text.length)
         val newLen = b.value.text.length + txt.length
@@ -567,6 +572,8 @@ fun NoteEditorScreen(
             blocks.clear()
             blocks.add(NoteBlock(id = 1L))
         }
+        // 兜底：任何路径下块列表都至少有一块（空表会让所有 coerceIn 落进空区间）
+        if (blocks.isEmpty()) blocks.add(NoteBlock(id = 1L))
         history.clear()
         history.add(blocks.toList())
         histIndex = 0
@@ -598,9 +605,15 @@ fun NoteEditorScreen(
         blocks.forEach { if (it.value.text.isNotBlank()) lines.add(blockPlain(it)) }
         val plain = lines.joinToString("\n")
         scope.launch {
-            val savedId = vm.saveNote(id.ifBlank { null }, plain.ifBlank { t }, tags, markdown)
-            // v1.0.6.9：从分类下新建的笔记，保存后自动归入该分类
-            if (folderId != null && savedId.isNotBlank()) vm.assignFolder(savedId, folderId)
+            // v2.0.0：保存整链路兜底 —— 任何意外都只提示，绝不把用户困在崩掉的编辑页里
+            runCatching {
+                val savedId = vm.saveNote(id.ifBlank { null }, plain.ifBlank { t }, tags, markdown)
+                // v1.0.6.9：从分类下新建的笔记，保存后自动归入该分类
+                if (folderId != null && savedId.isNotBlank()) vm.assignFolder(savedId, folderId)
+            }.onFailure { e ->
+                android.util.Log.e("NoteEditor", "save failed", e)
+                android.widget.Toast.makeText(context, "保存失败：${e.message ?: "未知错误"}", android.widget.Toast.LENGTH_SHORT).show()
+            }
             onBack()
         }
     }
@@ -648,7 +661,7 @@ fun NoteEditorScreen(
                     onItalic = { toggleSpan(MD_ITALIC) { it.fontStyle == FontStyle.Italic } },
                     onUnderline = { toggleSpan(MD_UNDER) { it.textDecoration == TextDecoration.Underline } },
                     onHeading = {
-                        val i = focusedIndex.coerceIn(0, blocks.lastIndex)
+                        val i = focusedIndex.coerceIn(0, blocks.lastIndex.coerceAtLeast(0))
                         val b = blocks[i]
                         blocks[i] = b.copy(kind = if (b.kind == BlockKind.H1) BlockKind.TEXT else BlockKind.H1)
                         pendingFocus = b.id to b.value.selection.min
