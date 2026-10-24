@@ -222,7 +222,7 @@ fun BackpackScreen(
     }
     if (showCategoryManager) {
         val scope = if (tab == 0) SCOPE_ITEM else SCOPE_COLLECTION
-        val cats = if (tab == 0) itemCats else collectionCats
+        val cats = (if (tab == 0) itemCats else collectionCats).orEmpty()
         CategoryManagerDialog(
             title = if (tab == 0) "物品分类管理" else "收藏分类管理",
             categories = cats,

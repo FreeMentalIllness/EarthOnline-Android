@@ -2,8 +2,16 @@ package com.example.earthonline.ui.theme
 
 import android.app.ActivityManager
 import android.content.Context
+import android.graphics.RenderEffect
 import android.os.Build
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import java.io.File
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -130,12 +138,14 @@ fun GlassSurface(
        极高不透明度的纯色（surface 0.97~1.0），绝对不允许花壁纸透过来破字。
        一级页面的「壁纸氛围」仅由 MainScaffold 的全屏背景层负责（页面间隙透出），
        卡片与弹窗一律实心，确保任意壁纸下文字绝对清晰。 */
-    val baseAlpha = tintOverride ?: LocalCardOpacity.current
-    // solid=true（弹窗档）或卡片不透明度拉到阈值以上（默认 100%）→ 完全实心纯色；
-    // 其余也强制下限 0.97，杜绝任何壁纸透出。
-    val effectiveSolid = solid || baseAlpha >= CARD_OPAQUE_THRESHOLD
-    val maskAlpha = if (effectiveSolid) 1f
-    else (0.97f + 0.03f * baseAlpha).coerceIn(0.97f, 1f)
+    val wallPath = LocalWallpaperPath.current
+    val liquid = LocalLiquidGlass.current
+    // v1.0.6.11（本轮回滚死命令#1「去壁纸化」）：恢复全局毛玻璃 —— 卡片 / Tab 栏半透明，
+    // 隐约透出底层壁纸、文字仍清晰。底层实时采样壁纸 + RenderEffect 高斯模糊（Crop 取景、
+    // 不偏移，彻底杜绝色块断层），其上压一层半透明白色蒙版（Color.White.copy(alpha≈0.65)
+    // 量级）+ 极轻可读性遮罩。弹窗(solid=0.97 近不透明) 与 无壁纸 / 性能模式 回落近不透明纯色。
+    val useBackdrop = !solid && liquid && !wallPath.isNullOrBlank()
+    val frostAlpha = if (solid) 0.97f else 0.66f
 
     Box(
         modifier = modifier
@@ -154,14 +164,47 @@ fun GlassSurface(
            它会把整个 Box 撑成满屏高，进而把 innerPadding.bottom 顶到屏高，
            内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
-        // v1.0.6.10（彻底去壁纸化）：卡片内壁纸采样已废弃（见上方注释），底板只保留纯色遮罩 + 描边。
-        // 2) 单层平滑半透明遮罩（可读性）；此处 alpha 恒为 0.97~1.0，绝不透出壁纸。
-        Box(
-            Modifier
-                .matchParentSize()
-                .clip(shape)
-                .background(scheme.surface.copy(alpha = maskAlpha))
-        )
+        if (useBackdrop) {
+            // 1) 毛玻璃底层：采样壁纸 + 高斯模糊（GPU 档，API31+；低版本跳过模糊只透色相）
+            val wDensity = LocalDensity.current
+            val blurPx = with(wDensity) { GLASS_BLUR_RADIUS_DP.toPx() }
+            Box(Modifier.matchParentSize().clip(shape)) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(File(wallPath))
+                        .size(240)
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            renderEffect = if (Build.VERSION.SDK_INT >= 31) {
+                                RenderEffect.createBlurEffect(
+                                    blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                                ).asComposeRenderEffect()
+                            } else null
+                        }
+                )
+            }
+            // 2) 半透明白色蒙版（毛玻璃质感，隐约透出壁纸色相）
+            Box(
+                Modifier.matchParentSize().clip(shape)
+                    .background(Color.White.copy(alpha = frostAlpha))
+            )
+            // 3) 极轻可读性遮罩（保证任意壁纸下正文清晰）
+            Box(
+                Modifier.matchParentSize().clip(shape)
+                    .background(scheme.surface.copy(alpha = 0.10f))
+            )
+        } else {
+            // 无壁纸 / 性能模式 / 弹窗档：近不透明纯色底板
+            Box(
+                Modifier.matchParentSize().clip(shape)
+                    .background(scheme.surface.copy(alpha = frostAlpha))
+            )
+        }
         // 3) 色散描边（玻璃边缘光，1dp 细线，零额外成本）
         if (showBorder) {
             /* v1.0.7：色散描边（dispersion edge）—— 白 → 琥珀 → 冷蓝的细渐变，

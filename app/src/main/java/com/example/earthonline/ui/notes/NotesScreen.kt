@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderOpen
@@ -90,6 +92,8 @@ fun NotesScreen(
     var toDelete by remember { mutableStateOf<String?>(null) }
     // v1.0.6.9：分类相关弹窗状态
     var showCreateFolder by remember { mutableStateOf(false) }
+    // v1.0.6.11：顶栏「分类管理」入口（对齐背包页右上角），集中管理全部笔记分类
+    var showFolderManager by remember { mutableStateOf(false) }
     var manageFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var confirmDeleteFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var moveTarget by remember { mutableStateOf<MemoEntity?>(null) }
@@ -120,6 +124,10 @@ fun NotesScreen(
                             imageVector = if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
                             contentDescription = "搜索"
                         )
+                    }
+                    // v1.0.6.11：分类管理入口（对齐背包页右上角 Tune 图标）
+                    IconButton(onClick = { showFolderManager = true }) {
+                        Icon(Icons.Rounded.Tune, contentDescription = "分类管理")
                     }
                 }
             )
@@ -436,6 +444,55 @@ fun NotesScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDeleteFolder = null }) { Text("取消") } }
         )
+    }
+
+    // —— 顶栏「分类管理」：集中管理全部笔记分类（对齐背包页右上角入口）——
+    if (showFolderManager) {
+        GlassDialog(onDismissRequest = { showFolderManager = false }) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("分类管理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                if (folders.isEmpty()) {
+                    Text(
+                        "还没有分类，点下方按钮新建一个。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    folders.forEach { f ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                f.name,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            IconButton(onClick = { showFolderManager = false; manageFolder = f }) {
+                                Icon(Icons.Rounded.Edit, contentDescription = "重命名", modifier = Modifier.size(20.dp))
+                            }
+                            IconButton(onClick = { showFolderManager = false; confirmDeleteFolder = f }) {
+                                Icon(Icons.Rounded.Delete, contentDescription = "删除", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+                Button(
+                    onClick = { showFolderManager = false; showCreateFolder = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AmberPrimary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("新建分类", fontWeight = FontWeight.SemiBold) }
+            }
+        }
     }
 
     // —— 移动笔记到分类 ——

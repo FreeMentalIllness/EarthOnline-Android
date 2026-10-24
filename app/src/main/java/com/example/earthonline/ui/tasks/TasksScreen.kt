@@ -3,6 +3,7 @@ package com.example.earthonline.ui.tasks
 import com.example.earthonline.ui.components.bouncyPress
 
 import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.GlassSurface
 import android.content.Intent
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
@@ -232,30 +233,12 @@ fun TasksScreen(
         }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // 顶层 Tab：日常 / Todo
-            // v1.0.6.8（死命令 #2）：TabRow 加深容器底色 + 分割线；未选中 Tab 加 1.5dp
-            // 主题色描边胶囊，解决「未选中 Tab 看不见、不知道能点」的问题。
-            TabRow(
-                selectedTabIndex = if (topTab == "daily") 0 else 1,
-                containerColor = MaterialTheme.colorScheme.background,
-                divider = {
-                    HorizontalDivider(
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                    )
-                }
-            ) {
-                Tab(
-                    selected = topTab == "daily",
-                    onClick = { topTab = "daily" },
-                    text = { TasksTabLabel("日常", topTab == "daily") }
-                )
-                Tab(
-                    selected = topTab == "todo",
-                    onClick = { topTab = "todo" },
-                    text = { TasksTabLabel("Todo", topTab == "todo") }
-                )
-            }
+            // 顶层 Tab：日常 / Todo —— 对齐背包页「分段控件」样式（v1.0.6.11）
+            // 同一颗玻璃药丸里两段等分按铃，选中段填主题暖色，整体连续控制，切换无分割感。
+            TaskTabToggle(
+                selected = if (topTab == "daily") 0 else 1,
+                onSelect = { topTab = if (it == 0) "daily" else "todo" }
+            )
             // 工具行：概览 + 视图开关 + 全部展开 / 折叠
             // v1.0.5 QA 修复：两个区块拆开判定。
             // 原来整体挂在 flat.isNotEmpty() 上 —— 当某分类唯一任务是「已完成」时，
@@ -609,22 +592,48 @@ fun TasksScreen(
  * 未选中态外包 1.5dp 主题色描边胶囊（提高边框线宽 + 加深颜色），选中态实心琥珀淡底，
  * 让两个 Tab 在任何壁纸 / 背景下都清晰可辨。
  */
+/**
+ * 任务页顶层 Tab：与背包页完全一致的「分段控件」样式（v1.0.6.11）。
+ * 玻璃药丸容器 + 两段等分按铃，选中段填主题色，未选中透明，切换无割裂感。
+ */
 @Composable
-private fun TasksTabLabel(text: String, selected: Boolean) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        color = if (selected) AmberPrimary.copy(alpha = 0.14f) else Color.Transparent,
-        contentColor = if (selected) AmberPrimary else scheme.onSurface,
-        shape = RoundedCornerShape(8.dp),
-        border = if (selected) null else BorderStroke(1.5.dp, AmberPrimary.copy(alpha = 0.85f)),
-        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+private fun TaskTabToggle(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    GlassSurface(
+        shape = RoundedCornerShape(20.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = UiDimens.ListPad, vertical = 8.dp)
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp)
+        ) {
+            TaskTabToggleButton("日常", selected = selected == 0) { onSelect(0) }
+            TaskTabToggleButton("Todo", selected = selected == 1) { onSelect(1) }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.TaskTabToggleButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .weight(1f)
+            .height(38.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

@@ -148,7 +148,13 @@ android {
         // ⑦ 彻底去壁纸化（死命令根因修复）：GlassSurface 彻底移除壁纸采样（AsyncImage +
         //    RenderEffect 背景层删除），卡片/弹窗底板恒为 surface 高不透明度纯色（0.97~1.0，
         //    默认 1.0 完全不透明），任意花壁纸上文字绝对清晰；清理相关失效 import 与注释。
-        versionCode = 60
+        // versionCode 61 = v1.0.6（六合一修复批）：① 恢复全局毛玻璃（卡片/Tab 半透明透出壁纸 + 文字清晰）；
+        // ② 主页卡片堆叠改为前后层叠 3D 景深（默认前置「日程」）；
+        // ③ 背包右上角分类管理入口加固（null-safe，彻底根治闪退）；
+        // ④ 恢复旧版记账外链跳转（已配包名 Intent 直启，否则弹网盘/GitHub 双下载引导）；
+        // ⑤ 任务页 Tab 对齐背包分段控件样式；
+        // ⑥ 笔记页顶栏加分类管理 + 待办打勾行级切换（点一次☑ 再点□）。
+        versionCode = 61
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

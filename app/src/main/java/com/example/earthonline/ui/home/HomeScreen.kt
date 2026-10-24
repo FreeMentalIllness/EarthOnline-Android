@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -94,12 +96,17 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.earthonline.data.local.entity.ActivityEntity
 import com.example.earthonline.data.local.entity.TaskEntity
 import com.example.earthonline.util.millisToDayStr
+import com.example.earthonline.util.launchAccounting
 import com.example.earthonline.util.todayStr
 import com.example.earthonline.ui.components.AnimatedAlertDialog
 import com.example.earthonline.ui.components.bouncyPress
@@ -1054,7 +1061,13 @@ private fun HomeStack(
         }
         return
     }
-    val pagerState = rememberPagerState(pageCount = { pages.size })
+    // v1.0.6.11（死命令 #2）：卡片堆叠改为「前后层叠」—— 上层卡片居中、下层卡片边缘在
+    // 后方/下方露出，点击下层卡片把它翻到最前。默认最前卡片为「日程」。
+    val defaultFront = remember(pages) {
+        val i = pages.indexOf("calendar")
+        if (i < 0) 0 else i
+    }
+    var front by remember(pages) { mutableStateOf(defaultFront) }
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("卡片堆叠", Modifier.weight(1f), icon = Icons.Rounded.Layers)
@@ -1063,7 +1076,7 @@ private fun HomeStack(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 repeat(pages.size) { idx ->
-                    val active = idx == pagerState.currentPage
+                    val active = idx == front
                     Box(
                         Modifier
                             .size(if (active) 8.dp else 6.dp)
@@ -1078,50 +1091,74 @@ private fun HomeStack(
                 Icon(Icons.Rounded.Tune, contentDescription = "堆叠与动态设置", modifier = Modifier.size(18.dp))
             }
         }
-        Spacer(Modifier.height(8.dp))
-        // v1.0.6.9（死命令）：真正的卡片堆叠 —— 页宽收窄为「屏宽 - 72dp」+ 左右各 36dp
-        // contentPadding 居中，当前卡片居中、相邻卡片边缘露出（轮播/堆叠观感），
-        // 左右滑动翻页（HorizontalPager 手势），而非点击切换。
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val pageWidth = (maxWidth - 72.dp).coerceAtLeast(200.dp)
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth().height(348.dp),
-                pageSize = androidx.compose.foundation.pager.PageSize.Fixed(pageWidth),
-                pageSpacing = 10.dp,
-                contentPadding = PaddingValues(horizontal = 36.dp)
-            ) { page ->
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+        Spacer(Modifier.height(14.dp))
+        // 前后层叠卡片台：固定高度容器内，各卡按相对最前位置的纵深排布（纵移 + 缩放 + 透明度）。
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(356.dp)
+                .padding(horizontal = 16.dp)
+        ) {
+            // 倒序遍历：越靠后（rel 越大）越先绘制，最前卡片最后画、压在最上层。
+            pages.forEachIndexed { i, key ->
+                val rel = i - front
+                val absRel = kotlin.math.abs(rel)
+                val offsetY by animateDpAsState(
+                    targetValue = (rel * 30).dp,
+                    animationSpec = tween(320), label = "stackOffset$i"
+                )
+                val scale by animateFloatAsState(
+                    targetValue = (1f - absRel * 0.05f).coerceAtLeast(0.82f),
+                    animationSpec = tween(320), label = "stackScale$i"
+                )
+                val alpha by animateFloatAsState(
+                    targetValue = if (absRel > 2) 0f else (1f - absRel * 0.18f).coerceAtLeast(0f),
+                    animationSpec = tween(320), label = "stackAlpha$i"
+                )
+                val onClick = if (rel == 0) {
+                    // 最前卡片：点击进入对应详情（仅 一签/动态/日程 有跳转；时间轴/人生卡纯展示）
+                    {
+                        when (key) {
+                            "dailydraw" -> dailyDraw?.let { onOpenDraw(it) }
+                            "acts" -> onOpenActs()
+                            "calendar" -> onOpenCalendar()
+                        }
+                    }
+                } else {
+                    { front = i }
+                }
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .zIndex(-absRel.toFloat())
+                        .graphicsLayer { this.alpha = alpha }
+                        .offset { IntOffset(0, offsetY.roundToPx()) }
+                        .scale(scale)
+                        .clickable(onClick = onClick)
+                        .height(330.dp)
                 ) {
-                    when (pages[page]) {
-                        // 纯展示：点击整卡跳详情（一签按来源类型路由）
-                        "dailydraw" -> {
-                            val draw = dailyDraw
-                            if (draw != null) {
-                                Box(Modifier.clickable { onOpenDraw(draw) }) { DailyDrawCard(item = draw) }
-                            } else {
-                                EmptyHint("今天没有抽到记录，明天再来")
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        when (key) {
+                            "dailydraw" -> {
+                                val draw = dailyDraw
+                                if (draw != null) DailyDrawCard(item = draw)
+                                else EmptyHint("今天没有抽到记录，明天再来")
                             }
+                            "acts" -> ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
+                            "calendar" -> CalendarCardPure(tasks = calendarTasks)
+                            "timeline" -> timeline()
+                            "life" -> life()
                         }
-                        // 纯展示：点击整卡进「全部动态」页
-                        "acts" -> Box(Modifier.clickable(onClick = onOpenActs)) {
-                            ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
-                        }
-                        // 纯展示：点击整卡进任务页
-                        "calendar" -> Box(Modifier.clickable(onClick = onOpenCalendar)) {
-                            CalendarCardPure(tasks = calendarTasks)
-                        }
-                        "timeline" -> timeline()
-                        "life" -> life()
                     }
                 }
             }
         }
         Text(
-            "左右滑动切换卡片 · 点击卡片进入详情 · 右上角自定义",
+            "点击下层卡片切换到最前 · 点击「日程」卡片查看详情 · 右上角自定义",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp)
@@ -1343,6 +1380,9 @@ private fun OverviewGrid(
     onAccounting: () -> Unit,
     onEditEntries: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    // v1.0.6.11（死命令 #1）：记账未安装目标 App 时，弹出来源选择弹窗（网盘 + GitHub）
+    var showAccDialog by remember { mutableStateOf(false) }
     // v1.0.6.7（死命令 #2 入口拆分）：原「任务」拆为「日常」+「Todo」两项，原「背包」拆为
     // 「物品」+「收藏」两项。日常/Todo 同走任务页（内部按状态筛选），物品走背包页、收藏走收藏页。
     val allEntries = listOf(
@@ -1413,11 +1453,12 @@ private fun OverviewGrid(
                         // Todo → 任务页 Todo Tab + 新建任务弹窗；
                         // 日常 → 任务页；笔记 → 直达新建笔记编辑页；其余保持原跳转。
                         when (entry.id) {
-                            "accounting" -> onAccounting()
+                            "accounting" -> { if (!launchAccounting(context)) showAccDialog = true }
                             "todo" -> onNavigate("new_todo")
                             "daily" -> onNavigate("tasks")
                             "notes" -> onNavigate("note_editor?id=&folder=")
-                            else -> if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                            else -> if (entry.route != null) onNavigate(entry.route)
+                            else { if (!launchAccounting(context)) showAccDialog = true }
                         }
                     }
                 }
@@ -1447,7 +1488,8 @@ private fun OverviewGrid(
                                 tint = entry.tint,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                                if (entry.route != null) onNavigate(entry.route)
+                                else { if (!launchAccounting(context)) showAccDialog = true }
                             }
                         }
                         repeat(cols - rowEntries.size) { Spacer(Modifier.weight(1f)) }
@@ -1466,6 +1508,11 @@ private fun OverviewGrid(
                     )
                 }
             }
+        }
+        // 记账未安装目标 App 时弹出来源选择弹窗（网盘 + GitHub 两个入口）
+        // 必须置于展开区之外、随速览整体常驻，否则收起态点「记账」不会弹窗。
+        if (showAccDialog) {
+            AccountingDownloadDialog(onDismiss = { showAccDialog = false })
         }
     }
 }

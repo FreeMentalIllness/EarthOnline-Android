@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -309,7 +310,7 @@ fun NoteEditorScreen(
                     onItalic = { toggleStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
                     onUnderline = { toggleStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
                     onHeading = { toggleStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                    onTodo = { editorState.addTextAfterSelection("- [ ] "); pushHistory(editorState) },
+                    onTodo = { toggleTodo(editorState); pushHistory(editorState) },
                     onBullet = { editorState.toggleUnorderedList(); pushHistory(editorState) },
                     onOrdered = { editorState.toggleOrderedList(); pushHistory(editorState) },
                     onImage = { pickImage() },
@@ -473,6 +474,32 @@ private fun splitTitle(md: String): Pair<String, String> {
     val t = firstLine.trim().trimStart('#').trim()
     val rest = md.substring(firstLine.length).trimStart('\n')
     return t to rest
+}
+
+/**
+ * 笔记「待办」按钮：行首插入 / 切换「- [ ] 」「- [x]」标准 Checkbox 结构。
+ *
+ * 与任务备注 [com.example.earthonline.ui.tasks.TasksScreenKt] 同一套语义：
+ * 一律用**空区间 replaceTextRange** 插入（删除长度为 0，绝不吞掉已有文字）；
+ * 当前行已是待办行时按行首切换 未勾选 / 已勾选 —— 点一次变 ☑，再点变 □。
+ */
+private fun toggleTodo(state: RichTextState) {
+    val text = state.toText()
+    val caret = state.selection.min.coerceIn(0, text.length)
+    val nl = text.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
+    val ls = if (nl < 0) 0 else nl + 1
+    val ne = text.indexOf('\n', caret)
+    val le = if (ne < 0) text.length else ne
+    val line = text.substring(ls, le)
+    val prefixLen = "- [ ] ".length
+    when {
+        line.startsWith("- [ ] ") ->
+            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [x] ")
+        line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
+            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
+        else ->
+            state.replaceTextRange(TextRange(caret, caret), "- [ ] ")
+    }
 }
 
 
