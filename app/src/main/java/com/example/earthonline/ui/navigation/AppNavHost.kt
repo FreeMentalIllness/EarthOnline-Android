@@ -20,7 +20,6 @@ import androidx.navigation.navArgument
 import com.example.earthonline.ui.report.ReportKind
 import com.example.earthonline.ui.achievements.AchievementViewModel
 import com.example.earthonline.ui.achievements.AchievementsRoute
-import com.example.earthonline.ui.accounting.AccountingRoute
 import com.example.earthonline.ui.ai.AiRoute
 import com.example.earthonline.ui.album.AlbumRoute
 import com.example.earthonline.ui.recyclebin.RecycleBinRoute
@@ -239,14 +238,6 @@ fun AppNavHost(
             SteamLibraryRoute(onBack = { navController.popBackStack() })
         }
         composable(Screen.Ai.route) { AiRoute(moreActions = moreActions) }
-        // v1.0.6.9：记账页（应用内账本，取代原外部 App 下载引导；autoAdd=1 时自动弹键盘录入面板）
-        composable(
-            route = Screen.Accounting.route + "?autoAdd={autoAdd}",
-            arguments = listOf(navArgument("autoAdd") { defaultValue = false; type = NavType.BoolType })
-        ) { backStackEntry ->
-            val autoAdd = backStackEntry.arguments?.getBoolean("autoAdd") ?: false
-            AccountingRoute(moreActions = moreActions, autoAddInput = autoAdd)
-        }
         composable(Screen.Settings.route) { SettingsRoute(moreActions = moreActions) }
         // v1.2.3：集中设置页拆出的二级页（独立路由，返回栈由 NavHost 维护）
         composable(Screen.SettingsAppearance.route) {

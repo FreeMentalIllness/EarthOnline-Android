@@ -69,17 +69,6 @@ import java.io.File
 import androidx.compose.runtime.snapshots.SnapshotStateList
 
 /**
- * v1.0.6.6（死命令 #4）：笔记待办改为**标准 Compose Checkbox** 的独立清单，
- * 彻底废弃「- [ ] 」文字符号替换。勾选时文字加删除线、取消勾选恢复原状。
- * 存储仍序列化为 Markdown 待办行（跨端兼容），载入时解析回本结构。
- */
-private data class TodoItem(
-    val id: String,
-    val text: String,
-    val done: Boolean
-)
-
-/**
  * 笔记编辑页（v1.0.6.5 终版：richeditor-compose rc10 真实富文本）。
  *
  * 本轮按死命令彻底废弃上一版「Markdown 源码 + 透明标记」的手搓方案：
@@ -125,8 +114,6 @@ fun NoteEditorScreen(
     var showTagRow by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
-    // v1.0.6.6（死命令 #4）：笔记待办清单（标准 Checkbox，非文字符号）
-    var todos by remember { mutableStateOf(listOf<TodoItem>()) }
     var bodyScale by remember { mutableFloatStateOf(1f) }
     val editorFocus = remember { FocusRequester() }
     var historyJob by remember { mutableStateOf<Job?>(null) }
@@ -195,38 +182,6 @@ fun NoteEditorScreen(
     val underlineActive = editorState.currentSpanStyle.textDecoration == TextDecoration.Underline
     val headingActive = editorState.currentSpanStyle.fontSize == 20.sp
 
-    /* ---------- 待办：独立 Checkbox 清单（死命令 #4，废弃文字符号） ---------- */
-    fun addTodo(text: String = "") {
-        todos = todos + TodoItem(uid("td"), text, false)
-    }
-    fun toggleTodoDone(index: Int) {
-        todos = todos.mapIndexed { i, it -> if (i == index) it.copy(done = !it.done) else it }
-    }
-    fun editTodoText(index: Int, text: String) {
-        todos = todos.mapIndexed { i, it -> if (i == index) it.copy(text = text) else it }
-    }
-    fun removeTodo(index: Int) {
-        todos = todos.filterIndexed { i, _ -> i != index }
-    }
-
-    /** 从 Markdown 正文解析出待办清单，返回「剔除待办行后的正文」与待办列表（兼容旧版已存的 - [ ] 行）。 */
-    fun extractTodos(md: String): Pair<String, List<TodoItem>> {
-        val kept = mutableListOf<String>()
-        val items = mutableListOf<TodoItem>()
-        val re = Regex("^\\s*-\\s*\\[([ xX])\\]\\s*(.*)$")
-        md.lines().forEach { line ->
-            val m = re.find(line)
-            if (m != null) {
-                items += TodoItem(
-                    uid("td"),
-                    m.groupValues[2],
-                    m.groupValues[1].equals("x", ignoreCase = true)
-                )
-            } else kept += line
-        }
-        return kept.joinToString("\n") to items
-    }
-
     fun commitTag() {
         val t = tagInput.trim().trim('#')
         if (t.isNotBlank()) tags = NotesViewModel.normalizeTags(tags + t)
@@ -280,9 +235,7 @@ fun NoteEditorScreen(
                 val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
                 val (t, rest) = splitTitle(md)
                 title = t
-                val (body, extracted) = extractTodos(rest)
-                todos = extracted
-                editorState.setMarkdown(body)
+                editorState.setMarkdown(rest)
                 tags = NotesViewModel.tagsOf(m)
             }
         }
@@ -296,17 +249,14 @@ fun NoteEditorScreen(
         val bodyMarkdown = editorState.toMarkdown().trim()
         val plain = editorState.toText().trim()
         val t = title.trim()
-        if (t.isBlank() && plain.isBlank() && todos.none { it.text.isNotBlank() }) {
+        if (t.isBlank() && plain.isBlank()) {
             onBack()
             return
         }
         commitTag()
-        // v1.0.6.6（死命令 #4）：待办清单序列化为 Markdown 待办行，跨端兼容，不与正文混排。
-        val effectiveTodos = todos.filter { it.text.isNotBlank() }
-        val todoBlock = if (effectiveTodos.isEmpty()) "" else "\n\n" + effectiveTodos.joinToString("\n") {
-            "- [${if (it.done) "x" else " "}] ${it.text}"
-        }
-        val markdown = (if (t.isBlank()) bodyMarkdown else "# $t\n\n$bodyMarkdown") + todoBlock
+        // v1.0.6.6（死命令 #4 修订）：待办内联为正文中的普通 Markdown 行（"- [ ] "），
+        // 不再单独拆出独立清单模块，由编辑器直接维护。
+        val markdown = if (t.isBlank()) bodyMarkdown else "# $t\n\n$bodyMarkdown"
         val plainBody = if (t.isBlank()) plain
         else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
         scope.launch {
@@ -359,7 +309,7 @@ fun NoteEditorScreen(
                     onItalic = { toggleStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
                     onUnderline = { toggleStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
                     onHeading = { toggleStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                    onTodo = { addTodo() },
+                    onTodo = { editorState.addTextAfterSelection("- [ ] "); pushHistory(editorState) },
                     onBullet = { editorState.toggleUnorderedList(); pushHistory(editorState) },
                     onOrdered = { editorState.toggleOrderedList(); pushHistory(editorState) },
                     onImage = { pickImage() },
@@ -445,14 +395,6 @@ fun NoteEditorScreen(
                 )
             }
 
-            // v1.0.6.6（死命令 #4）：标准 Checkbox 待办清单（独立于正文富文本，勾选加删除线）
-            TodoSection(
-                todos = todos,
-                onToggle = { toggleTodoDone(it) },
-                onTextChange = { i, s -> editTodoText(i, s) },
-                onDelete = { removeTodo(it) },
-                onAdd = { addTodo(it) }
-            )
 
             GlassCard(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -533,113 +475,6 @@ private fun splitTitle(md: String): Pair<String, String> {
     return t to rest
 }
 
-/**
- * v1.0.6.6（死命令 #4）：标准 Compose Checkbox 待办清单。
- * - 行首标准 Checkbox，勾选后文字加删除线、取消勾选恢复原状；
- * - 与正文富文本解耦，数据经 Markdown 待办行序列化（跨端兼容）；
- * - 高度上限 220dp、超出内部滚动，正文编辑区仍占据主要空间。
- */
-@Composable
-private fun TodoSection(
-    todos: List<TodoItem>,
-    onToggle: (Int) -> Unit,
-    onTextChange: (Int, String) -> Unit,
-    onDelete: (Int) -> Unit,
-    onAdd: (String) -> Unit
-) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.CheckBox,
-                    contentDescription = null,
-                    tint = AmberPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "待办清单",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            if (todos.isEmpty()) {
-                Text(
-                    "还没有待办。点下方「添加」，或点上方工具栏 ☑ 快速新建一条。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            todos.forEachIndexed { index, item ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = item.done,
-                        onCheckedChange = { onToggle(index) },
-                        modifier = Modifier.size(22.dp)
-                    )
-                    TextField(
-                        value = item.text,
-                        onValueChange = { onTextChange(index, it) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("待办事项") },
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            textDecoration = if (item.done) TextDecoration.LineThrough else null
-                        ),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent
-                        )
-                    )
-                    IconButton(onClick = { onDelete(index) }, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            Icons.Rounded.Delete,
-                            contentDescription = "删除待办",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            var newText by remember { mutableStateOf("") }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextField(
-                    value = newText,
-                    onValueChange = { newText = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = { Text("添加一项待办…") },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent
-                    )
-                )
-                Spacer(Modifier.width(6.dp))
-                TextButton(onClick = {
-                    if (newText.isNotBlank()) {
-                        onAdd(newText.trim())
-                        newText = ""
-                    }
-                }) { Text("添加") }
-            }
-        }
-    }
-}
 
 /**
  * 编辑工具栏（对标主流 Markdown 编辑器）：撤销 / 重做 | B I U H | ☑ 待办 • 列表 1. 有序 | 图片 附件 | A±。

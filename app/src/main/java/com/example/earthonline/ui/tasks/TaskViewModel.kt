@@ -162,4 +162,10 @@ class TaskViewModel @Inject constructor(
 
     /** 级联删除（含子任务），对应 HTML deleteTaskCascade */
     fun deleteCascade(id: String) = viewModelScope.launch { repo.deleteCascade(id) }
+
+    /** v1.0.6.10：更新任务备注（如勾选 Markdown 待办行后回写）。 */
+    fun updateNote(id: String, note: String) = viewModelScope.launch {
+        val t = repo.get(id) ?: return@launch
+        repo.update(t.copy(note = note, lastModified = todayStr()))
+    }
 }

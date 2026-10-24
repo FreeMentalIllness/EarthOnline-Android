@@ -80,6 +80,7 @@ import com.example.earthonline.ui.theme.ProvideWallpaper
 import com.example.earthonline.ui.theme.ProvideLiquidGlass
 import com.example.earthonline.ui.settings.SettingsViewModel
 import com.example.earthonline.util.AchievementSound
+import com.example.earthonline.util.launchAccounting
 import com.example.earthonline.util.rememberIsOnline
 import android.app.Activity
 import android.widget.Toast
@@ -355,12 +356,9 @@ fun MainScaffold(
                 achVm = achVm,
                 moreActions = MoreMenuActions(
                     onNavigate = { route -> navController.navigate(route) { launchSingleTop = true } },
-                    // v1.0.6.9：记账 = 应用内账本页（取代原外部 App 下载引导框）
-                    onAccounting = {
-                        navController.navigate(
-                            com.example.earthonline.ui.navigation.Screen.Accounting.route
-                        ) { launchSingleTop = true }
-                    }
+                    // 死命令 #1（v1.0.6.x）：记账回归外链跳转 —— 速览/菜单点「记账」直接唤起
+                    // 外部记账 App（若已配置包名且已安装），否则浏览器打开下载页。不再走应用内账本页。
+                    onAccounting = { launchAccounting(context) }
                 )
                 )
                 } // v1.0.18：CompositionLocalProvider(LocalCardOpacity) 闭合

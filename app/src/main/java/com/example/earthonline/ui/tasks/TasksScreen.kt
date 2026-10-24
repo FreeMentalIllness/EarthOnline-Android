@@ -82,6 +82,7 @@ import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.components.MarkdownRemark
 import com.example.earthonline.ui.design.EOConfirmDialog
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
@@ -533,6 +534,8 @@ fun TasksScreen(
                             onSetProgress = { vm.setProgress(node.task, it) },
                             onEdit = { editing = node.task },
                             onAddChild = { addParentId = node.task.id; showAdd = true },
+                            // v1.0.6.10：备注里的 Markdown 待办可点勾回写
+                            onToggleTodo = { vm.updateNote(node.task.id, it) },
                             // 红线：不直接删除，先弹破坏性确认
                             onDelete = { pendingDeleteId = node.task.id }
                         )
@@ -780,7 +783,9 @@ private fun TaskRow(
     onSetProgress: (Int) -> Unit,
     onEdit: () -> Unit,
     onAddChild: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    /** v1.0.6.10：勾选备注中 Markdown 待办行时回写（拿到重排后的完整备注） */
+    onToggleTodo: (String) -> Unit = {}
 ) {
     val t = node.task
     val hasChildren = node.children.isNotEmpty()
@@ -927,10 +932,9 @@ private fun TaskRow(
                 }
 
                 t.note?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MarkdownRemark(
+                        note = it,
+                        onToggle = onToggleTodo
                     )
                 }
             }

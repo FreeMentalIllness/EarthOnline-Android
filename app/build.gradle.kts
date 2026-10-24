@@ -131,7 +131,24 @@ android {
         // ⑧ 彻底去壁纸化（死命令）：GlassSurface 新增 solid 档（0.97 近不透明+不采样壁纸），
         //    GlassDialog/AnimatedAlertDialog 全量强制；二级页 containerColor 改纯色 background；
         //    AppNavHost 按路由收编壁纸作用域（仅主页/任务/背包/笔记四个 Tab 及其变体透出）。
-        versionCode = 59
+        // versionCode 60 = v1.0.6（深度测试反馈三轮修复批，死命令模式）：
+        // ① 记账回归外链跳转（撤销 vc59 ⑤ 应用内账本页）：删除 AccountingScreen/ViewModel，
+        //    速览/菜单「记账」改走 launchAccounting —— 已配置记账 App 包名则 Intent 直启，
+        //    否则浏览器打开下载页（恢复 v1.0.1 外链行为）；Screen.Accounting 路由移除。
+        // ② 任务与笔记页 UI 对齐背包页：统一 AppCard（圆角 16dp / 同套描边 / 无黑色 elevation）
+        //    + TopAppBar containerColor 用 background，列表卡内边距 12dp。
+        // ③ 任务备注复选框美化：MarkdownRemark 把备注里的「- [ ] / - [x]」渲染为品牌色
+        //    标准 Compose Checkbox（圆角琥珀色 + 勾选删除线），可回写。
+        // ④ 笔记编辑取消独立待办模块：待办内联为正文普通行（工具栏插入「- [ ] 」），
+        //    不再拆出独立清单；读取/保存直接走 RichTextState Markdown。
+        // ⑤ 主页 AI 快捷 FAB 卡顿根治：hideFab 改 derivedStateOf 同时观察 isScrollInProgress
+        //    与方向位，停滚即回显（修掉「停滚后卡在隐藏态」），方向阈值降到 +4 更跟手。
+        // ⑥ 速览默认收起：收起态只固定 6 个核心入口（相册/地图/记账/数据/成就/系统），
+        //    日常/Todo/物品/收藏/笔记 5 项默认收进「展开/更多」区，点按钮平滑放出。
+        // ⑦ 彻底去壁纸化（死命令根因修复）：GlassSurface 彻底移除壁纸采样（AsyncImage +
+        //    RenderEffect 背景层删除），卡片/弹窗底板恒为 surface 高不透明度纯色（0.97~1.0，
+        //    默认 1.0 完全不透明），任意花壁纸上文字绝对清晰；清理相关失效 import 与注释。
+        versionCode = 60
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

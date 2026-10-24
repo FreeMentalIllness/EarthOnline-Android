@@ -2,14 +2,11 @@ package com.example.earthonline.ui.theme
 
 import android.app.ActivityManager
 import android.content.Context
-import android.graphics.RenderEffect
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.MaterialTheme
@@ -22,33 +19,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.bouncyClickable
-import java.io.File
 
 /**
- * 全局液态玻璃（Liquid Glass）封装。
+ * 全局液态玻璃（Liquid Glass）封装 —— 仅作**统一材质与描边**入口，业务层只调用 [GlassSurface]。
  *
- * 设计原则（对应需求红线）：
- *  - 全端视觉统一：业务层只调用 [GlassSurface]，不感知降级；
- *  - 流畅度优先：低端机 / Android 12 及以下自动降级为半透明纯色 + 高光，零 GPU 模糊；
- *  - 绝不崩溃：所有 RenderEffect 调用均门控于 SDK 版本，低版本 / 异常一律回退纯色玻璃。
+ * 死命令（v1.0.6.x 彻底去壁纸化）：**卡片 / 对话框底板一律实心高不透明度纯色**
+ * （surface 0.97 ~ 1.0，由 [LocalCardOpacity] 控制，默认 1.0 = 完全不透明），
+ * 绝不从壁纸采样毛玻璃 —— 任何花壁纸上文字都绝对清晰。
+ * 「壁纸氛围」只由 [MainScaffold] 的全屏背景层负责（一级页面间隙透出），与卡片层解耦。
  *
- * 降级矩阵：
- *  - [GlassTier.FULL]：API 33+ 且非低内存 → 透镜微放大（折射观感）+ 背景模糊 + 高光；
- *  - [GlassTier.BLUR]：API 31/32 且非低内存 → 背景模糊 + 高光；
- *  - [GlassTier.FLAT]：API < 31 或低内存 → 半透明纯色 + 顶部高光边，零卡顿。
- *
- * 背景来源：通过 [LocalWallpaperPath] 从主框架注入当前壁纸路径，
- * 玻璃在支持 GPU 效果的层级会就地模糊壁纸（毛玻璃观感）；
- * 无壁纸或降级档时退化为半透明纯色面板。
+ * 降级矩阵（仅描述历史分层意图；卡片实际永远走实心纯色档，不再做 GPU 模糊）：
+ *  - [GlassTier.FULL]：API 33+ 且非低内存；
+ *  - [GlassTier.BLUR]：API 31/32 且非低内存；
+ *  - [GlassTier.FLAT]：API < 31 或低内存。
+ * 三档仅影响全屏壁纸层的模糊半径，不再影响卡片底板。
  */
 val LocalWallpaperPath = compositionLocalOf<String?> { null }
 
@@ -131,31 +120,22 @@ fun GlassSurface(
     solid: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val deviceTier = rememberGlassTier()
-    // v1.0.10：设置中的「液态玻璃开关」已彻底移除 —— 全局强制开启液态玻璃，
-    // 不再提供关闭选项。低端机仍由 GlassTier 自动降级为纯色底板（零 GPU 开销），流畅度不受影响。
-    val liquidGlass = true
-    val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
-    val wallPath = LocalWallpaperPath.current
-    // v1.0.6.7（死命令 #1 断层修复）：精简为「单层毛玻璃底层 + 单层平滑半透明遮罩」。
-    // 旧版多层叠加（模糊壁纸 + 渐变 tint + scrim + 顶部高光），且壁纸图按整屏 FillBounds +
-    // 每卡位置偏移，导致灰/白相间的色块断层。现只保留：一层 RenderEffect 高斯模糊壁纸
-    // （matchParentSize + Crop，不偏移、不拉伸）+ 一层 surface 半透明遮罩 + 1dp 描边；
-    // 模糊半径加大到 14dp，色晕更平滑，彻底消除断层，同时平滑透出壁纸真实色彩。
-    val useBackdrop = !solid && tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
-    // v1.0.6.8（死命令 #1 全局去壁纸化）：遮罩不透明度整体提到高 Alpha 档（0.72~0.88）。
-    // 真机反馈：0.34~0.66 档在花壁纸上卡片仍能直接透出复杂底层图案，文字发虚、
-    // 灰白相间断层感明显。现在底层仍是 14dp 高斯模糊壁纸（保留液态玻璃质感），
-    // 但遮罩拉到 0.72 以上 —— 壁纸只作为「色相氛围」极淡透出，任何壁纸下文字都清晰。
-    // 「卡片不透明度」滑块在 0.72~0.88 区间微调；FLAT 降级档用 0.93 高不透明纯色。
-    // v1.0.6.9（死命令）：solid 弹窗档 0.97 近不透明，彻底不透壁纸。
+    // v1.0.6.7（死命令 #1 断层修复）演进：卡片底板已彻底废弃「壁纸采样」——
+    // 旧版多层叠加（模糊壁纸 + 渐变 tint + scrim + 顶部高光）且壁纸按每卡偏移，
+    // 导致灰/白色块断层。现底板只由下方「单层高不透明度纯色遮罩 + 1dp 描边」构成，
+    // 零壁纸采样、零断层，任意壁纸下文字都清晰。
+    /* v1.0.6.10（彻底去壁纸化·死命令）：**彻底废弃卡片 / 弹窗内的壁纸采样**。
+       任何卡片、对话框底板都不再从壁纸文件采样毛玻璃 —— 底层始终是一层
+       极高不透明度的纯色（surface 0.97~1.0），绝对不允许花壁纸透过来破字。
+       一级页面的「壁纸氛围」仅由 MainScaffold 的全屏背景层负责（页面间隙透出），
+       卡片与弹窗一律实心，确保任意壁纸下文字绝对清晰。 */
     val baseAlpha = tintOverride ?: LocalCardOpacity.current
-    val maskAlpha = when {
-        solid -> 0.97f
-        tier == GlassTier.FLAT -> 0.93f
-        else -> (0.72f + 0.16f * baseAlpha).coerceIn(0.72f, 0.88f)
-    }
+    // solid=true（弹窗档）或卡片不透明度拉到阈值以上（默认 100%）→ 完全实心纯色；
+    // 其余也强制下限 0.97，杜绝任何壁纸透出。
+    val effectiveSolid = solid || baseAlpha >= CARD_OPAQUE_THRESHOLD
+    val maskAlpha = if (effectiveSolid) 1f
+    else (0.97f + 0.03f * baseAlpha).coerceIn(0.97f, 1f)
 
     Box(
         modifier = modifier
@@ -174,37 +154,8 @@ fun GlassSurface(
            它会把整个 Box 撑成满屏高，进而把 innerPadding.bottom 顶到屏高，
            内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
-        // 1) 毛玻璃底层：实时采样壁纸 + RenderEffect 高斯模糊（GPU 档）。
-        //    matchParentSize + Crop 按卡片自身取景，绝不整屏拉伸、绝不按位置偏移 → 无断层。
-        if (useBackdrop) {
-            val wDensity = LocalDensity.current
-            val blurPx = with(wDensity) { GLASS_BLUR_RADIUS_DP.toPx() }
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(shape)
-            ) {
-                AsyncImage(
-                    model = coil.request.ImageRequest.Builder(LocalContext.current)
-                        .data(File(wallPath!!))
-                        .size(220)
-                        .crossfade(false)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier
-                        .matchParentSize()
-                        .graphicsLayer {
-                            if (Build.VERSION.SDK_INT >= 31) {
-                                renderEffect = RenderEffect.createBlurEffect(
-                                    blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
-                                ).asComposeRenderEffect()
-                            }
-                        }
-                )
-            }
-        }
-        // 2) 单层平滑半透明遮罩（可读性 + 与壁纸融合）；FLAT 档即高不透明纯色底板。
+        // v1.0.6.10（彻底去壁纸化）：卡片内壁纸采样已废弃（见上方注释），底板只保留纯色遮罩 + 描边。
+        // 2) 单层平滑半透明遮罩（可读性）；此处 alpha 恒为 0.97~1.0，绝不透出壁纸。
         Box(
             Modifier
                 .matchParentSize()

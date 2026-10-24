@@ -225,21 +225,28 @@ fun HomeScreen(
     var showAiHub by remember { mutableStateOf(false) }
     // v1.0.6 封板：搜索框是否聚焦 —— 聚焦时隐藏 AI 悬浮按钮（键盘顶起后它会压在速览瓦片上）
     var searchFocused by remember { mutableStateOf(false) }
-    // v1.0.6.8（死命令 #4）：悬浮「+」滚动监听 —— 向下滑动且 isScrollInProgress 时隐藏，
-    // 向上滑动或停止时重新显示，防止遮挡列表内容。声明在外层 Box 作用域（FAB 的可见性归属）。
+    // v1.0.6.8（死命令 #4）：悬浮「+」滚动监听 —— 列表内容上滑（向底部读）时隐藏，
+    // 列表内容下滑（回顶）或停止时立即显示，防止遮挡内容。
+    // 死命令翻新：改用 derivedStateOf 直接派生 hideFab，同时观察 isScrollInProgress 与方向位 ——
+    // 滚动一停 isScrollInProgress 翻转，FAB 立即回显（旧实现只在 scrollingUp 变化时重组，
+    // 停滚后卡在隐藏态，正是「卡顿/不跟手」的根因）。方向判定阈值降到 +4，更跟手。
     val homeListState = rememberLazyListState()
     var lastFirst by remember { mutableStateOf(0 to 0) }
-    var scrollingDown by remember { mutableStateOf(false) }
+    var scrollingUp by remember { mutableStateOf(false) }
     LaunchedEffect(homeListState) {
         snapshotFlow { homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset }
             .collect { (i, o) ->
                 if (homeListState.isScrollInProgress) {
                     val (li, lo) = lastFirst
-                    val down = i > li || (i == li && o > lo + 6)
-                    if (down != scrollingDown) scrollingDown = down
+                    val up = i > li || (i == li && o > lo + 4)
+                    if (up != scrollingUp) scrollingUp = up
                 }
                 lastFirst = i to o
             }
+    }
+    // derivedStateOf：向底读（内容上滑）且仍在滚 → 隐藏；回顶 / 停滚 → 立即显示，零掉帧。
+    val hideFab by remember {
+        derivedStateOf { homeListState.isScrollInProgress && scrollingUp }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -369,8 +376,8 @@ fun HomeScreen(
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
         // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp）；
         // v1.0.20：键盘让位由 MainScaffold 统一处理，这里不再自带 imePadding。
-        // v1.0.6.8（死命令 #4）：向下滚动时淡出隐藏，向上滚动 / 停止时恢复，不遮挡列表。
-        val hideFab = homeListState.isScrollInProgress && scrollingDown
+        // v1.0.6.8（死命令 #4 翻新）：hideFab 已上移为 derivedStateOf（见上方声明），
+        // 滚动一停即恢复显示，避免卡在隐藏态。
         AnimatedVisibility(
             visible = !searchFocused && !hideFab,
             modifier = Modifier
@@ -1354,10 +1361,10 @@ private fun OverviewGrid(
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
 
-    // v1.0.7：速览改为「3 列网格 + 右上角展开」——
-    //   收起态固定主入口（日常/Todo/物品/收藏/笔记/相册/地图/记账，共 8 个，3 列排布），
-    //   不受历史自定义影响；其余入口（数据/成就/系统）由右上角「展开」按钮平滑放出/收回。
-    val DEFAULT_IDS = setOf("daily", "todo", "items", "collections", "notes", "album", "map", "accounting")
+    // 死命令 #5（v1.0.6.x）：速览默认收起 —— 收起态只固定 6 个核心入口
+    // （相册/地图/记账/数据/成就/系统，3 列 × 2 行），不受历史自定义影响；
+    // 其余入口（日常/Todo/物品/收藏/笔记，共 5 个）默认收进「展开 / 更多」区，点按钮平滑放出/收回。
+    val DEFAULT_IDS = setOf("album", "map", "accounting", "data", "achievements", "ai")
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
@@ -1401,11 +1408,12 @@ private fun OverviewGrid(
                         tint = entry.tint,
                         modifier = Modifier.weight(1f)
                     ) {
-                        // v1.0.6.9（死命令）：速览 = 先跳对应二级主页面，再自动弹出该功能的操作面板。
-                        // 记账 → 账本页 + 金额键盘；Todo → 任务页 Todo Tab + 新建任务弹窗；
+                        // 死命令 #1（v1.0.6.x）：速览 = 先跳对应二级主页面，再自动弹出该功能的操作面板。
+                        // 记账 → 唤起外部记账 App / 下载页（外链跳转，非应用内页）；
+                        // Todo → 任务页 Todo Tab + 新建任务弹窗；
                         // 日常 → 任务页；笔记 → 直达新建笔记编辑页；其余保持原跳转。
                         when (entry.id) {
-                            "accounting" -> onNavigate("accounting?autoAdd=true")
+                            "accounting" -> onAccounting()
                             "todo" -> onNavigate("new_todo")
                             "daily" -> onNavigate("tasks")
                             "notes" -> onNavigate("note_editor?id=&folder=")
