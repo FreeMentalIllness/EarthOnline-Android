@@ -163,7 +163,16 @@ android {
         // ⑤ 笔记页 UI 统一：取消顶部两张新建大卡，顶部常驻搜索框（对齐背包），右下角悬浮「+」
         //    弹新建笔记/分类选项面板；
         // ⑥ 卡片堆叠修复：HorizontalPager + 缩放/位移动画模拟堆叠（滑动/惯性/回弹零冲突）。
-        versionCode = 62
+        // versionCode 63 = v1.0.6（真机截图五项修复批）：
+        // ① 根治卡片底部「灰砖」：vc62 底部内阴影的 verticalGradient 未映射矩形（铺满全绘制区），
+        //    实测渲染为恒定 6% 黑的 20dp 灰带；删除之，玻璃卡仅留 1.5px 极细顶边高光（渐变已锁定矩形内）；
+        // ② 速览「系统」默认收起（收起态恒 3×2 满排）；展开区改 FlowRow 固定瓦片宽，根治末行大留白；
+        // ③ 背包/笔记右上角闪退根治：对话框内容嵌套 verticalScroll（在 GlassDialog 滚动容器内
+        //    被无限高约束测量直接抛异常）—— 拔除 CategoryManagerDialog 与笔记分类管理的内层滚动；
+        // ④ 笔记待办改真实复选框：独立待办区 + Compose 原生 Checkbox（点击打勾/取消 + 删除线），
+        //    存储仍为标准 "- [ ]/- [x] " Markdown 行（跨端契约零改动），编辑态绝无「□」字符；
+        // ⑤ 堆叠卡片尺寸自适应：大/中/小三档切换（DataStore 持久化），全卡统一宽高比例。
+        versionCode = 63
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

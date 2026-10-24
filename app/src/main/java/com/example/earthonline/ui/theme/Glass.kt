@@ -287,48 +287,29 @@ fun GlassSurface(
                     .background(scheme.surface.copy(alpha = frostAlpha))
             )
         }
-        // vc62：顶部极细高光 + 底部内阴影 —— DrawScope 手绘的玻璃倒角，
-        // 模拟左上打光：顶边 1.5px 白色渐变高光线（左亮右暗），底部 20dp 极轻内阴影，
-        // 让玻璃「有厚度」。纯 drawBehind，零额外合成开销；solid 弹窗档同样保留。
+        // vc62：顶部极细高光 —— DrawScope 手绘的玻璃倒角（左上打光，仅 1.5px 细线）。
+        // vc63（真机反馈「灰砖」根治）：① 删除底部 20dp 内阴影 —— 其 verticalGradient 未映射到
+        // 矩形（Brush 默认铺满整个绘制区），整条带几乎恒定 6% 黑，视觉上就是一块灰色砖头；
+        // ② 顶部高光渐变显式传 startY/endY，锁定在 1.5px 细线内，保证「极细高光」真实生效。
         Box(
             Modifier
                 .matchParentSize()
                 .drawBehind {
                     val hi = 1.5.dp.toPx()
                     val inset = fxRadiusPx * 0.55f
-                    // 顶边高光线：白 → 透明，左上角最亮
+                    // 顶边高光线：白 → 透明，左上角最亮（渐变严格限制在细线矩形内）
                     drawRect(
                         brush = Brush.horizontalGradient(
-                            listOf(
+                            colors = listOf(
                                 Color.White.copy(alpha = 0.70f),
                                 Color.White.copy(alpha = 0.28f),
                                 Color.Transparent
-                            )
+                            ),
+                            startX = inset,
+                            endX = size.width - inset
                         ),
                         topLeft = Offset(inset, 0f),
                         size = Size(size.width - inset * 2f, hi)
-                    )
-                    // 高光下方 2px 柔光晕，增强「倒角」立体感
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.16f),
-                                Color.Transparent
-                            )
-                        ),
-                        topLeft = Offset(inset, hi),
-                        size = Size(size.width - inset * 2f, 3.dp.toPx())
-                    )
-                    // 底部内阴影（玻璃厚度）
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.Transparent,
-                                Color.Black.copy(alpha = 0.06f)
-                            )
-                        ),
-                        topLeft = Offset(0f, size.height - 20.dp.toPx()),
-                        size = Size(size.width, 20.dp.toPx())
                     )
                 }
         )

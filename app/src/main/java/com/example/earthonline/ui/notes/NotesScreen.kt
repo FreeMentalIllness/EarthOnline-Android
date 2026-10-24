@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -538,11 +537,11 @@ fun NotesScreen(
     if (showFolderManager) {
         GlassDialog(onDismissRequest = { showFolderManager = false }) {
             Column(
-                Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // vc63（真机闪退根治）：这里绝不能再套 verticalScroll —— 外层 GlassDialog
+                // 内容列已自带滚动，内层在无限高约束下测量直接抛异常（点「分类管理」必闪退的真凶）。
                 Text("分类管理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (folders.isEmpty()) {
                     Text(

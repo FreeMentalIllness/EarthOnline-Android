@@ -5,7 +5,6 @@ import com.example.earthonline.ui.components.GlassTextField
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
@@ -77,10 +76,12 @@ fun CategoryManagerDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } },
         title = { Text(title) },
         text = {
-            // v1.0.4：内容可滚动 —— 顶部说明行 + 分类列表在长内容 / 大字号下不再溢出对话框
+            // vc63（真机闪退根治）：**禁止在此再套 verticalScroll** —— 外层 AnimatedAlertDialog
+            // → GlassDialog 内容列自带 verticalScroll，内层可滚动组件在无限高约束下测量
+            // 直接抛 IllegalStateException（「点右上角分类管理必闪退」的真凶，与 ViewModel 无关）。
+            // 长内容滚动由外层 GlassDialog 统一负责。
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState())
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // v1.0.4：说清两个按钮的分工——「添加」保存新分类，「完成」只是关窗。
                 // 此前只有一个「+」图标按钮，与右下角「完成」并列时用户常分不清哪个才是保存。

@@ -84,6 +84,8 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
 
         /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（JSON 字符串集合：timeline/life；空 = 用默认全集） */
         val HOME_STACK_CARDS = stringPreferencesKey("home_stack_cards")
+        /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大） */
+        val HOME_STACK_SIZE = intPreferencesKey("home_stack_size")
 
         /** v1.0.6.9：笔记分类文件夹（JSON 列表 {id,name,createdAt}；先建分类再建笔记的层级结构） */
         val NOTE_FOLDERS = stringPreferencesKey("note_folders")
@@ -242,6 +244,12 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     suspend fun setHomeFeedLimit(v: Int) = ds.edit { it[HOME_FEED_LIMIT] = v.coerceIn(0, 200) }
     suspend fun setHomeQuickEntriesJson(v: String) = ds.edit { it[HOME_QUICK_ENTRIES] = v }
     suspend fun setHomeStackCardsJson(v: String) = ds.edit { it[HOME_STACK_CARDS] = v }
+
+    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大；异常值回落中档） */
+    val homeStackSize: Flow<Int> = ds.data.map {
+        (it[HOME_STACK_SIZE] ?: 1).coerceIn(0, 2)
+    }
+    suspend fun setHomeStackSize(v: Int) = ds.edit { it[HOME_STACK_SIZE] = v.coerceIn(0, 2) }
 
     /** v1.0.6.9：笔记分类文件夹 / 归属 / 账本流水（JSON 字符串原样落盘） */
     suspend fun setNoteFoldersJson(v: String) = ds.edit { it[NOTE_FOLDERS] = v }

@@ -174,6 +174,7 @@ fun HomeRoute(
         onFeedLimitChange = vm::setFeedLimit,
         onQuickEntriesChange = vm::setQuickEntries,
         onStackCardsChange = vm::setStackCards,
+        onStackSizeChange = vm::setStackSize,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -204,6 +205,8 @@ fun HomeScreen(
     onQuickEntriesChange: (Set<String>) -> Unit = {},
     /** v1.0.6.7：主页卡片堆叠区自定义（哪些次要卡片入堆叠，DataStore 持久化） */
     onStackCardsChange: (Set<String>) -> Unit = {},
+    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大，DataStore 持久化） */
+    onStackSizeChange: (Int) -> Unit = {},
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -316,6 +319,8 @@ fun HomeScreen(
         item(key = "stack", contentType = "card") {
             HomeStack(
                 stackCards = state.stackCards,
+                stackSize = state.stackSize,
+                onStackSizeChange = onStackSizeChange,
                 dailyDraw = state.dailyDraw,
                 acts = state.allActs,
                 feedKinds = state.feedKinds,
@@ -1008,6 +1013,9 @@ private fun AvatarWithBadge(
 @Composable
 private fun HomeStack(
     stackCards: Set<String>,
+    /** vc63：尺寸档（0=小 / 1=中 / 2=大），DataStore 持久化 */
+    stackSize: Int,
+    onStackSizeChange: (Int) -> Unit,
     dailyDraw: ThrowbackItem?,
     acts: List<ActivityEntity>,
     feedKinds: Set<String>,
@@ -1050,9 +1058,34 @@ private fun HomeStack(
     }
     val pagerState = rememberPagerState(initialPage = defaultFront, pageCount = { pages.size })
     val pagerScope = rememberCoroutineScope()
+    // vc63：尺寸自适应 —— 小/中/大三档（DataStore 持久化），容器与卡片同高、宽高比例全卡统一
+    val stackHeight = when (stackSize.coerceIn(0, 2)) { 0 -> 280.dp; 2 -> 440.dp; else -> 356.dp }
+    val cardHeight = stackHeight - 26.dp
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("卡片堆叠", Modifier.weight(1f), icon = Icons.Rounded.Layers)
+            // vc63：大 / 中 / 小尺寸切换（统一所有堆叠卡片的基础宽高比例）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                listOf(2 to "大", 1 to "中", 0 to "小").forEach { (v, label) ->
+                    val active = stackSize.coerceIn(0, 2) == v
+                    Surface(
+                        onClick = { onStackSizeChange(v) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (active) AmberPrimary.copy(alpha = 0.16f) else Color.Transparent
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                            color = if (active) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -1078,7 +1111,7 @@ private fun HomeStack(
             state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(356.dp),
+                .height(stackHeight),
             pageSpacing = 12.dp,
             beyondViewportPageCount = 1
         ) { page ->
@@ -1089,7 +1122,7 @@ private fun HomeStack(
             GlassCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(330.dp)
+                    .height(cardHeight)
                     .graphicsLayer {
                         val f = pageOffset.coerceIn(0f, 1f)
                         val s = 1f - f * 0.07f
@@ -1345,6 +1378,7 @@ private fun CalendarCardPure(tasks: List<TaskEntity>) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OverviewGrid(
     state: HomeUiState,
@@ -1380,10 +1414,11 @@ private fun OverviewGrid(
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
 
-    // 死命令 #5（v1.0.6.x）：速览默认收起 —— 收起态固定核心入口（3 列 × 3 行），
-    // 不受历史自定义影响；其余入口默认收进「展开 / 更多」区，点按钮平滑放出/收回。
-    // vc62：默认集加入「游戏库」（todo 仍在展开区，跳转语义已统一）。
-    val DEFAULT_IDS = setOf("album", "map", "accounting", "data", "achievements", "ai", "games")
+    // 死命令 #5（v1.0.6.x）：速览默认收起 —— 收起态只固定 6 个核心入口
+    // （游戏库/相册/地图/记账/数据/成就，3 列 × 2 行满排），不受历史自定义影响；
+    // vc63（真机反馈）：**「系统」等不常用入口默认收起**，并修复 7 格默认集导致的
+    // 「孤行大留白」—— 收起态恒为完美 3×2。
+    val DEFAULT_IDS = setOf("album", "map", "accounting", "data", "achievements", "games")
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
@@ -1447,6 +1482,8 @@ private fun OverviewGrid(
         }
 
         // 展开区：更多入口 + 自定义入口，垂直展开 + 淡入淡出（spring 弹性，与容器 animateContentSize 协同）
+        // vc63（真机反馈「奇怪留空」根治）：改用 FlowRow + 固定瓦片宽 —— 旧版 chunked Row +
+        // weight 占位会让末行出现整块空白列；FlowRow 逐项紧凑换行，绝无无意义留空。
         AnimatedVisibility(
             visible = expanded && moreEntries.isNotEmpty(),
             enter = expandVertically(animationSpec = GlassSpringIntSize) +
@@ -1455,23 +1492,24 @@ private fun OverviewGrid(
                 fadeOut(tween(180))
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                moreEntries.chunked(cols).forEach { rowEntries ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val gap = 10.dp
+                    val tileW = (maxWidth - gap * (cols - 1)) / cols
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(gap)
                     ) {
-                        rowEntries.forEach { entry ->
+                        moreEntries.forEach { entry ->
                             WaffleTile(
                                 icon = entry.icon,
                                 label = entry.label,
                                 tint = entry.tint,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.width(tileW)
                             ) {
                                 if (entry.route != null) onNavigate(entry.route)
                                 else { if (!launchAccounting(context)) showAccDialog = true }
                             }
                         }
-                        repeat(cols - rowEntries.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
                 // 自定义入口（原右上角按钮，收进展开区）

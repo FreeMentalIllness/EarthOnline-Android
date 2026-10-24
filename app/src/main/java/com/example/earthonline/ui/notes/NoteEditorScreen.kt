@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -47,7 +48,6 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -79,9 +79,17 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
  *    跨端兼容与双写兜底完全不变；
  *  - 撤销 / 重做：rc10 库内未内建 undo/redo，这里维护 [RichTextState.copy] 快照栈
  *    （输入停顿 400ms 记一次，格式化动作即时落栈），出栈直接换状态实例；
- *  - 待办：行首插入 / 切换「- [ ] 」「- [x]」纯文本标记，原文字绝不清空；
+ *  - 待办：vc63 起改为**独立待办清单区 + Compose 原生 Checkbox**（点空框立即打勾、再点取消），
+ *    存储层仍序列化为标准「- [ ] / - [x] 」Markdown 行，跨端契约零改动；编辑态绝不渲染「□」字符；
  *  - 列表 / 标题样式走库内 toggleUnorderedList / toggleOrderedList 与 SpanStyle 切换。
  */
+
+/** vc63：待办条目（不可变数据，更新时整元素替换触发重组） */
+private data class NoteTodoItem(val id: Long, val text: String, val done: Boolean)
+
+/** 待办行解析：行首「- [ ] / - [x] / - [X] 」（兼容 * / + 项目符），捕获勾选态与内容 */
+private val TODO_LINE_REGEX = Regex("^\\s*[-*+] \\[([xX ])]\\s+(.*)$")
+
 @Composable
 fun NoteEditorRoute(
     id: String,
@@ -109,6 +117,10 @@ fun NoteEditorScreen(
 
     // 正文：真实富文本状态（richeditor rc10）
     var editorState by remember { mutableStateOf(RichTextState()) }
+    // vc63（真实复选框批）：待办清单 —— **Compose 原生 Checkbox**，点空框立即打勾、再点取消；
+    // 持久化仍是标准 Markdown「- [ ] / - [x] 」行（跨端契约零改动），编辑态绝不渲染「□」字符。
+    // 数据与正文分离：载入时把 markdown 里的待办行抽出来，保存时按序拼回正文尾部。
+    val todos = remember { mutableStateListOf<NoteTodoItem>() }
     var title by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
@@ -236,7 +248,24 @@ fun NoteEditorScreen(
                 val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
                 val (t, rest) = splitTitle(md)
                 title = t
-                editorState.setMarkdown(rest)
+                // vc63：把 markdown 里的待办行抽到原生 Checkbox 清单，其余进富文本编辑器
+                todos.clear()
+                val bodyLines = StringBuilder()
+                rest.lines().forEach { line ->
+                    val hit = TODO_LINE_REGEX.find(line)
+                    if (hit != null) {
+                        todos.add(
+                            NoteTodoItem(
+                                id = System.nanoTime(),
+                                text = hit.groupValues[2].trim(),
+                                done = hit.groupValues[1] != " "
+                            )
+                        )
+                    } else {
+                        bodyLines.appendLine(line)
+                    }
+                }
+                editorState.setMarkdown(bodyLines.toString().trim())
                 tags = NotesViewModel.tagsOf(m)
             }
         }
@@ -250,16 +279,24 @@ fun NoteEditorScreen(
         val bodyMarkdown = editorState.toMarkdown().trim()
         val plain = editorState.toText().trim()
         val t = title.trim()
-        if (t.isBlank() && plain.isBlank()) {
+        if (t.isBlank() && plain.isBlank() && todos.none { it.text.isNotBlank() }) {
             onBack()
             return
         }
         commitTag()
-        // v1.0.6.6（死命令 #4 修订）：待办内联为正文中的普通 Markdown 行（"- [ ] "），
-        // 不再单独拆出独立清单模块，由编辑器直接维护。
-        val markdown = if (t.isBlank()) bodyMarkdown else "# $t\n\n$bodyMarkdown"
-        val plainBody = if (t.isBlank()) plain
-        else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
+        // vc63：待办清单按序拼回正文尾部，仍是标准 Markdown「- [ ] / - [x] 」行（跨端兼容）
+        val todoMarkdown = todos
+            .filter { it.text.isNotBlank() }
+            .joinToString("\n") { if (it.done) "- [x] ${it.text}" else "- [ ] ${it.text}" }
+        val bodyWithTodos = listOf(bodyMarkdown, todoMarkdown).filter { it.isNotBlank() }.joinToString("\n\n")
+        val todoPlain = todos
+            .filter { it.text.isNotBlank() }
+            .joinToString("\n") { (if (it.done) "[完成] " else "[待办] ") + it.text }
+        val plainBody = listOf(
+            if (t.isBlank()) plain else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n"),
+            todoPlain
+        ).filter { it.isNotBlank() }.joinToString("\n\n")
+        val markdown = if (t.isBlank()) bodyWithTodos else "# $t\n\n$bodyWithTodos"
         scope.launch {
             val savedId = vm.saveNote(id.ifBlank { null }, plainBody.ifBlank { t }, tags, markdown)
             // v1.0.6.9：从分类下新建的笔记，保存后自动归入该分类
@@ -310,7 +347,8 @@ fun NoteEditorScreen(
                     onItalic = { toggleStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
                     onUnderline = { toggleStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
                     onHeading = { toggleStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                    onTodo = { toggleTodo(editorState); pushHistory(editorState) },
+                    // vc63：待办 = 追加一条真实 Checkbox 待办（原生组件，不再是字符标记）
+                    onTodo = { todos.add(NoteTodoItem(System.nanoTime(), "", false)) },
                     onBullet = { editorState.toggleUnorderedList(); pushHistory(editorState) },
                     onOrdered = { editorState.toggleOrderedList(); pushHistory(editorState) },
                     onImage = { pickImage() },
@@ -401,35 +439,97 @@ fun NoteEditorScreen(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(UiDimens.CardRadius)
             ) {
-                Box(
+                Column(
                     Modifier
                         .fillMaxSize()
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             RoundedCornerShape(UiDimens.CardRadius)
                         )
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    BasicRichTextEditor(
-                        state = editorState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .focusRequester(editorFocus),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = (16 * bodyScale).sp,
-                            lineHeight = (28 * bodyScale).sp
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        decorationBox = { inner ->
-                            if (editorState.annotatedString.text.isEmpty()) {
-                                Text(
-                                    "写点什么…支持加粗、列表、待办、插图",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        BasicRichTextEditor(
+                            state = editorState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .focusRequester(editorFocus),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = (16 * bodyScale).sp,
+                                lineHeight = (28 * bodyScale).sp
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                if (editorState.annotatedString.text.isEmpty() && todos.isEmpty()) {
+                                    Text(
+                                        "写点什么…支持加粗、列表、待办、插图",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                inner()
                             }
-                            inner()
+                        )
+                    }
+
+                    // vc63：真实复选框待办区 —— Compose 原生 Checkbox（点击空框立即打勾、再点取消），
+                    // 绝不出现「□」字符；已完成项整行删除线。最多高 200dp，超出内部滚动。
+                    if (todos.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            todos.forEachIndexed { i, item ->
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = item.done,
+                                        onCheckedChange = { on -> todos[i] = item.copy(done = on) }
+                                    )
+                                    BasicTextField(
+                                        value = item.text,
+                                        onValueChange = { txt -> todos[i] = item.copy(text = txt) },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            textDecoration = if (item.done) TextDecoration.LineThrough else null,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                                        decorationBox = { inner ->
+                                            Box {
+                                                if (item.text.isEmpty()) {
+                                                    Text(
+                                                        "待办内容…",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                inner()
+                                            }
+                                        }
+                                    )
+                                    IconButton(onClick = { todos.removeAt(i) }, modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "删除待办",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
-                    )
+                    }
                 }
             }
         }
@@ -474,32 +574,6 @@ private fun splitTitle(md: String): Pair<String, String> {
     val t = firstLine.trim().trimStart('#').trim()
     val rest = md.substring(firstLine.length).trimStart('\n')
     return t to rest
-}
-
-/**
- * 笔记「待办」按钮：行首插入 / 切换「- [ ] 」「- [x]」标准 Checkbox 结构。
- *
- * 与任务备注 [com.example.earthonline.ui.tasks.TasksScreenKt] 同一套语义：
- * 一律用**空区间 replaceTextRange** 插入（删除长度为 0，绝不吞掉已有文字）；
- * 当前行已是待办行时按行首切换 未勾选 / 已勾选 —— 点一次变 ☑，再点变 □。
- */
-private fun toggleTodo(state: RichTextState) {
-    val text = state.toText()
-    val caret = state.selection.min.coerceIn(0, text.length)
-    val nl = text.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
-    val ls = if (nl < 0) 0 else nl + 1
-    val ne = text.indexOf('\n', caret)
-    val le = if (ne < 0) text.length else ne
-    val line = text.substring(ls, le)
-    val prefixLen = "- [ ] ".length
-    when {
-        line.startsWith("- [ ] ") ->
-            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [x] ")
-        line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
-            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
-        else ->
-            state.replaceTextRange(TextRange(caret, caret), "- [ ] ")
-    }
 }
 
 
