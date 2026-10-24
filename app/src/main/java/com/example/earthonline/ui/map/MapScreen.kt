@@ -89,15 +89,15 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     val snackbar = remember { SnackbarHostState() }
     val locations by vm.locations.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    // v1.0.7：顶部地点搜索栏 —— 本地足迹筛选（名称 / 备注 / 标签 / 日期），不依赖高德 Key
-    var query by remember { mutableStateOf("") }
     var showList by remember { mutableStateOf(false) }
-    val filteredLocations = remember(locations, query) {
-        if (query.isBlank()) locations else locations.filter { loc ->
-            loc.name.contains(query, ignoreCase = true) ||
-                (loc.note ?: "").contains(query, ignoreCase = true) ||
-                loc.date.contains(query, ignoreCase = true) ||
-                (loc.tagsJson ?: "").contains(query, ignoreCase = true)
+    // v1.0.6.9：足迹列表内的本地搜索（与地图顶栏的 POI 搜索彻底解耦）
+    var locQuery by remember { mutableStateOf("") }
+    val filteredLocations = remember(locations, locQuery) {
+        if (locQuery.isBlank()) locations else locations.filter { loc ->
+            loc.name.contains(locQuery, ignoreCase = true) ||
+                (loc.note ?: "").contains(locQuery, ignoreCase = true) ||
+                loc.date.contains(locQuery, ignoreCase = true) ||
+                (loc.tagsJson ?: "").contains(locQuery, ignoreCase = true)
         }
     }
 
@@ -117,7 +117,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     // v1.0.6.4：足迹列表 → 地图联动（点击足迹回地图居中 + 信息气泡）
     var focusLoc by remember { mutableStateOf<LocationEntity?>(null) }
     // v1.0.6.5：高德原生 Search SDK POI 搜索（复用清单 Key，无需 Web Key）
-    var showPoi by remember { mutableStateOf(false) }
+    // v1.0.6.9：POI 搜索改为地图顶部常驻搜索栏（就地输入），不再走弹窗
     var poiQuery by remember { mutableStateOf("") }
     var poiLoading by remember { mutableStateOf(false) }
     var poiResults by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
@@ -255,11 +255,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = { Text("足迹地图") },
                 actions = {
-                    // v1.0.6.4：高德 POI 地点搜索（关键字 → 候选列表 → 移动视野 / 一键加足迹）
-                    IconButton(onClick = { showPoi = true }) {
-                        Icon(Icons.Rounded.Search, contentDescription = "搜索地点")
-                    }
-                    // v1.0.7：打开「路径点记录页」（本地足迹列表，支持搜索筛选）
+                    // v1.0.6.9：POI 搜索已改为顶部常驻搜索栏（就地输入、就地出结果），
+                    // 不再需要单独的搜索图标入口；此处仅保留足迹列表入口。
                     IconButton(onClick = { showList = true }) {
                         Icon(Icons.Rounded.List, contentDescription = "足迹列表")
                     }
@@ -360,11 +357,12 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                             )
                         }
                     }
-                    LocationList(filteredLocations, vm::deleteLocation, onLocate = { })
+                    LocationList(locations, vm::deleteLocation, onLocate = { })
                 }
             }
 
-            // v1.0.7：顶部地点搜索栏（悬浮于地图之上，本地筛选足迹，不依赖高德 Key）
+            // v1.0.6.9：顶部搜索栏 = POI 地点搜索（与本地足迹搜索彻底解耦）。
+            // 足迹搜索已移入「足迹列表」二级面板顶部的专用搜索框。
             Column(
                 Modifier
                     .align(Alignment.TopCenter)
@@ -377,14 +375,14 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
                 ) {
                     GlassTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = "搜索足迹名称 / 备注 / 标签 / 日期",
+                        value = poiQuery,
+                        onValueChange = { poiQuery = it },
+                        placeholder = "搜索地点（POI），如「故宫」「星巴克」",
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                         trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { query = "" }) {
+                            if (poiQuery.isNotEmpty()) {
+                                IconButton(onClick = { poiQuery = "" }) {
                                     Icon(Icons.Rounded.Close, contentDescription = "清空")
                                 }
                             }
@@ -392,8 +390,8 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                // 有词时就地展开筛选结果（本地足迹列表）；地图已降级为列表时主区已展示，避免重复
-                if (query.isNotBlank() && !mapFailed) {
+                // 有词时就地展开 POI 候选（高德原生 Search SDK）；地图降级为列表时不展开，避免重复
+                if (poiQuery.isNotBlank() && !mapFailed) {
                     Spacer(Modifier.height(8.dp))
                     Surface(
                         tonalElevation = 6.dp,
@@ -402,11 +400,59 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp)
                     ) {
                         Column(Modifier.fillMaxWidth().padding(8.dp)) {
-                            LocationList(
-                                filteredLocations,
-                                vm::deleteLocation,
-                                onLocate = { loc -> focusLoc = loc }
-                            )
+                            if (poiLoading) {
+                                LinearProgressIndicator(Modifier.fillMaxWidth())
+                            }
+                            val poiError by vm.poiError.collectAsStateWithLifecycle()
+                            poiError?.let { err ->
+                                Text(
+                                    err,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                            if (poiError == null && !poiLoading && poiResults.isEmpty()) {
+                                Text(
+                                    "没有找到相关地点，换个关键字试试。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                items(poiResults, key = { "${it.lat},${it.lng},${it.name}" }) { s ->
+                                    Column(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable {
+                                                moveCameraTo(LatLng(s.lat, s.lng))
+                                                pendingLatLng = LatLng(s.lat, s.lng)
+                                                pendingName = s.name
+                                                showAdd = true
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            s.name.ifBlank { "未命名地点" },
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        val sub = listOf(s.district, s.address)
+                                            .filter { it.isNotBlank() }
+                                            .joinToString(" · ")
+                                        if (sub.isNotBlank()) {
+                                            Text(
+                                                sub,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -415,6 +461,7 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
     }
 
     // v1.0.7：路径点记录页 —— 独立的足迹列表（本地搜索筛选，不依赖高德 Key）
+    // v1.0.6.9：顶部增加本地足迹专用搜索框（与地图顶栏 POI 搜索解耦）
     // v1.0.6.4：点击某条足迹 → 关闭列表并回地图居中 + 信息气泡
     if (showList) {
         GlassDialog(
@@ -431,9 +478,25 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                if (query.isNotBlank()) {
+                // 本地足迹搜索：名称 / 备注 / 标签 / 日期
+                GlassTextField(
+                    value = locQuery,
+                    onValueChange = { locQuery = it },
+                    placeholder = "搜索足迹名称 / 备注 / 标签 / 日期",
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (locQuery.isNotEmpty()) {
+                            IconButton(onClick = { locQuery = "" }) {
+                                Icon(Icons.Rounded.Close, contentDescription = "清空")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (locQuery.isNotBlank()) {
                     Text(
-                        "搜索「$query」的筛选结果",
+                        "搜索「$locQuery」的筛选结果",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -453,101 +516,6 @@ fun MapScreen(vm: MapViewModel, moreActions: MoreMenuActions) {
                         }
                     )
                 }
-            }
-        }
-    }
-
-    // v1.0.6.5：高德 POI 地点搜索抽屉（原生 Search SDK）—— 关键字 → 候选列表 → 点击移动视野并一键添加足迹
-    if (showPoi) {
-        GlassDialog(
-            onDismissRequest = { showPoi = false },
-            // 内含 POI 候选 LazyColumn：关闭外层滚动避免同方向嵌套
-            scrollable = false
-        ) {
-            Column(
-                Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    "搜索地点",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                GlassTextField(
-                    value = poiQuery,
-                    onValueChange = { poiQuery = it },
-                    placeholder = "输入地点关键字，如「故宫」「星巴克」",
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (poiQuery.isNotEmpty()) {
-                            IconButton(onClick = { poiQuery = "" }) {
-                                Icon(Icons.Rounded.Close, contentDescription = "清空")
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (poiLoading) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                }
-                // 错误码透出（如 10009 = Key/SHA1 未绑定或未开通搜索服务）——绝不静默吞掉
-                val poiError by vm.poiError.collectAsStateWithLifecycle()
-                poiError?.let { err ->
-                    Text(
-                        err,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-                if (poiError == null && poiQuery.isNotBlank() && !poiLoading && poiResults.isEmpty()) {
-                    Text(
-                        "没有找到相关地点，换个关键字试试。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(poiResults, key = { "${it.lat},${it.lng},${it.name}" }) { s ->
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    moveCameraTo(LatLng(s.lat, s.lng))
-                                    pendingLatLng = LatLng(s.lat, s.lng)
-                                    pendingName = s.name
-                                    showPoi = false
-                                    showAdd = true
-                                }
-                                .padding(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                s.name.ifBlank { "未命名地点" },
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            val sub = listOf(s.district, s.address)
-                                .filter { it.isNotBlank() }
-                                .joinToString(" · ")
-                            if (sub.isNotBlank()) {
-                                Text(
-                                    sub,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-                Text(
-                    "搜索由高德 POI 服务提供；点击候选地点：地图移动到该点，并可一键添加为足迹。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

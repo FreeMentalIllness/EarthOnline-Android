@@ -113,6 +113,8 @@ fun rememberGlassTier(): GlassTier {
  * @param onClick 非空时整块可点（替代 Button 的玻璃态）。
  * @param shape 圆角形状（默认 20dp）。
  * @param showBorder 是否描边（玻璃边缘高光）。
+ * @param solid v1.0.6.9（死命令 去壁纸化）：近不透明纯色模式 —— 跳过壁纸采样，
+ *   遮罩 Alpha 固定 0.97。所有弹窗 / 对话框强制走此档：绝对不允许透出壁纸。
  */
 @Composable
 fun GlassSurface(
@@ -125,6 +127,8 @@ fun GlassSurface(
     tintOverride: Float? = null,
     /** v1.0.18：可读性遮罩覆写（随不透明度滑块联动），null = 用内置 0.28 */
     scrimOverride: Float? = null,
+    /** v1.0.6.9（死命令）：true = 弹窗档，0.97 近不透明纯色、不采样壁纸 */
+    solid: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
     val deviceTier = rememberGlassTier()
@@ -139,14 +143,16 @@ fun GlassSurface(
     // 每卡位置偏移，导致灰/白相间的色块断层。现只保留：一层 RenderEffect 高斯模糊壁纸
     // （matchParentSize + Crop，不偏移、不拉伸）+ 一层 surface 半透明遮罩 + 1dp 描边；
     // 模糊半径加大到 14dp，色晕更平滑，彻底消除断层，同时平滑透出壁纸真实色彩。
-    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
+    val useBackdrop = !solid && tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
     // v1.0.6.8（死命令 #1 全局去壁纸化）：遮罩不透明度整体提到高 Alpha 档（0.72~0.88）。
     // 真机反馈：0.34~0.66 档在花壁纸上卡片仍能直接透出复杂底层图案，文字发虚、
     // 灰白相间断层感明显。现在底层仍是 14dp 高斯模糊壁纸（保留液态玻璃质感），
     // 但遮罩拉到 0.72 以上 —— 壁纸只作为「色相氛围」极淡透出，任何壁纸下文字都清晰。
     // 「卡片不透明度」滑块在 0.72~0.88 区间微调；FLAT 降级档用 0.93 高不透明纯色。
+    // v1.0.6.9（死命令）：solid 弹窗档 0.97 近不透明，彻底不透壁纸。
     val baseAlpha = tintOverride ?: LocalCardOpacity.current
     val maskAlpha = when {
+        solid -> 0.97f
         tier == GlassTier.FLAT -> 0.93f
         else -> (0.72f + 0.16f * baseAlpha).coerceIn(0.72f, 0.88f)
     }

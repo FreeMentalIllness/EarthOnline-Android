@@ -1,21 +1,26 @@
 package com.example.earthonline.ui.navigation
 
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.example.earthonline.ui.report.ReportKind
 import com.example.earthonline.ui.achievements.AchievementViewModel
 import com.example.earthonline.ui.achievements.AchievementsRoute
+import com.example.earthonline.ui.accounting.AccountingRoute
 import com.example.earthonline.ui.ai.AiRoute
 import com.example.earthonline.ui.album.AlbumRoute
 import com.example.earthonline.ui.recyclebin.RecycleBinRoute
@@ -36,6 +41,8 @@ import com.example.earthonline.ui.settings.AboutRoute
 import com.example.earthonline.ui.tasks.TasksRoute
 import com.example.earthonline.ui.notes.NotesRoute
 import com.example.earthonline.ui.notes.NoteEditorRoute
+import com.example.earthonline.ui.theme.LocalWallpaperPath
+import com.example.earthonline.ui.theme.ProvideWallpaper
 import androidx.navigation.NavType
 
 /**
@@ -51,7 +58,30 @@ private val TAB_ROUTES = setOf(
 )
 
 /**
- * @param moreActions 右上角设置按钮的行为（导航 / 记账下载框），由 MainScaffold 统一注入
+ * v1.0.6.9（死命令 去壁纸化）：壁纸仅允许在「全局一级页面」透出 —— 底部四个 Tab 及其
+ * 同界变体（new_task / new_todo / collections）。其余二级详情页一律注入 null 壁纸路径，
+ * 其上的 GlassCard / GlassSurface 全部退化为纯色底板，壁纸零透出。
+ */
+private val WALLPAPER_ROUTES = TAB_ROUTES + setOf(
+    Screen.NewTask.route,
+    Screen.NewTodo.route,
+    Screen.Collections.route
+)
+
+/** v1.0.6.9（死命令）：全局统一弹簧转场规格 —— Fade + Slide，中低刚度 + 高阻尼，跟手不弹跳。
+ *  注意：Compose 的 slideIn/OutVertically/Horizontally 动画值类型都是 IntOffset（不是 Int），
+ *  只有 fadeIn/fadeOut 是 Float —— 两类规格必须分开，混用直接编译期类型不匹配。 */
+private fun navSpringFloat() = spring<Float>(
+    dampingRatio = 0.92f,
+    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+)
+private fun navSpringOffset() = spring<androidx.compose.ui.unit.IntOffset>(
+    dampingRatio = 0.92f,
+    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+)
+
+/**
+ * @param moreActions 右上角设置按钮的行为（导航 / 记账页），由 MainScaffold 统一注入
  * @param achVm 成就 VM（由 MainScaffold 创建并共享）。必须复用同一实例 ——
  *              它可以挂在 NavBackStackEntry 上，但那样会与框架层那份并存，
  *              两个引擎同时跑会各写一条「解锁成就」动态。
@@ -65,39 +95,47 @@ fun AppNavHost(
     achVm: AchievementViewModel? = null,
     moreActions: MoreMenuActions = MoreMenuActions(onNavigate = {}, onAccounting = {})
 ) {
+    /* v1.0.6.9（死命令）：壁纸作用域收编 —— 非一级页注入 null，二级页 / 弹窗彻底去壁纸化 */
+    val inheritedWallpaper = LocalWallpaperPath.current
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val wallpaperAllowed = currentRoute == null || currentRoute in WALLPAPER_ROUTES
+
+    ProvideWallpaper(if (wallpaperAllowed) inheritedWallpaper else null) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        /* 转场规范（死磕细节批）：
+        /* 转场规范（v1.0.6.9 死命令：全局统一弹簧阻尼）：
            - Tab 间切换：淡入 + 极轻微垂直位移（交叉淡变，翻页不抢眼）；
-           - 进入 / 返回二级页：从右侧推入 / 平滑推出（标准栈式位移，推满整屏）。 */
+           - 进入 / 返回二级页：从右侧推入 / 平滑推出（标准栈式位移，推满整屏）。
+           四向全部走同一 spring 规格（damping 0.92 / MediumLow），杜绝各向速度不一致的割裂感。 */
         enterTransition = {
             if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
-                fadeIn(tween(220)) + slideInVertically(tween(260)) { it / 10 }
+                fadeIn(navSpringFloat()) + slideInVertically(navSpringOffset()) { it / 12 }
             } else {
-                fadeIn(tween(200)) + slideInHorizontally(tween(300)) { it }
+                fadeIn(navSpringFloat()) + slideInHorizontally(navSpringOffset()) { it }
             }
         },
         exitTransition = {
             if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
-                fadeOut(tween(200)) + slideOutVertically(tween(260)) { -it / 10 }
+                fadeOut(navSpringFloat()) + slideOutVertically(navSpringOffset()) { -it / 12 }
             } else {
-                fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { -it }
+                fadeOut(navSpringFloat()) + slideOutHorizontally(navSpringOffset()) { -it }
             }
         },
         popEnterTransition = {
             if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
-                fadeIn(tween(220)) + slideInVertically(tween(260)) { -it / 10 }
+                fadeIn(navSpringFloat()) + slideInVertically(navSpringOffset()) { -it / 12 }
             } else {
-                fadeIn(tween(200)) + slideInHorizontally(tween(300)) { -it }
+                fadeIn(navSpringFloat()) + slideInHorizontally(navSpringOffset()) { -it }
             }
         },
         popExitTransition = {
             if (initialState.destination.route in TAB_ROUTES && targetState.destination.route in TAB_ROUTES) {
-                fadeOut(tween(200)) + slideOutVertically(tween(260)) { it / 10 }
+                fadeOut(navSpringFloat()) + slideOutVertically(navSpringOffset()) { it / 12 }
             } else {
-                fadeOut(tween(200)) + slideOutHorizontally(tween(300)) { it }
+                fadeOut(navSpringFloat()) + slideOutHorizontally(navSpringOffset()) { it }
             }
         }
     ) {
@@ -121,6 +159,10 @@ fun AppNavHost(
         composable(Screen.NewTask.route) {
             TasksRoute(moreActions = moreActions, openAddOnEntry = true)
         }
+        // v1.0.6.9：速览「Todo」→ 任务页 Todo Tab + 自动弹新建对话框（见 Screen.NewTodo 注释）
+        composable(Screen.NewTodo.route) {
+            TasksRoute(moreActions = moreActions, openAddOnEntry = true, initialTab = "todo")
+        }
         composable(Screen.Backpack.route) {
             BackpackRoute(startTab = 0, moreActions = moreActions)
         }
@@ -138,21 +180,29 @@ fun AppNavHost(
         composable(Screen.Notes.route) {
             NotesRoute(
                 moreActions = moreActions,
-                onEdit = { id ->
-                    navController.navigate(Screen.NoteEditor.route + "?id=${id ?: ""}") {
+                onEdit = { id, folder ->
+                    navController.navigate(
+                        Screen.NoteEditor.route + "?id=${id ?: ""}&folder=${folder ?: ""}"
+                    ) {
                         launchSingleTop = true
                     }
                 }
             )
         }
         composable(
-            route = Screen.NoteEditor.route + "?id={id}",
-            arguments = listOf(navArgument("id") { defaultValue = ""; type = NavType.StringType })
+            route = Screen.NoteEditor.route + "?id={id}&folder={folder}",
+            arguments = listOf(
+                navArgument("id") { defaultValue = ""; type = NavType.StringType },
+                navArgument("folder") { defaultValue = ""; type = NavType.StringType }
+            )
         ) { backStackEntry ->
             val id = backStackEntry.arguments?.getString("id").orEmpty()
+            // v1.0.6.9：从某个分类下新建笔记时带上 folderId，保存后自动归入该分类
+            val folder = backStackEntry.arguments?.getString("folder")?.takeIf { it.isNotBlank() }
             NoteEditorRoute(
                 id = id,
                 moreActions = moreActions,
+                folderId = folder,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -189,6 +239,14 @@ fun AppNavHost(
             SteamLibraryRoute(onBack = { navController.popBackStack() })
         }
         composable(Screen.Ai.route) { AiRoute(moreActions = moreActions) }
+        // v1.0.6.9：记账页（应用内账本，取代原外部 App 下载引导；autoAdd=1 时自动弹键盘录入面板）
+        composable(
+            route = Screen.Accounting.route + "?autoAdd={autoAdd}",
+            arguments = listOf(navArgument("autoAdd") { defaultValue = false; type = NavType.BoolType })
+        ) { backStackEntry ->
+            val autoAdd = backStackEntry.arguments?.getBoolean("autoAdd") ?: false
+            AccountingRoute(moreActions = moreActions, autoAddInput = autoAdd)
+        }
         composable(Screen.Settings.route) { SettingsRoute(moreActions = moreActions) }
         // v1.2.3：集中设置页拆出的二级页（独立路由，返回栈由 NavHost 维护）
         composable(Screen.SettingsAppearance.route) {
@@ -204,4 +262,5 @@ fun AppNavHost(
             AboutRoute(navController = navController, moreActions = moreActions)
         }
     }
+    } // v1.0.6.9：ProvideWallpaper（壁纸作用域收编）闭合
 }

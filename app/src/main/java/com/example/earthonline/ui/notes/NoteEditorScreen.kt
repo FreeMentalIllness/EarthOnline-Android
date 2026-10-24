@@ -96,10 +96,12 @@ private data class TodoItem(
 fun NoteEditorRoute(
     id: String,
     moreActions: MoreMenuActions,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** v1.0.6.9：从某个分类下新建笔记时带上分类 id，保存后自动归入该分类 */
+    folderId: String? = null
 ) {
     val vm = hiltViewModel<NotesViewModel>()
-    NoteEditorScreen(vm = vm, id = id, moreActions = moreActions, onBack = onBack)
+    NoteEditorScreen(vm = vm, id = id, moreActions = moreActions, onBack = onBack, folderId = folderId)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,7 +110,9 @@ fun NoteEditorScreen(
     vm: NotesViewModel,
     id: String,
     moreActions: MoreMenuActions,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** v1.0.6.9：目标分类 id（空 = 未分类）；保存成功后自动归属 */
+    folderId: String? = null
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -306,13 +310,15 @@ fun NoteEditorScreen(
         val plainBody = if (t.isBlank()) plain
         else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
         scope.launch {
-            vm.saveNote(id.ifBlank { null }, plainBody.ifBlank { t }, tags, markdown)
+            val savedId = vm.saveNote(id.ifBlank { null }, plainBody.ifBlank { t }, tags, markdown)
+            // v1.0.6.9：从分类下新建的笔记，保存后自动归入该分类
+            if (folderId != null && savedId.isNotBlank()) vm.assignFolder(savedId, folderId)
             onBack()
         }
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0),
         topBar = {
             Column {

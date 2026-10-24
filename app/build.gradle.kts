@@ -112,7 +112,26 @@ android {
         //    「+ 添加自」截断 → 补全「+ 添加自定义」并加大按钮容器宽度。
         // ⑥ 悬浮「+」滚动监听：LazyColumn 向下滑动且 isScrollInProgress 时 AnimatedVisibility
         //    隐藏，向上滑 / 停止恢复，不再遮挡列表。
-        versionCode = 58
+        // versionCode 59 = v1.0.6（深度测试反馈二轮修复批）：
+        // ① 笔记分类层级：先建分类（文件夹）再在分类下建笔记，取消平铺；分类/归属走
+        //    DataStore JSON（NOTE_FOLDERS/NOTE_FOLDER_MAP），零 Room 迁移、不动同步契约；
+        //    笔记卡新增「移动到分类」；筛选态临时平铺。
+        // ② 任务页 UI 对齐背包：卡片内边距 10/8dp→12dp、列表底部预留 88dp FAB 让位、
+        //    Todo 表格行包 AppCard；父子层级 INDENT 26→40dp + 连接线 2.5dp/加深/车道加重。
+        // ③ 导航转场统一：AppNavHost 四向全部改弹簧（damping 0.92/MediumLow）Fade+Slide。
+        // ④ 地图/足迹搜索解耦：地图顶栏只搜 POI（就地输入出结果，废独立 POI 弹窗）；
+        //    足迹搜索移入「路径点记录」面板顶部专用搜索框（本地名称/备注/标签/日期）。
+        // ⑤ 记账回滚为应用内账本页：新 AccountingScreen（月度汇总+快捷录入键盘+流水，
+        //    DataStore JSON 持久化），删除外部 App 下载引导（AccountingDialog.kt 移除）；
+        //    速览记账 = 跳账本页 + 自动弹金额键盘。
+        // ⑥ 速览操作化：记账→账本页+键盘、Todo→new_todo 路由（任务页 Todo Tab+新建弹窗）、
+        //    日常→任务页、笔记→直达新建编辑页。
+        // ⑦ 真正卡片堆叠：位置下移至速览正下方；HorizontalPager pageSize 收窄+contentPadding
+        //    居中，当前卡居中、相邻卡边缘露出，左右滑动翻页。
+        // ⑧ 彻底去壁纸化（死命令）：GlassSurface 新增 solid 档（0.97 近不透明+不采样壁纸），
+        //    GlassDialog/AnimatedAlertDialog 全量强制；二级页 containerColor 改纯色 background；
+        //    AppNavHost 按路由收编壁纸作用域（仅主页/任务/背包/笔记四个 Tab 及其变体透出）。
+        versionCode = 59
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

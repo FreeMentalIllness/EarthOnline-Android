@@ -85,6 +85,13 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（JSON 字符串集合：timeline/life；空 = 用默认全集） */
         val HOME_STACK_CARDS = stringPreferencesKey("home_stack_cards")
 
+        /** v1.0.6.9：笔记分类文件夹（JSON 列表 {id,name,createdAt}；先建分类再建笔记的层级结构） */
+        val NOTE_FOLDERS = stringPreferencesKey("note_folders")
+        /** v1.0.6.9：笔记 → 分类归属（JSON 对象 memoId->folderId；空值 = 未分类） */
+        val NOTE_FOLDER_MAP = stringPreferencesKey("note_folder_map")
+        /** v1.0.6.9：应用内账本流水（JSON 列表 {id,amount,income,category,note,time}；不动 Room 表，保跨端契约） */
+        val ACCOUNTING_LEDGER = stringPreferencesKey("accounting_ledger")
+
         /* ————— v1.0.3 体验升级批次 ————— */
         /** 用户自定义称号（空 = 用默认「旅行者」） */
         val CUSTOM_TITLE = stringPreferencesKey("custom_title")
@@ -220,12 +227,26 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（JSON 字符串集合，空串 = 默认全集） */
     val homeStackCardsJson: Flow<String> = ds.data.map { it[HOME_STACK_CARDS] ?: "" }
 
+    /** v1.0.6.9：笔记分类文件夹（JSON 列表，空串 = 无分类） */
+    val noteFoldersJson: Flow<String> = ds.data.map { it[NOTE_FOLDERS] ?: "" }
+
+    /** v1.0.6.9：笔记 → 分类归属（JSON 对象，空串 = 无归属） */
+    val noteFolderMapJson: Flow<String> = ds.data.map { it[NOTE_FOLDER_MAP] ?: "" }
+
+    /** v1.0.6.9：应用内账本流水（JSON 列表，空串 = 空账本） */
+    val accountingLedgerJson: Flow<String> = ds.data.map { it[ACCOUNTING_LEDGER] ?: "" }
+
     suspend fun setAchSound(v: Boolean) = ds.edit { it[ACH_SOUND] = v }
     suspend fun setCustomTimelineJson(v: String) = ds.edit { it[CUSTOM_TIMELINE] = v }
     suspend fun setHomeFeedFilterJson(v: String) = ds.edit { it[HOME_FEED_FILTER] = v }
     suspend fun setHomeFeedLimit(v: Int) = ds.edit { it[HOME_FEED_LIMIT] = v.coerceIn(0, 200) }
     suspend fun setHomeQuickEntriesJson(v: String) = ds.edit { it[HOME_QUICK_ENTRIES] = v }
     suspend fun setHomeStackCardsJson(v: String) = ds.edit { it[HOME_STACK_CARDS] = v }
+
+    /** v1.0.6.9：笔记分类文件夹 / 归属 / 账本流水（JSON 字符串原样落盘） */
+    suspend fun setNoteFoldersJson(v: String) = ds.edit { it[NOTE_FOLDERS] = v }
+    suspend fun setNoteFolderMapJson(v: String) = ds.edit { it[NOTE_FOLDER_MAP] = v }
+    suspend fun setAccountingLedgerJson(v: String) = ds.edit { it[ACCOUNTING_LEDGER] = v }
 
     /* ————— v1.0.3 体验升级批次 ————— */
 

@@ -327,7 +327,9 @@ fun GlassDialog(
                     this.alpha = alpha
                 },
             shape = RoundedCornerShape(24.dp),
-            showBorder = true
+            showBorder = true,
+            // v1.0.6.9（死命令）：弹窗一律近不透明纯色档，绝对不透出底层壁纸
+            solid = true
         ) {
             Column(
                 Modifier

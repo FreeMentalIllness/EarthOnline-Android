@@ -22,7 +22,7 @@ val bottomNavItems = listOf(
     BottomNavItem(Screen.Home.route, Screen.Home.label, NavIconKind.HOME),
     BottomNavItem(
         Screen.Tasks.route, Screen.Tasks.label, NavIconKind.TASKS,
-        altRoutes = listOf(Screen.NewTask.route)
+        altRoutes = listOf(Screen.NewTask.route, Screen.NewTodo.route)
     ),
     BottomNavItem(
         Screen.Backpack.route, Screen.Backpack.label, NavIconKind.BACKPACK,

@@ -602,55 +602,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { memoRepo.delete(id) }
     }
 
-    /**
-     * v1.0.6.8（死命令 #2 速览操作化）：首页速览「Todo」一键新建任务。
-     * 不走任务页、不打开完整编辑弹窗 —— 只问一个标题，回车即建（category=todo）。
-     */
-    fun quickAddTask(title: String) {
-        val t = title.trim()
-        if (t.isBlank()) return
-        viewModelScope.launch {
-            taskRepo.insert(
-                TaskEntity(
-                    id = uid("task"),
-                    category = "todo",
-                    title = t,
-                    status = "planning",
-                    createdAt = todayStr(),
-                    lastModified = todayStr()
-                )
-            )
-            activityRepo.add(
-                ActivityEntity(id = uid("act"), time = nowIso(), kind = "task", title = "创建了任务：$t")
-            )
-        }
-    }
-
-    /**
-     * v1.0.6.8（死命令 #2 速览操作化）：首页速览「记账」快捷记账。
-     * 应用内不设账本数据库，快捷记账以自定义动态（星标条目）落入动态流，
-     * 在「最近动态 / 全部动态」中可查可删，格式：`记账 ¥12.5 · 餐饮 · 备注`。
-     */
-    fun addQuickAccounting(amount: String, category: String, note: String) {
-        val a = amount.trim()
-        if (a.isBlank()) return
-        val parts = buildList {
-            add("记账 ¥$a")
-            if (category.isNotBlank()) add(category)
-            if (note.isNotBlank()) add(note.trim())
-        }
-        viewModelScope.launch {
-            activityRepo.add(
-                ActivityEntity(
-                    id = uid("act"),
-                    time = nowIso(),
-                    kind = "custom",
-                    title = parts.joinToString(" · ").take(120)
-                )
-            )
-        }
-    }
-
     private fun Parts.toUi(): HomeUiState {
         val fields = parseFields(profile?.customFieldsJson)
         val shown = fields.take(3)

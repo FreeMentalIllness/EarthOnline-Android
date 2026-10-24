@@ -105,15 +105,18 @@ private val DAY_FMT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
 /** 每层缩进宽度（与 TreeGuide 的单格宽度保持一致） */
 // v1.0.6.7（死命令 #6）：层级缩进步进由 18dp 加大到 26dp，子任务左缩进更明显
-private val INDENT = 26.dp
+// v1.0.6.9（死命令）：父子层级缩进 26dp → 40dp —— 子任务必须比父任务有极其明显的缩进
+private val INDENT = 40.dp
 
 @Composable
 fun TasksRoute(
     moreActions: MoreMenuActions,
     openAddOnEntry: Boolean = false,
+    /** v1.0.6.9：初始顶层 Tab（daily / todo）—— 速览「Todo」进入时预选 Todo */
+    initialTab: String = "daily",
     vm: TaskViewModel = hiltViewModel()
 ) {
-    TasksScreen(vm, moreActions, openAddOnEntry)
+    TasksScreen(vm, moreActions, openAddOnEntry, initialTab)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,14 +124,16 @@ fun TasksRoute(
 fun TasksScreen(
     vm: TaskViewModel,
     moreActions: MoreMenuActions,
-    openAddOnEntry: Boolean = false
+    openAddOnEntry: Boolean = false,
+    /** v1.0.6.9：初始顶层 Tab（daily / todo） */
+    initialTab: String = "daily"
 ) {
     val allTasks by vm.tasks.collectAsStateWithLifecycle()
     // v1.0.4：「隐藏已完成任务」开关（DataStore 持久化，跨会话记住）
     val hideDone by vm.hideDone.collectAsStateWithLifecycle(initialValue = false)
     // v1.0.10：顶层「日常 / Todo」；「日常」下不再强行拆分主线/支线，
     // 合并为统一的日常列表（减轻认知负担）。Todo 走独立 Tab + 表格视图。
-    var topTab by remember { mutableStateOf("daily") }   // daily | todo
+    var topTab by remember { mutableStateOf(initialTab) }   // daily | todo
     // v1.0.10：daily 用 null 表示「主线 + 支线」合并视图；todo 走独立分类。
     val category = if (topTab == "daily") null else "todo"
     val collapsed = remember { mutableStateOf(setOf<String>()) }
@@ -206,7 +211,7 @@ fun TasksScreen(
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("任务") },
@@ -231,7 +236,7 @@ fun TasksScreen(
             // 主题色描边胶囊，解决「未选中 Tab 看不见、不知道能点」的问题。
             TabRow(
                 selectedTabIndex = if (topTab == "daily") 0 else 1,
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                containerColor = MaterialTheme.colorScheme.background,
                 divider = {
                     HorizontalDivider(
                         thickness = 1.dp,
@@ -462,7 +467,8 @@ fun TasksScreen(
                             )
                         },
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 8.dp)
+                    // v1.0.6.9：底部预留 88dp —— 与背包页一致，右下角悬浮「+」不遮挡最后一项
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp)
                 ) {
                     // Todo 表格视图：表头
                     if (topTab == "todo") {
@@ -658,6 +664,8 @@ private fun TodoTableHeader() {
 /**
  * v1.0.7：Todo 表格视图 —— 单行。
  * 勾选框直接切换完成态（多选模式下改为切换选中）；点行进入编辑。
+ * v1.0.6.9：外层包 AppCard（16dp 圆角 + 12dp 内边距），卡片样式 / 圆角 / 间距
+ * 与背包页列表完全对齐，日常与 Todo 两个视图视觉统一。
  */
 @Composable
 private fun TodoTableRow(
@@ -670,57 +678,60 @@ private fun TodoTableRow(
 ) {
     val done = task.status == "done"
     val statusLabel = STATUSES.firstOrNull { it.first == task.status }?.second ?: task.status
-    Row(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { if (selectMode) onToggleSelect() else onEdit() }
-            .padding(horizontal = UiDimens.ListPad, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
-            checked = if (selectMode) selected else done,
-            onCheckedChange = { if (selectMode) onToggleSelect() else onToggleDone() },
-            modifier = Modifier.size(44.dp)
-        )
-        Text(
-            task.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textDecoration = if (done) TextDecoration.LineThrough else null,
-            color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f).padding(start = 4.dp)
-        )
-        Text(
-            task.dueDate ?: "—",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(72.dp)
-        )
-        Text(
-            statusLabel,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (done) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(56.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = if (selectMode) selected else done,
+                onCheckedChange = { if (selectMode) onToggleSelect() else onToggleDone() },
+                modifier = Modifier.size(44.dp)
+            )
+            Text(
+                task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (done) TextDecoration.LineThrough else null,
+                color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f).padding(start = 4.dp)
+            )
+            Text(
+                task.dueDate ?: "—",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(72.dp)
+            )
+            Text(
+                statusLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (done) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(56.dp)
+            )
+        }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 }
 
 /**
- * 树形连接线引导：为每一层祖先画一格 18dp。
+ * 树形连接线引导：为每一层祖先画一格 [INDENT]（40dp）。
  * - 该层下方还有兄弟 -> 竖线贯穿整行
  * - 已是该层最后一个 -> 竖线只到中部，并向右画一条横线形成「└」拐角
+ * v1.0.6.9（死命令）：线宽 2dp→2.5dp、线条加深至 0.7、祖先列「车道」底色 0.05→0.08、
+ * 拐角下移 22dp→26dp —— 谁是谁的子任务一眼可辨。
  */
 @Composable
 private fun TreeGuide(depth: Int, ancestorLast: List<Boolean>, isLast: Boolean) {
     if (depth <= 0) return
-    // v1.0.6.7（死命令 #6）：引导线加深 + 祖先列加淡色「车道」底色，层级关系一目了然
-    val line = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-    val lane = MaterialTheme.colorScheme.outline.copy(alpha = 0.05f)
-    val corner = 22.dp
+    val line = MaterialTheme.colorScheme.outline.copy(alpha = 0.70f)
+    val lane = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)
+    val corner = 26.dp
     Row(Modifier.fillMaxHeight()) {
         repeat(depth) { level ->
             val isFinalLevel = level == depth - 1
@@ -734,18 +745,18 @@ private fun TreeGuide(depth: Int, ancestorLast: List<Boolean>, isLast: Boolean) 
             ) {
                 if (hasFollowingSibling) {
                     Box(
-                        Modifier.fillMaxHeight().width(2.dp).align(Alignment.TopCenter).background(line)
+                        Modifier.fillMaxHeight().width(2.5.dp).align(Alignment.TopCenter).background(line)
                     )
                 } else {
                     Box(
-                        Modifier.height(corner).width(2.dp).align(Alignment.TopCenter).background(line)
+                        Modifier.height(corner).width(2.5.dp).align(Alignment.TopCenter).background(line)
                     )
                 }
                 if (isFinalLevel) {
                     Box(
                         Modifier
                             .padding(top = corner)
-                            .height(2.dp)
+                            .height(2.5.dp)
                             .width(INDENT)
                             .align(Alignment.TopCenter)
                             .background(line)
@@ -813,7 +824,9 @@ private fun TaskRow(
                 }
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                // v1.0.6.9：卡片内边距对齐背包页 ItemCard（12dp 统一四边），
+                // 圆角走 AppCard 的 UiDimens.CardRadius(16dp)，与背包完全一致
+                modifier = Modifier.padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(

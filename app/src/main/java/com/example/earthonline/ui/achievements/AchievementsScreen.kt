@@ -64,7 +64,7 @@ fun AchievementsScreen(vm: AchievementViewModel, moreActions: MoreMenuActions) {
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

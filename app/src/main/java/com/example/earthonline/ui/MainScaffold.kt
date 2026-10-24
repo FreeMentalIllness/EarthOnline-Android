@@ -70,7 +70,6 @@ import coil.size.Precision
 import com.example.earthonline.ui.achievements.AchievementUnlockHost
 import com.example.earthonline.ui.achievements.AchievementViewModel
 import com.example.earthonline.ui.components.MoreMenuActions
-import com.example.earthonline.ui.home.AccountingDownloadDialog
 import com.example.earthonline.ui.navigation.AppNavHost
 import com.example.earthonline.ui.navigation.AnimatedNavIcon
 import com.example.earthonline.ui.navigation.NavIconKind
@@ -123,7 +122,6 @@ fun MainScaffold(
     startRoute: String = Screen.Home.route
 ) {
     val navController = rememberNavController()
-    var showAccounting by remember { mutableStateOf(false) }
     val settingsVm: SettingsViewModel = hiltViewModel()
     /* 成就引擎提到框架层：解锁提示要在任意页面都能弹。
        ⚠️ 同一份 VM 必须往下传给成就页（AppNavHost），否则会存在两个引擎实例，
@@ -357,7 +355,12 @@ fun MainScaffold(
                 achVm = achVm,
                 moreActions = MoreMenuActions(
                     onNavigate = { route -> navController.navigate(route) { launchSingleTop = true } },
-                    onAccounting = { showAccounting = true }
+                    // v1.0.6.9：记账 = 应用内账本页（取代原外部 App 下载引导框）
+                    onAccounting = {
+                        navController.navigate(
+                            com.example.earthonline.ui.navigation.Screen.Accounting.route
+                        ) { launchSingleTop = true }
+                    }
                 )
                 )
                 } // v1.0.18：CompositionLocalProvider(LocalCardOpacity) 闭合
@@ -384,9 +387,6 @@ fun MainScaffold(
             }
             // v1.2.1：成就解锁提示（右下角卡片 + 音效），浮在所有页面与导航栏之上
             AchievementUnlockHost(vm = achVm)
-            if (showAccounting) {
-                AccountingDownloadDialog(onDismiss = { showAccounting = false })
-            }
         }
     }
     }

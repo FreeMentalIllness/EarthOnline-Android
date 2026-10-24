@@ -53,6 +53,18 @@ sealed class Screen(val route: String, val label: String) {
      * 会出现「从主页进过一次新增后，再点底部任务 Tab 又弹出对话框」。
      */
     object NewTask : Screen("new_task", "新建任务")
+
+    /**
+     * v1.0.6.9：速览「Todo」入口：复用任务页（Todo Tab）+ 直接弹出新增对话框。
+     * 独立路由理由同 [NewTask]；与 new_task 分开是为了预选 Todo 分类。
+     */
+    object NewTodo : Screen("new_todo", "新建 Todo")
+
+    /**
+     * v1.0.6.9：记账页（应用内账本）。取代原「外部 App 下载引导」——
+     * 速览「记账」跳到此页并自动弹出金额键盘录入面板（?autoAdd=true）。
+     */
+    object Accounting : Screen("accounting", "记账")
 }
 
 /**

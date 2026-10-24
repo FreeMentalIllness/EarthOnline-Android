@@ -117,7 +117,7 @@ fun SteamLibraryEntry(
 @Composable
 fun SteamLibraryRoute(onBack: () -> Unit) {
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),

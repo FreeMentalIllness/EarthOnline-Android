@@ -164,9 +164,6 @@ fun HomeRoute(
         onFeedLimitChange = vm::setFeedLimit,
         onQuickEntriesChange = vm::setQuickEntries,
         onStackCardsChange = vm::setStackCards,
-        // v1.0.6.8（死命令 #2 速览操作化）：Todo 一键新建 / 记账快捷录入
-        onQuickAddTask = vm::quickAddTask,
-        onQuickAccounting = vm::addQuickAccounting,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -197,9 +194,6 @@ fun HomeScreen(
     onQuickEntriesChange: (Set<String>) -> Unit = {},
     /** v1.0.6.7：主页卡片堆叠区自定义（哪些次要卡片入堆叠，DataStore 持久化） */
     onStackCardsChange: (Set<String>) -> Unit = {},
-    /** v1.0.6.8（死命令 #2 速览操作化）：Todo 一键新建 / 记账快捷录入 */
-    onQuickAddTask: (String) -> Unit = {},
-    onQuickAccounting: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -221,9 +215,6 @@ fun HomeScreen(
     var showQuickEdit by remember { mutableStateOf(false) }
     // v1.0.6.7：卡片堆叠区「自定义」（选择哪些次要卡片入堆叠）
     var showStackEdit by remember { mutableStateOf(false) }
-    // v1.0.6.8（死命令 #2）：速览操作化 —— 记账键盘输入面板 / Todo 新建任务弹窗
-    var showQuickAccounting by remember { mutableStateOf(false) }
-    var showQuickTodo by remember { mutableStateOf(false) }
     // v1.0.6.8：最近动态配置（分类 / 条数 / 添加自定义动态）从 ActsCard 上提到主页层
     var showFeedConfig by remember { mutableStateOf(false) }
     var showAddCustomAct by remember { mutableStateOf(false) }
@@ -285,8 +276,47 @@ fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(UiDimens.Gap)
     ) {
-        // v1.0.6.8（死命令 #3）：卡片堆叠移动到首页最顶部 ——
-        // 今日一签 / 最近动态 / 日程 / 时间轴 / 人生卡片全部收进堆叠区，左右滑动切换、纯展示。
+        item(key = "search", contentType = "search") {
+            HomeSearchBox(
+                query = query,
+                results = results,
+                onQueryChange = onQueryChange,
+                onPickResult = onPickResult,
+                onFocusChange = { searchFocused = it }
+            )
+        }
+
+        item(key = "hero", contentType = "hero") {
+            HeroBanner(
+                state = state,
+                onAvatarClick = { onNavigate("profile") }
+            )
+        }
+
+        // v1.0.3：历年今日 —— 去年今天留下的记录，有内容才出现
+        if (state.throwback.isNotEmpty()) {
+            item(key = "throwback", contentType = "card") {
+                ThrowbackCard(
+                    items = state.throwback,
+                    comeback = state.comeback,
+                    onSeen = onThrowbackSeen
+                )
+            }
+        }
+
+        item(key = "overview", contentType = "overview") {
+            OverviewGrid(
+                state = state,
+                expanded = overviewExpanded,
+                onExpandedChange = { overviewExpanded = it },
+                onNavigate = onNavigate,
+                onAccounting = moreActions.onAccounting,
+                onEditEntries = { showQuickEdit = true }
+            )
+        }
+
+        // v1.0.6.9（死命令）：卡片堆叠移动到「速览」正下方 —— 今日一签 / 最近动态 /
+        // 日程 / 时间轴 / 人生卡片收进堆叠区，左右滑动翻页（相邻卡片边缘露出），纯展示。
         item(key = "stack", contentType = "card") {
             HomeStack(
                 stackCards = state.stackCards,
@@ -331,47 +361,6 @@ fun HomeScreen(
                 onOpenActs = { onNavigate("all_activities") },
                 onOpenCalendar = { onNavigate("tasks") },
                 onCustomize = { showStackEdit = true }
-            )
-        }
-
-        item(key = "search", contentType = "search") {
-            HomeSearchBox(
-                query = query,
-                results = results,
-                onQueryChange = onQueryChange,
-                onPickResult = onPickResult,
-                onFocusChange = { searchFocused = it }
-            )
-        }
-
-        item(key = "hero", contentType = "hero") {
-            HeroBanner(
-                state = state,
-                onAvatarClick = { onNavigate("profile") }
-            )
-        }
-
-        // v1.0.3：历年今日 —— 去年今天留下的记录，有内容才出现
-        if (state.throwback.isNotEmpty()) {
-            item(key = "throwback", contentType = "card") {
-                ThrowbackCard(
-                    items = state.throwback,
-                    comeback = state.comeback,
-                    onSeen = onThrowbackSeen
-                )
-            }
-        }
-
-        item(key = "overview", contentType = "overview") {
-            OverviewGrid(
-                state = state,
-                expanded = overviewExpanded,
-                onExpandedChange = { overviewExpanded = it },
-                onNavigate = onNavigate,
-                onAccounting = moreActions.onAccounting,
-                onQuickAccounting = { showQuickAccounting = true },
-                onQuickTodo = { showQuickTodo = true },
-                onEditEntries = { showQuickEdit = true }
             )
         }
     }
@@ -583,30 +572,6 @@ fun HomeScreen(
                 onConfirm = { title ->
                     onAddCustomActivity(title)
                     showAddCustomAct = false
-                }
-            )
-        }
-
-        // v1.0.6.8（死命令 #2）：速览「记账」→ 快捷记账键盘输入面板（金额数字键盘自动弹出）
-        if (showQuickAccounting) {
-            QuickAccountingDialog(
-                onDismiss = { showQuickAccounting = false },
-                onConfirm = { amount, category, note ->
-                    onQuickAccounting(amount, category, note)
-                    showQuickAccounting = false
-                    Toast.makeText(context, "已记一笔：¥$amount", Toast.LENGTH_SHORT).show()
-                }
-            )
-        }
-
-        // v1.0.6.8（死命令 #2）：速览「Todo」→ 新建任务弹窗（标题聚焦、键盘自动弹出）
-        if (showQuickTodo) {
-            QuickTodoDialog(
-                onDismiss = { showQuickTodo = false },
-                onConfirm = { title ->
-                    onQuickAddTask(title)
-                    showQuickTodo = false
-                    Toast.makeText(context, "已创建任务：$title", Toast.LENGTH_SHORT).show()
                 }
             )
         }
@@ -1107,32 +1072,44 @@ private fun HomeStack(
             }
         }
         Spacer(Modifier.height(8.dp))
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth().height(348.dp),
-            pageSpacing = 10.dp
-        ) { page ->
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                when (pages[page]) {
-                    // 纯展示：点击整卡跳详情（一签按来源类型路由）
-                    "dailydraw" -> {
-                        val draw = dailyDraw
-                        if (draw != null) {
-                            Box(Modifier.clickable { onOpenDraw(draw) }) { DailyDrawCard(item = draw) }
-                        } else {
-                            EmptyHint("今天没有抽到记录，明天再来")
+        // v1.0.6.9（死命令）：真正的卡片堆叠 —— 页宽收窄为「屏宽 - 72dp」+ 左右各 36dp
+        // contentPadding 居中，当前卡片居中、相邻卡片边缘露出（轮播/堆叠观感），
+        // 左右滑动翻页（HorizontalPager 手势），而非点击切换。
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val pageWidth = (maxWidth - 72.dp).coerceAtLeast(200.dp)
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth().height(348.dp),
+                pageSize = androidx.compose.foundation.pager.PageSize.Fixed(pageWidth),
+                pageSpacing = 10.dp,
+                contentPadding = PaddingValues(horizontal = 36.dp)
+            ) { page ->
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    when (pages[page]) {
+                        // 纯展示：点击整卡跳详情（一签按来源类型路由）
+                        "dailydraw" -> {
+                            val draw = dailyDraw
+                            if (draw != null) {
+                                Box(Modifier.clickable { onOpenDraw(draw) }) { DailyDrawCard(item = draw) }
+                            } else {
+                                EmptyHint("今天没有抽到记录，明天再来")
+                            }
                         }
+                        // 纯展示：点击整卡进「全部动态」页
+                        "acts" -> Box(Modifier.clickable(onClick = onOpenActs)) {
+                            ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
+                        }
+                        // 纯展示：点击整卡进任务页
+                        "calendar" -> Box(Modifier.clickable(onClick = onOpenCalendar)) {
+                            CalendarCardPure(tasks = calendarTasks)
+                        }
+                        "timeline" -> timeline()
+                        "life" -> life()
                     }
-                    // 纯展示：点击整卡进「全部动态」页
-                    "acts" -> Box(Modifier.clickable(onClick = onOpenActs)) {
-                        ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
-                    }
-                    // 纯展示：点击整卡进任务页
-                    "calendar" -> Box(Modifier.clickable(onClick = onOpenCalendar)) {
-                        CalendarCardPure(tasks = calendarTasks)
-                    }
-                    "timeline" -> timeline()
-                    "life" -> life()
                 }
             }
         }
@@ -1357,9 +1334,6 @@ private fun OverviewGrid(
     onExpandedChange: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onAccounting: () -> Unit,
-    /** v1.0.6.8（死命令 #2）：速览操作化 —— 记账直接弹键盘输入面板、Todo 直接弹新建任务 */
-    onQuickAccounting: () -> Unit = {},
-    onQuickTodo: () -> Unit = {},
     onEditEntries: () -> Unit = {}
 ) {
     // v1.0.6.7（死命令 #2 入口拆分）：原「任务」拆为「日常」+「Todo」两项，原「背包」拆为
@@ -1427,11 +1401,14 @@ private fun OverviewGrid(
                         tint = entry.tint,
                         modifier = Modifier.weight(1f)
                     ) {
-                        // v1.0.6.8（死命令 #2）：记账 = 唤起键盘输入面板；Todo = 弹出新建任务；
-                        // 其余入口保持原跳转逻辑。
+                        // v1.0.6.9（死命令）：速览 = 先跳对应二级主页面，再自动弹出该功能的操作面板。
+                        // 记账 → 账本页 + 金额键盘；Todo → 任务页 Todo Tab + 新建任务弹窗；
+                        // 日常 → 任务页；笔记 → 直达新建笔记编辑页；其余保持原跳转。
                         when (entry.id) {
-                            "accounting" -> onQuickAccounting()
-                            "todo" -> onQuickTodo()
+                            "accounting" -> onNavigate("accounting?autoAdd=true")
+                            "todo" -> onNavigate("new_todo")
+                            "daily" -> onNavigate("tasks")
+                            "notes" -> onNavigate("note_editor?id=&folder=")
                             else -> if (entry.route != null) onNavigate(entry.route) else onAccounting()
                         }
                     }
@@ -1663,173 +1640,6 @@ private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -
         },
         dismissButton = { TextButton(onDismiss) { Text("取消") } }
     )
-}
-
-/**
- * v1.0.6.8（死命令 #2）：速览「记账」快捷输入面板。
- * 点击速览「记账」瓦片直接弹出本面板（非页面跳转）：金额输入框自动聚焦并弹出数字键盘，
- * 分类快选 chips + 可选备注；确认后以自定义动态落入动态流（星标条目，可查可删）。
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun QuickAccountingDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (amount: String, category: String, note: String) -> Unit
-) {
-    var amount by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("餐饮") }
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-    // 面板弹出即聚焦金额框并唤起数字键盘（用户要的就是「直接弹出键盘输入面板」）
-    LaunchedEffect(Unit) {
-        runCatching { focusRequester.requestFocus() }
-        keyboardController?.show()
-    }
-    val categories = listOf("餐饮", "交通", "购物", "居住", "娱乐", "其他")
-    GlassDialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("快速记账", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            GlassTextField(
-                value = amount,
-                onValueChange = { v -> amount = v.filter { it.isDigit() || it == '.' }.take(12) },
-                label = "金额（元）",
-                placeholder = "0.00",
-                singleLine = true,
-                leadingIcon = {
-                    Text(
-                        "¥",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = AmberPrimary
-                    )
-                },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-            )
-            Text("分类", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            // v1.0.6.8（排版修复）：FlowRow 自动换行，杜绝定宽 Row 挤压标签成竖排
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                categories.forEach { c ->
-                    FilterChip(
-                        selected = category == c,
-                        onClick = { category = c },
-                        label = { Text(c, style = MaterialTheme.typography.labelSmall) }
-                    )
-                }
-            }
-            GlassTextField(
-                value = note,
-                onValueChange = { note = it.take(40) },
-                label = "备注（可选）",
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "记账将记入「最近动态」（星标条目），可在全部动态页查看与删除。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("取消", maxLines = 1) }
-                Button(
-                    onClick = { onConfirm(amount, category, note) },
-                    enabled = amount.isNotBlank(),
-                    modifier = Modifier.weight(1.25f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AmberPrimary,
-                        contentColor = OnAmber
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("记一笔", fontWeight = FontWeight.SemiBold, maxLines = 1) }
-            }
-        }
-    }
-}
-
-/**
- * v1.0.6.8（死命令 #2）：速览「Todo」新建任务弹窗。
- * 点击速览「Todo」瓦片直接弹出（非页面跳转）：标题聚焦、键盘自动弹出，确认即建。
- */
-@Composable
-private fun QuickTodoDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (title: String) -> Unit
-) {
-    var title by remember { mutableStateOf("") }
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-    LaunchedEffect(Unit) {
-        runCatching { focusRequester.requestFocus() }
-        keyboardController?.show()
-    }
-    GlassDialog(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("新建 Todo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            GlassTextField(
-                value = title,
-                onValueChange = { title = it.take(60) },
-                label = "任务内容",
-                placeholder = "例如：给星球浇一次水",
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = { if (title.isNotBlank()) onConfirm(title.trim()) }
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-            )
-            Text(
-                "任务将创建在任务页「Todo」分类，可随时去任务页补充截止日期与备注。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("取消", maxLines = 1) }
-                Button(
-                    onClick = { onConfirm(title.trim()) },
-                    enabled = title.isNotBlank(),
-                    modifier = Modifier.weight(1.25f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AmberPrimary,
-                        contentColor = OnAmber
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("创建", fontWeight = FontWeight.SemiBold, maxLines = 1) }
-            }
-        }
-    }
 }
 
 /**
