@@ -120,7 +120,7 @@ fun BackpackScreen(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = {
             TopAppBar(
                 title = { Text("背包") },

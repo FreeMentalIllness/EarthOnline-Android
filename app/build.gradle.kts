@@ -96,7 +96,23 @@ android {
         //    勾选加删除线；回车拆行、行首退格合并；Markdown 待办行存取跨端兼容。
         // ⑤ 任务时间选择器增加钟表盘（Material3 TimePicker analog dial），时间追加进到期日 HH:mm。
         // ⑥ 父子任务层级缩进优化：INDENT 18→26dp + 引导线加深 + 祖先列淡色「车道」底色。
-        versionCode = 57
+        // versionCode 58 = v1.0.6（深度测试反馈修复批）：
+        // ① 全局去壁纸化：GlassSurface 遮罩 Alpha 0.34~0.66 → 0.72~0.88（卡片不再直接透出
+        //    复杂壁纸，文字任何壁纸下清晰）；全部二级页 Scaffold 加 0.96 高透明度表面背板
+        //    （地图页除外，承载高德视图须透明）。
+        // ② 全局对比度修复：二级/三级文字加深（#7A7268→#6A6258 / #B0A89C→#8D8478）；
+        //    日历非高亮日期文字加深、选中日期暖棕实心 + 3dp 主题色描边；任务页 TabRow
+        //    加深容器 + 未选中 Tab 1.5dp 主题色描边胶囊。
+        // ③ 交互解耦：卡片堆叠移至首页 LazyColumn 最顶部；今日一签 / 最近动态 / 日程整合进
+        //    堆叠卡片（HorizontalPager 纯展示，剥离编辑按钮，点击整卡跳详情页）；
+        //    速览「记账」→ 快捷记账键盘输入面板（金额数字键盘自动弹出），「Todo」→ 新建任务弹窗。
+        // ④ 笔记页回退：NoteEditorScreen 恢复至 0a3c86f（v1.0.6.6 标准 Checkbox 清单稳定版），
+        //    移除行式编辑器引入的打勾 Bug。
+        // ⑤ 排版修复：自定义最近动态弹窗「记录」标签竖排 / 「全部」等标签挤压 → FlowRow 换行；
+        //    「+ 添加自」截断 → 补全「+ 添加自定义」并加大按钮容器宽度。
+        // ⑥ 悬浮「+」滚动监听：LazyColumn 向下滑动且 isScrollInProgress 时 AnimatedVisibility
+        //    隐藏，向上滑 / 停止恢复，不再遮挡列表。
+        versionCode = 58
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

@@ -75,7 +75,7 @@ fun NotesScreen(
     var toDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = {
             TopAppBar(
                 title = { Text("笔记") },

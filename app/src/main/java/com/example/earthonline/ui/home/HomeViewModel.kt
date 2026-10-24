@@ -204,8 +204,25 @@ internal fun migrateQuickEntries(src: Set<String>): Set<String> {
     return out
 }
 
-/** v1.0.6.7（死命令 #3）：主页卡片堆叠区默认包含的次要卡片（timeline=时间轴 / life=人生卡片） */
-internal val DEFAULT_STACK_CARDS = setOf("timeline", "life")
+/**
+ * v1.0.6.8（死命令 #3 堆叠扩容）：主页卡片堆叠区默认包含的卡片。
+ * 今日一签（dailydraw）/ 最近动态（acts）/ 日程（calendar）整合进顶部堆叠，
+ * 与时间轴（timeline）/ 人生卡片（life）一起左右滑动切换，全部纯展示。
+ */
+internal val DEFAULT_STACK_CARDS = setOf("dailydraw", "acts", "calendar", "timeline", "life")
+
+/** v1.0.6.8：旧版堆叠键迁移 —— 老用户持久化集只有 timeline/life 时补入三个新堆叠页，
+ *  防止升级后首页只剩两页、看不到一签/动态/日程。已知键原样保留。 */
+internal fun migrateStackCards(src: Set<String>): Set<String> {
+    val known = setOf("dailydraw", "acts", "calendar", "timeline", "life")
+    val out = src.filter { it in known }.toMutableSet()
+    if (out.isEmpty()) return DEFAULT_STACK_CARDS
+    // 旧集（仅 timeline/life 子集）→ 补齐新三页
+    if (out.none { it in setOf("dailydraw", "acts", "calendar") }) {
+        out += setOf("dailydraw", "acts", "calendar")
+    }
+    return out
+}
 
 private data class Parts(
     val profile: ProfileEntity?,
@@ -339,7 +356,9 @@ class HomeViewModel @Inject constructor(
     private val stackCardsFlow: Flow<Set<String>> = settingsDs.homeStackCardsJson.map { txt ->
         if (txt.isBlank()) DEFAULT_STACK_CARDS
         else runCatching { json.decodeFromString(SetSerializer(String.serializer()), txt) }
-            .getOrNull()?.takeIf { it.isNotEmpty() } ?: DEFAULT_STACK_CARDS
+            .getOrNull()?.takeIf { it.isNotEmpty() }
+            ?.let { migrateStackCards(it) }
+            ?: DEFAULT_STACK_CARDS
     }
 
     /** v1.0.3：自定义称号 */
@@ -581,6 +600,55 @@ class HomeViewModel @Inject constructor(
 
     fun deleteMemo(id: String) {
         viewModelScope.launch { memoRepo.delete(id) }
+    }
+
+    /**
+     * v1.0.6.8（死命令 #2 速览操作化）：首页速览「Todo」一键新建任务。
+     * 不走任务页、不打开完整编辑弹窗 —— 只问一个标题，回车即建（category=todo）。
+     */
+    fun quickAddTask(title: String) {
+        val t = title.trim()
+        if (t.isBlank()) return
+        viewModelScope.launch {
+            taskRepo.insert(
+                TaskEntity(
+                    id = uid("task"),
+                    category = "todo",
+                    title = t,
+                    status = "planning",
+                    createdAt = todayStr(),
+                    lastModified = todayStr()
+                )
+            )
+            activityRepo.add(
+                ActivityEntity(id = uid("act"), time = nowIso(), kind = "task", title = "创建了任务：$t")
+            )
+        }
+    }
+
+    /**
+     * v1.0.6.8（死命令 #2 速览操作化）：首页速览「记账」快捷记账。
+     * 应用内不设账本数据库，快捷记账以自定义动态（星标条目）落入动态流，
+     * 在「最近动态 / 全部动态」中可查可删，格式：`记账 ¥12.5 · 餐饮 · 备注`。
+     */
+    fun addQuickAccounting(amount: String, category: String, note: String) {
+        val a = amount.trim()
+        if (a.isBlank()) return
+        val parts = buildList {
+            add("记账 ¥$a")
+            if (category.isNotBlank()) add(category)
+            if (note.isNotBlank()) add(note.trim())
+        }
+        viewModelScope.launch {
+            activityRepo.add(
+                ActivityEntity(
+                    id = uid("act"),
+                    time = nowIso(),
+                    kind = "custom",
+                    title = parts.joinToString(" · ").take(120)
+                )
+            )
+        }
     }
 
     private fun Parts.toUi(): HomeUiState {

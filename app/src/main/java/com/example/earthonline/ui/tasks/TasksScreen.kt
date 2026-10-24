@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -205,7 +206,7 @@ fun TasksScreen(
 
     Box(Modifier.fillMaxSize()) {
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = {
             TopAppBar(
                 title = { Text("任务") },
@@ -226,9 +227,28 @@ fun TasksScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // 顶层 Tab：日常 / Todo
-            TabRow(selectedTabIndex = if (topTab == "daily") 0 else 1) {
-                Tab(selected = topTab == "daily", onClick = { topTab = "daily" }, text = { Text("日常") })
-                Tab(selected = topTab == "todo", onClick = { topTab = "todo" }, text = { Text("Todo") })
+            // v1.0.6.8（死命令 #2）：TabRow 加深容器底色 + 分割线；未选中 Tab 加 1.5dp
+            // 主题色描边胶囊，解决「未选中 Tab 看不见、不知道能点」的问题。
+            TabRow(
+                selectedTabIndex = if (topTab == "daily") 0 else 1,
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                divider = {
+                    HorizontalDivider(
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                }
+            ) {
+                Tab(
+                    selected = topTab == "daily",
+                    onClick = { topTab = "daily" },
+                    text = { TasksTabLabel("日常", topTab == "daily") }
+                )
+                Tab(
+                    selected = topTab == "todo",
+                    onClick = { topTab = "todo" },
+                    text = { TasksTabLabel("Todo", topTab == "todo") }
+                )
             }
             // 工具行：概览 + 视图开关 + 全部展开 / 折叠
             // v1.0.5 QA 修复：两个区块拆开判定。
@@ -571,6 +591,30 @@ fun TasksScreen(
                 editing = null
             },
             onDelete = { vm.deleteCascade(t.id); editing = null }
+        )
+    }
+}
+
+/**
+ * v1.0.6.8（死命令 #2）：任务页顶层 Tab 文字。
+ * 未选中态外包 1.5dp 主题色描边胶囊（提高边框线宽 + 加深颜色），选中态实心琥珀淡底，
+ * 让两个 Tab 在任何壁纸 / 背景下都清晰可辨。
+ */
+@Composable
+private fun TasksTabLabel(text: String, selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        color = if (selected) AmberPrimary.copy(alpha = 0.14f) else Color.Transparent,
+        contentColor = if (selected) AmberPrimary else scheme.onSurface,
+        shape = RoundedCornerShape(8.dp),
+        border = if (selected) null else BorderStroke(1.5.dp, AmberPrimary.copy(alpha = 0.85f)),
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
         )
     }
 }

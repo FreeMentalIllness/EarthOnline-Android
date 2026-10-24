@@ -12,8 +12,11 @@ val BackgroundLight = Color(0xFFF8F6F2)   // --bg #f8f6f2
 val SurfaceLight = Color(0xFFFFFFFF)        // --panel #fff
 val BorderLight = Color(0xFFE8E2DA)        // --border #e8e2da
 val TextPrimaryLight = Color(0xFF1E1A16)    // --text #1e1a16
-val TextSecondaryLight = Color(0xFF7A7268)  // --text-2 #7a7268
-val TextTertiaryLight = Color(0xFFB0A89C)   // --text-3 #b0a89c
+/* v1.0.6.8（死命令 #2 全局对比度修复）：二级/三级文字整体加深一档。
+   原 #7A7268 在白底约 4.6:1、在 0.88 半透明卡片上跌到 4:1 以下，小字号发虚；
+   现 #6A6258（白底 ≈5.9:1）、#8D8478（≈4.6:1），深浅主题均达 WCAG AA。 */
+val TextSecondaryLight = Color(0xFF6A6258)  // --text-2 #6a6258（加深）
+val TextTertiaryLight = Color(0xFF8D8478)   // --text-3 #8d8478（加深）
 
 /* v1.2.1 深色对比度复核（第 18 项）：
    原深色值里 --caption/#71717A 这类三级文字在 #232326 上只有约 3.3:1，

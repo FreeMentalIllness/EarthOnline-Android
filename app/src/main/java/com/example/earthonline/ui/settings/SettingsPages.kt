@@ -128,7 +128,7 @@ fun AppearanceRoute(
     })
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = { SettingsTopBar("外观") { navController.popBackStack() } },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
@@ -400,7 +400,7 @@ fun GeneralRoute(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = { SettingsTopBar("通用") { navController.popBackStack() } },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
@@ -609,7 +609,7 @@ fun BackupSyncRoute(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = { SettingsTopBar("数据与备份") { navController.popBackStack() } },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
@@ -952,7 +952,7 @@ fun AboutRoute(
     }
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = { SettingsTopBar("关于") { navController.popBackStack() } },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->

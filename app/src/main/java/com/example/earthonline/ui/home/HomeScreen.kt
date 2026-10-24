@@ -23,6 +23,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -78,6 +80,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -161,6 +164,9 @@ fun HomeRoute(
         onFeedLimitChange = vm::setFeedLimit,
         onQuickEntriesChange = vm::setQuickEntries,
         onStackCardsChange = vm::setStackCards,
+        // v1.0.6.8（死命令 #2 速览操作化）：Todo 一键新建 / 记账快捷录入
+        onQuickAddTask = vm::quickAddTask,
+        onQuickAccounting = vm::addQuickAccounting,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -174,7 +180,7 @@ fun HomeRoute(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -191,6 +197,9 @@ fun HomeScreen(
     onQuickEntriesChange: (Set<String>) -> Unit = {},
     /** v1.0.6.7：主页卡片堆叠区自定义（哪些次要卡片入堆叠，DataStore 持久化） */
     onStackCardsChange: (Set<String>) -> Unit = {},
+    /** v1.0.6.8（死命令 #2 速览操作化）：Todo 一键新建 / 记账快捷录入 */
+    onQuickAddTask: (String) -> Unit = {},
+    onQuickAccounting: (String, String, String) -> Unit = { _, _, _ -> },
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -212,6 +221,12 @@ fun HomeScreen(
     var showQuickEdit by remember { mutableStateOf(false) }
     // v1.0.6.7：卡片堆叠区「自定义」（选择哪些次要卡片入堆叠）
     var showStackEdit by remember { mutableStateOf(false) }
+    // v1.0.6.8（死命令 #2）：速览操作化 —— 记账键盘输入面板 / Todo 新建任务弹窗
+    var showQuickAccounting by remember { mutableStateOf(false) }
+    var showQuickTodo by remember { mutableStateOf(false) }
+    // v1.0.6.8：最近动态配置（分类 / 条数 / 添加自定义动态）从 ActsCard 上提到主页层
+    var showFeedConfig by remember { mutableStateOf(false) }
+    var showAddCustomAct by remember { mutableStateOf(false) }
     // v1.0.6：速览「展开 / 收起」状态上提到主页层级 —— 只有用户主动点「收起」或触发
     //         特定页面跳转才折叠；点击其它区域 / 其它操作不会导致展开态被重组复位收起。
     var overviewExpanded by remember { mutableStateOf(false) }
@@ -219,6 +234,22 @@ fun HomeScreen(
     var showAiHub by remember { mutableStateOf(false) }
     // v1.0.6 封板：搜索框是否聚焦 —— 聚焦时隐藏 AI 悬浮按钮（键盘顶起后它会压在速览瓦片上）
     var searchFocused by remember { mutableStateOf(false) }
+    // v1.0.6.8（死命令 #4）：悬浮「+」滚动监听 —— 向下滑动且 isScrollInProgress 时隐藏，
+    // 向上滑动或停止时重新显示，防止遮挡列表内容。声明在外层 Box 作用域（FAB 的可见性归属）。
+    val homeListState = rememberLazyListState()
+    var lastFirst by remember { mutableStateOf(0 to 0) }
+    var scrollingDown by remember { mutableStateOf(false) }
+    LaunchedEffect(homeListState) {
+        snapshotFlow { homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset }
+            .collect { (i, o) ->
+                if (homeListState.isScrollInProgress) {
+                    val (li, lo) = lastFirst
+                    val down = i > li || (i == li && o > lo + 6)
+                    if (down != scrollingDown) scrollingDown = down
+                }
+                lastFirst = i to o
+            }
+    }
 
     Box(Modifier.fillMaxSize()) {
         // v1.0.18（死命令 3）：顶部整块全幅出血 —— Column 包裹「实心顶块 + 内容列表」。
@@ -239,7 +270,7 @@ fun HomeScreen(
                 )
             }
         }
-    val homeListState = rememberLazyListState()
+    // homeListState 声明在 HomeScreen 外层作用域（FAB 滚动监听共用），这里只挂滑动模糊追踪
     TrackScrollBlur(homeListState)
     LazyColumn(
         state = homeListState,
@@ -254,6 +285,55 @@ fun HomeScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(UiDimens.Gap)
     ) {
+        // v1.0.6.8（死命令 #3）：卡片堆叠移动到首页最顶部 ——
+        // 今日一签 / 最近动态 / 日程 / 时间轴 / 人生卡片全部收进堆叠区，左右滑动切换、纯展示。
+        item(key = "stack", contentType = "card") {
+            HomeStack(
+                stackCards = state.stackCards,
+                dailyDraw = state.dailyDraw,
+                acts = state.allActs,
+                feedKinds = state.feedKinds,
+                feedLimit = state.feedLimit,
+                calendarTasks = state.calendarTasks,
+                timeline = {
+                    TimelineCard(
+                        items = state.timeline,
+                        customIds = state.customTimeline.map { it.key }.toSet(),
+                        streakStage = state.streakStage,
+                        streakDays = state.streakDays,
+                        onAdd = { showAddTimeline = true },
+                        onDelete = onDeleteTimelineEvent,
+                        pureDisplay = true
+                    )
+                },
+                life = {
+                    LifeCard(
+                        name = state.displayName,
+                        level = state.life.age,
+                        title = state.customTitle,
+                        unlockedAch = state.unlockedAch,
+                        locationCount = state.locationCount,
+                        doneRatio = state.doneRatio
+                    )
+                },
+                onOpenDraw = { draw ->
+                    // 一签来源路由：memo→笔记 / ach→成就 / task→任务 / loc→地图
+                    onNavigate(
+                        when (draw.kind) {
+                            "memo" -> "notes"
+                            "ach" -> "achievements"
+                            "task" -> "tasks"
+                            "loc" -> "map"
+                            else -> "notes"
+                        }
+                    )
+                },
+                onOpenActs = { onNavigate("all_activities") },
+                onOpenCalendar = { onNavigate("tasks") },
+                onCustomize = { showStackEdit = true }
+            )
+        }
+
         item(key = "search", contentType = "search") {
             HomeSearchBox(
                 query = query,
@@ -282,13 +362,6 @@ fun HomeScreen(
             }
         }
 
-        // v1.0.3：今日一签 —— 每天从过去随机展示一条记录
-        state.dailyDraw?.let { draw ->
-            item(key = "dailydraw", contentType = "card") {
-                DailyDrawCard(item = draw)
-            }
-        }
-
         item(key = "overview", contentType = "overview") {
             OverviewGrid(
                 state = state,
@@ -296,58 +369,9 @@ fun HomeScreen(
                 onExpandedChange = { overviewExpanded = it },
                 onNavigate = onNavigate,
                 onAccounting = moreActions.onAccounting,
+                onQuickAccounting = { showQuickAccounting = true },
+                onQuickTodo = { showQuickTodo = true },
                 onEditEntries = { showQuickEdit = true }
-            )
-        }
-
-        // v1.0.6.6（真机反馈 #6）：速览与最近动态之间的**轻量日历卡** ——
-        // 一眼看到这个月哪天有安排，并直接列出今天的任务 / 日程。
-        item(key = "calendar", contentType = "card") {
-            HomeCalendarCard(
-                tasks = state.calendarTasks,
-                onOpenTasks = { onNavigate("tasks") }
-            )
-        }
-
-        item(key = "acts", contentType = "card") {
-            ActsCard(
-                allActs = state.allActs,
-                feedKinds = state.feedKinds,
-                feedLimit = state.feedLimit,
-                onFeedKindsChange = onFeedKindsChange,
-                onFeedLimitChange = onFeedLimitChange,
-                onAddCustom = onAddCustomActivity,
-                onOpenAll = { onNavigate("all_activities") }
-            )
-        }
-
-        // v1.0.6.7（死命令 #3）：次要卡片（时间轴 / 人生卡片）收入「卡片堆叠」，
-        // 左右滑动切换、可自定义入堆叠的卡片。
-        item(key = "stack", contentType = "card") {
-            HomeStack(
-                showTimeline = "timeline" in state.stackCards,
-                showLife = "life" in state.stackCards,
-                timeline = {
-                    TimelineCard(
-                        items = state.timeline,
-                        customIds = state.customTimeline.map { it.key }.toSet(),
-                        streakStage = state.streakStage,
-                        streakDays = state.streakDays,
-                        onAdd = { showAddTimeline = true },
-                        onDelete = onDeleteTimelineEvent
-                    )
-                },
-                life = {
-                    LifeCard(
-                        name = state.displayName,
-                        level = state.life.age,
-                        title = state.customTitle,
-                        unlockedAch = state.unlockedAch,
-                        locationCount = state.locationCount,
-                        doneRatio = state.doneRatio
-                    )
-                },
-                onCustomize = { showStackEdit = true }
             )
         }
     }
@@ -356,13 +380,15 @@ fun HomeScreen(
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
         // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp）；
         // v1.0.20：键盘让位由 MainScaffold 统一处理，这里不再自带 imePadding。
+        // v1.0.6.8（死命令 #4）：向下滚动时淡出隐藏，向上滚动 / 停止时恢复，不遮挡列表。
+        val hideFab = homeListState.isScrollInProgress && scrollingDown
         AnimatedVisibility(
-            visible = !searchFocused,
+            visible = !searchFocused && !hideFab,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 18.dp, bottom = 96.dp),
-            enter = fadeIn(),
-            exit = fadeOut()
+            enter = fadeIn(animationSpec = tween(180)),
+            exit = fadeOut(animationSpec = tween(160))
         ) {
             Box(
                 Modifier
@@ -427,11 +453,12 @@ fun HomeScreen(
             }
         }
 
-        // v1.0.6.7（死命令 #3）：卡片堆叠自定义 —— 选择哪些次要卡片放入堆叠区
+        // v1.0.6.8（死命令 #3）：堆叠与动态设置 —— 上段勾选入堆叠卡片，下段最近动态配置
+        // （原 ActsCard 内「自定义」面板上提到此，堆叠内动态卡已纯展示化）。
         if (showStackEdit) {
             GlassDialog(onDismissRequest = { showStackEdit = false }) {
                 Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("卡片堆叠", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -440,7 +467,13 @@ fun HomeScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    listOf("timeline" to "时间轴", "life" to "人生卡片").forEach { (id, label) ->
+                    listOf(
+                        "dailydraw" to "今日一签",
+                        "acts" to "最近动态",
+                        "calendar" to "日程",
+                        "timeline" to "时间轴",
+                        "life" to "人生卡片"
+                    ).forEach { (id, label) ->
                         val checked = id in state.stackCards
                         Row(
                             Modifier.fillMaxWidth(),
@@ -457,11 +490,125 @@ fun HomeScreen(
                             Text(label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // —— 最近动态配置（原 ActsCard 自定义面板） ——
+                    Text("自定义最近动态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    Text("要展示的分类", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    // v1.0.6.8（死命令 #3 排版修复）：FlowRow 换行 —— 旧版定宽 Row 把
+                    // 「记录」等标签挤压成竖排文字，现按内容宽度自动换行，绝不再挤压。
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("task" to "任务", "ach" to "成就", "item" to "物品", "memo" to "记录")
+                            .forEach { (kind, label) ->
+                                val selected = kind in state.feedKinds
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        val next = if (selected) state.feedKinds - kind else state.feedKinds + kind
+                                        // 至少保留一个分类，避免「全部隐藏」死局
+                                        if (next.isNotEmpty()) onFeedKindsChange(next)
+                                    },
+                                    label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                    }
+                    Text(
+                        "「全部」标签只显示勾选的分类；自定义动态（星标）始终显示。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text("最多显示条数", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(5 to "5 条", 10 to "10 条", 20 to "20 条", 0 to "全部").forEach { (n, label) ->
+                            FilterChip(
+                                selected = state.feedLimit == n,
+                                onClick = { onFeedLimitChange(n) },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+
+                    // 3) 添加自定义动态 + 完整列表入口（v1.0.6.8：按钮文案补全为「+ 添加自定义」，
+                    //    主按钮权重加大 + 不截断，根除旧版「+ 添加自」文字截断问题）
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { showStackEdit = false; showAddCustomAct = true },
+                            modifier = Modifier.weight(1.25f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AmberPrimary,
+                                contentColor = OnAmber
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("+ 添加自定义", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                        OutlinedButton(
+                            onClick = { showStackEdit = false; onNavigate("all_activities") },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = AmberPrimary
+                            ),
+                            border = BorderStroke(1.5.dp, AmberPrimary),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("查看全部", maxLines = 1)
+                        }
+                    }
+
                     TextButton(onClick = { showStackEdit = false }, modifier = Modifier.fillMaxWidth()) {
                         Text("完成")
                     }
                 }
             }
+        }
+
+        // v1.0.6.8：添加自定义动态对话框（从堆叠设置面板进入）
+        if (showAddCustomAct) {
+            AddCustomActivityDialog(
+                onDismiss = { showAddCustomAct = false },
+                onConfirm = { title ->
+                    onAddCustomActivity(title)
+                    showAddCustomAct = false
+                }
+            )
+        }
+
+        // v1.0.6.8（死命令 #2）：速览「记账」→ 快捷记账键盘输入面板（金额数字键盘自动弹出）
+        if (showQuickAccounting) {
+            QuickAccountingDialog(
+                onDismiss = { showQuickAccounting = false },
+                onConfirm = { amount, category, note ->
+                    onQuickAccounting(amount, category, note)
+                    showQuickAccounting = false
+                    Toast.makeText(context, "已记一笔：¥$amount", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+
+        // v1.0.6.8（死命令 #2）：速览「Todo」→ 新建任务弹窗（标题聚焦、键盘自动弹出）
+        if (showQuickTodo) {
+            QuickTodoDialog(
+                onDismiss = { showQuickTodo = false },
+                onConfirm = { title ->
+                    onQuickAddTask(title)
+                    showQuickTodo = false
+                    Toast.makeText(context, "已创建任务：$title", Toast.LENGTH_SHORT).show()
+                }
+            )
         }
 
         // v1.0.4：升级庆祝浮层 —— 等级（周岁）跨档时弹一次，播完落档
@@ -895,223 +1042,30 @@ private fun AvatarWithBadge(
 }
 
 /**
- * v1.0.6.6（真机反馈 #6）：**主页轻量日历卡**。
- *
- * 定位：不是完整的日历页，而是「这个月哪天有安排 + 今天要做什么」的一屏速览 ——
- *  - 上半：本月迷你月历（周一开头），有任务 / 日程的日期打琥珀圆点，今天实心高亮；
- *  - 下半：当天任务清单（最多 3 条，超出折叠为「还有 N 项」），整卡可跳任务页；
- *  - 没有安排时给诚实空状态，绝不伪造"今天很充实"。
- *
- * 数据口径：日程 = 带到期日（dueDate，YYYY-MM-DD）且未完成的任务（ViewModel 已过滤）。
- */
-@Composable
-private fun HomeCalendarCard(
-    tasks: List<TaskEntity>,
-    onOpenTasks: () -> Unit
-) {
-    var monthOffset by remember { mutableStateOf(0) }
-    val base = remember(monthOffset) {
-        java.util.Calendar.getInstance().apply {
-            add(java.util.Calendar.MONTH, monthOffset)
-        }
-    }
-    val year = base.get(java.util.Calendar.YEAR)
-    val month = base.get(java.util.Calendar.MONTH)
-
-    /** 有安排的日期集合（YYYY-MM-DD；dueDate 可能带 " HH:mm" 时间后缀，取前 10 位日期） */
-    val busyDays = remember(tasks) {
-        tasks.mapNotNull { it.dueDate?.take(10)?.takeIf { d -> d.isNotBlank() } }.toSet()
-    }
-    val todayKey = remember {
-        val c = java.util.Calendar.getInstance()
-        String.format(
-            java.util.Locale.US, "%04d-%02d-%02d",
-            c.get(java.util.Calendar.YEAR),
-            c.get(java.util.Calendar.MONTH) + 1,
-            c.get(java.util.Calendar.DAY_OF_MONTH)
-        )
-    }
-    // v1.0.6.6（死命令 #5）：日历卡支持点击任意日期，选中后高亮并刷新下方当天任务。
-    var selectedKey by remember { mutableStateOf(todayKey) }
-    val selectedList = remember(tasks, selectedKey) { tasks.filter { it.dueDate?.take(10) == selectedKey } }
-
-    val first = remember(year, month) {
-        java.util.Calendar.getInstance().apply { set(year, month, 1) }
-    }
-    val daysInMonth = base.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
-    // 周一开头：Calendar.MONDAY=2 → 0
-    val firstDow = (first.get(java.util.Calendar.DAY_OF_WEEK) - java.util.Calendar.MONDAY + 7) % 7
-    val rows = (firstDow + daysInMonth + 6) / 7
-
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad)) {
-            SectionHeader(
-                text = "日程",
-                icon = Icons.Rounded.CalendarMonth,
-                chipColor = ModuleTints.Tasks
-            )
-            Spacer(Modifier.height(10.dp))
-
-            /* —— 月份切换行 —— */
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { monthOffset -= 1 }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Rounded.ChevronLeft, contentDescription = "上个月", modifier = Modifier.size(18.dp))
-                }
-                Text(
-                    "${year}年 ${month + 1}月",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
-                IconButton(onClick = { monthOffset += 1 }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Rounded.ChevronRight, contentDescription = "下个月", modifier = Modifier.size(18.dp))
-                }
-            }
-
-            /* —— 星期表头（周一开头） —— */
-            Row(Modifier.fillMaxWidth()) {
-                listOf("一", "二", "三", "四", "五", "六", "日").forEach { w ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        Text(
-                            w,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-
-            /* —— 日期网格：有安排打点、今天实心高亮 —— */
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                for (r in 0 until rows) {
-                    Row(Modifier.fillMaxWidth()) {
-                        for (c in 0..6) {
-                            val idx = r * 7 + c - firstDow
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                                if (idx in 0 until daysInMonth) {
-                                    val key = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, idx + 1)
-                                    val isToday = key == todayKey
-                                    val isSelected = key == selectedKey
-                                    val busy = key in busyDays
-                                    Box(
-                                        modifier = Modifier
-                                            .size(30.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                when {
-                                                    isSelected -> AmberPrimary
-                                                    isToday -> AmberPrimary
-                                                    busy -> AmberPrimary.copy(alpha = 0.14f)
-                                                    else -> Color.Transparent
-                                                }
-                                            )
-                                            .then(
-                                                if (isSelected) Modifier.border(
-                                                    2.5.dp, MaterialTheme.colorScheme.onBackground, CircleShape
-                                                ) else Modifier
-                                            )
-                                            .clickable { selectedKey = key },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            "${idx + 1}",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = when {
-                                                isSelected || isToday -> Color.White
-                                                busy -> AmberPrimary
-                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                            fontWeight = if (isSelected || isToday || busy) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant,
-                modifier = Modifier.padding(vertical = 10.dp)
-            )
-
-            /* —— 选中日期的安排（死命令 #5：随日历选中日期刷新） —— */
-            val selM = selectedKey.substring(5, 7).toInt()
-            val selD = selectedKey.substring(8, 10).toInt()
-            Text(
-                if (selectedKey == todayKey) "今天（${selM}月${selD}日）" else "${selM}月${selD}日",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(6.dp))
-            if (selectedList.isEmpty()) {
-                Text(
-                    if (selectedKey == todayKey) "今天没有安排，安心过一天。" else "这一天没有安排。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                selectedList.take(3).forEach { t ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Rounded.RadioButtonUnchecked,
-                            contentDescription = null,
-                            tint = AmberPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            t.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                if (selectedList.size > 3) {
-                    Text(
-                        "还有 ${selectedList.size - 3} 项…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onOpenTasks, modifier = Modifier.bouncyPress()) {
-                Text("查看全部任务")
-            }
-        }
-    }
-}
-
-/**
- * v1.0.6.7（死命令 #3）：主页「卡片堆叠」—— 把次要卡片（时间轴 / 人生卡片）收进一个堆叠区，
- * 左右滑动（HorizontalPager）切换，页码指示点 + 右上角自定义入口；每页内容可纵向滚动，
- * 长卡片不溢出。用户可自定义把哪些次要卡片放入堆叠区（DataStore 持久化）。
+ * v1.0.6.8（死命令 #3 重构）：主页「卡片堆叠」—— 置顶 + 纯展示化。
+ * 今日一签 / 最近动态 / 日程 / 时间轴 / 人生卡片收进同一堆叠区，HorizontalPager
+ * 左右滑动切换 + 页码指示点 + 右上角设置（堆叠卡片勾选 + 最近动态配置）。
+ * **堆叠内所有卡片仅做纯展示**：剥离一切编辑与按钮操作，点击整卡跳转到对应详情页。
+ * 用户可自定义把哪些卡片放入堆叠区（DataStore 持久化）。
  */
 @Composable
 private fun HomeStack(
-    showTimeline: Boolean,
-    showLife: Boolean,
+    stackCards: Set<String>,
+    dailyDraw: ThrowbackItem?,
+    acts: List<ActivityEntity>,
+    feedKinds: Set<String>,
+    feedLimit: Int,
+    calendarTasks: List<TaskEntity>,
     timeline: @Composable () -> Unit,
     life: @Composable () -> Unit,
+    onOpenDraw: (ThrowbackItem) -> Unit,
+    onOpenActs: () -> Unit,
+    onOpenCalendar: () -> Unit,
     onCustomize: () -> Unit
 ) {
-    val pages = remember(showTimeline, showLife) {
-        buildList {
-            if (showTimeline) add("timeline")
-            if (showLife) add("life")
-        }
+    // 固定展示顺序：一签 → 动态 → 日程 → 时间轴 → 人生卡片
+    val pages = remember(stackCards) {
+        listOf("dailydraw", "acts", "calendar", "timeline", "life").filter { it in stackCards }
     }
     if (pages.isEmpty()) {
         GlassCard(Modifier.fillMaxWidth()) {
@@ -1119,7 +1073,7 @@ private fun HomeStack(
                 Text("堆叠区是空的", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "把想常看的次要卡片放进堆叠，左右滑动切换。",
+                    "把想常看的卡片放进堆叠，左右滑动切换。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1149,28 +1103,250 @@ private fun HomeStack(
                 }
             }
             IconButton(onClick = onCustomize, modifier = Modifier.size(30.dp)) {
-                Icon(Icons.Rounded.Tune, contentDescription = "自定义堆叠", modifier = Modifier.size(18.dp))
+                Icon(Icons.Rounded.Tune, contentDescription = "堆叠与动态设置", modifier = Modifier.size(18.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier.fillMaxWidth().height(360.dp),
+            modifier = Modifier.fillMaxWidth().height(348.dp),
             pageSpacing = 10.dp
         ) { page ->
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 when (pages[page]) {
+                    // 纯展示：点击整卡跳详情（一签按来源类型路由）
+                    "dailydraw" -> {
+                        val draw = dailyDraw
+                        if (draw != null) {
+                            Box(Modifier.clickable { onOpenDraw(draw) }) { DailyDrawCard(item = draw) }
+                        } else {
+                            EmptyHint("今天没有抽到记录，明天再来")
+                        }
+                    }
+                    // 纯展示：点击整卡进「全部动态」页
+                    "acts" -> Box(Modifier.clickable(onClick = onOpenActs)) {
+                        ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
+                    }
+                    // 纯展示：点击整卡进任务页
+                    "calendar" -> Box(Modifier.clickable(onClick = onOpenCalendar)) {
+                        CalendarCardPure(tasks = calendarTasks)
+                    }
                     "timeline" -> timeline()
                     "life" -> life()
                 }
             }
         }
         Text(
-            "左右滑动切换卡片 · 点右上角图标自定义",
+            "左右滑动切换卡片 · 点击卡片进入详情 · 右上角自定义",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp)
         )
+    }
+}
+
+/**
+ * v1.0.6.8（死命令 #3）：堆叠区「最近动态」纯展示版 —— 无 Tab、无按钮、无手势，
+ * 只列动态流；点击整卡由堆叠容器统一跳转「全部动态」页。
+ */
+@Composable
+private fun ActsFeedPure(
+    allActs: List<ActivityEntity>,
+    feedKinds: Set<String>,
+    feedLimit: Int
+) {
+    val filtered = allActs.filter { it.kind in feedKinds || it.kind == "custom" }
+    val shown = if (feedLimit > 0) filtered.take(feedLimit) else filtered.take(10)
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(UiDimens.CardPad),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SectionHeader("最近动态", icon = Icons.Rounded.Bolt, chipColor = ModuleTints.Feed)
+            if (shown.isEmpty()) {
+                EmptyHint("暂无动态，去完成任务或解锁成就试试")
+            } else {
+                shown.forEach { act ->
+                    val actIcon = when (act.kind) {
+                        "ach" -> Icons.Rounded.EmojiEvents
+                        "task" -> Icons.Rounded.Checklist
+                        "item" -> Icons.Rounded.Backpack
+                        "custom" -> Icons.Rounded.Star
+                        else -> Icons.Rounded.ChatBubbleOutline
+                    }
+                    val verb = when (act.kind) {
+                        "ach" -> "解锁成就"
+                        "task" -> "完成任务"
+                        "item" -> "获得物品"
+                        "custom" -> "自定义事件"
+                        else -> "记录"
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            act.time.take(10),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(
+                            actIcon,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            "$verb「${act.title}」",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (filtered.size > shown.size) {
+                    Text(
+                        "还有 ${filtered.size - shown.size} 条动态…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * v1.0.6.8（死命令 #3）：堆叠区「日程」纯展示版 —— 只渲染本月月历 + 当天安排，
+ * 无月份切换、无按钮；点击整卡由堆叠容器统一跳转任务页。
+ */
+@Composable
+private fun CalendarCardPure(tasks: List<TaskEntity>) {
+    val base = remember { java.util.Calendar.getInstance() }
+    val year = base.get(java.util.Calendar.YEAR)
+    val month = base.get(java.util.Calendar.MONTH)
+    val busyDays = remember(tasks) {
+        tasks.mapNotNull { it.dueDate?.take(10)?.takeIf { d -> d.isNotBlank() } }.toSet()
+    }
+    val todayKey = remember {
+        val c = java.util.Calendar.getInstance()
+        String.format(
+            java.util.Locale.US, "%04d-%02d-%02d",
+            c.get(java.util.Calendar.YEAR),
+            c.get(java.util.Calendar.MONTH) + 1,
+            c.get(java.util.Calendar.DAY_OF_MONTH)
+        )
+    }
+    val todayList = remember(tasks) { tasks.filter { it.dueDate?.take(10) == todayKey } }
+    val first = remember(year, month) {
+        java.util.Calendar.getInstance().apply { set(year, month, 1) }
+    }
+    val daysInMonth = base.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+    val firstDow = (first.get(java.util.Calendar.DAY_OF_WEEK) - java.util.Calendar.MONDAY + 7) % 7
+    val rows = (firstDow + daysInMonth + 6) / 7
+
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad)) {
+            SectionHeader(
+                text = "日程 · ${month + 1}月",
+                icon = Icons.Rounded.CalendarMonth,
+                chipColor = ModuleTints.Tasks
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth()) {
+                listOf("一", "二", "三", "四", "五", "六", "日").forEach { w ->
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            w,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                for (r in 0 until rows) {
+                    Row(Modifier.fillMaxWidth()) {
+                        for (c in 0..6) {
+                            val idx = r * 7 + c - firstDow
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                if (idx in 0 until daysInMonth) {
+                                    val key = String.format(
+                                        java.util.Locale.US, "%04d-%02d-%02d",
+                                        year, month + 1, idx + 1
+                                    )
+                                    val isToday = key == todayKey
+                                    val busy = key in busyDays
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                when {
+                                                    isToday -> AmberPrimary
+                                                    busy -> AmberPrimary.copy(alpha = 0.14f)
+                                                    else -> Color.Transparent
+                                                }
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            "${idx + 1}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = when {
+                                                isToday -> Color.White
+                                                busy -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                            },
+                                            fontWeight = if (isToday || busy) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "今天（${month + 1}月${base.get(java.util.Calendar.DAY_OF_MONTH)}日）",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            if (todayList.isEmpty()) {
+                Text(
+                    "今天没有安排，安心过一天。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                todayList.take(3).forEach { t ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.RadioButtonUnchecked,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            t.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1181,6 +1357,9 @@ private fun OverviewGrid(
     onExpandedChange: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onAccounting: () -> Unit,
+    /** v1.0.6.8（死命令 #2）：速览操作化 —— 记账直接弹键盘输入面板、Todo 直接弹新建任务 */
+    onQuickAccounting: () -> Unit = {},
+    onQuickTodo: () -> Unit = {},
     onEditEntries: () -> Unit = {}
 ) {
     // v1.0.6.7（死命令 #2 入口拆分）：原「任务」拆为「日常」+「Todo」两项，原「背包」拆为
@@ -1248,7 +1427,13 @@ private fun OverviewGrid(
                         tint = entry.tint,
                         modifier = Modifier.weight(1f)
                     ) {
-                        if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                        // v1.0.6.8（死命令 #2）：记账 = 唤起键盘输入面板；Todo = 弹出新建任务；
+                        // 其余入口保持原跳转逻辑。
+                        when (entry.id) {
+                            "accounting" -> onQuickAccounting()
+                            "todo" -> onQuickTodo()
+                            else -> if (entry.route != null) onNavigate(entry.route) else onAccounting()
+                        }
                     }
                 }
                 // 末行不足一整行时用空白占位，保持左右对齐
@@ -1450,271 +1635,6 @@ private fun WaffleTile(
     }
 }
 
-/**
- * 最近动态：
- * - 顶部单选分类标签（全部 / 任务 / 成就 / 物品 / 记录），默认「全部」；
- *   「全部」按用户自定义的启用分类展示完整动态流（自定义动态恒显示）；
- * - 右上角「自定义」按钮 → BottomSheet 配置面板：勾选展示分类 / 设置显示条数 / 添加自定义动态；
- * - 底部「查看全部 N 条 ›」跳转完整动态列表页（AllActivitiesRoute）。
- * 启用分类（feedKinds）与条数（feedLimit）由 HomeViewModel 经 DataStore 持久化；
- * 标签选中态为轻量 UI 状态（默认「全部」，不持久化）。
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ActsCard(
-    allActs: List<ActivityEntity>,
-    feedKinds: Set<String>,
-    feedLimit: Int,
-    onFeedKindsChange: (Set<String>) -> Unit,
-    onFeedLimitChange: (Int) -> Unit,
-    onAddCustom: (String) -> Unit,
-    onOpenAll: () -> Unit = {}
-) {
-    val tabKinds = listOf(
-        "all" to "全部",
-        "task" to "任务",
-        "ach" to "成就",
-        "item" to "物品",
-        "memo" to "记录"
-    )
-    val sheetKinds = listOf(
-        "task" to "任务",
-        "ach" to "成就",
-        "item" to "物品",
-        "memo" to "记录"
-    )
-
-    var tab by remember { mutableStateOf("all") }
-    var showConfig by remember { mutableStateOf(false) }
-    var showAdd by remember { mutableStateOf(false) }
-    // v1.0.3：左右滑动切换分类（手势累计位移，超过阈值即切一格）
-    var dragAcc by remember { mutableStateOf(0f) }
-
-    // 筛选逻辑：具体标签 = 单独该类型（标签是显式意图，覆盖启用分类配置）；
-    // 「全部」= 按启用分类展示，自定义动态恒显示
-    val filtered = if (tab == "all") {
-        allActs.filter { it.kind in feedKinds || it.kind == "custom" }
-    } else {
-        allActs.filter { it.kind == tab }
-    }
-    val shown = if (feedLimit > 0) filtered.take(feedLimit) else filtered
-
-    // v1.0.7：全透明毛玻璃卡片 + 5% 黑遮罩（GlassCard）替代实心 Card，壁纸可透出
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            Modifier
-                .padding(UiDimens.CardPad)
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { dragAcc = 0f },
-                        onHorizontalDrag = { change, amount ->
-                            dragAcc += amount
-                            change.consume()
-                        },
-                        onDragEnd = {
-                            val idx = tabKinds.indexOfFirst { it.first == tab }
-                            when {
-                                dragAcc < -90f && idx < tabKinds.size - 1 -> tab = tabKinds[idx + 1].first
-                                dragAcc > 90f && idx > 0 -> tab = tabKinds[idx - 1].first
-                            }
-                        }
-                    )
-                },
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // weight 占满剩余宽度：大字号下标题换行也不会把右侧入口挤出屏幕
-                SectionHeader("最近动态", Modifier.weight(1f), icon = Icons.Rounded.Bolt, chipColor = ModuleTints.Feed)
-                // 可见性修复（第二轮）：纯图标 32dp 方块在琥珀底上仍不够醒目，
-                // 改为「图标 + 文字」实心按钮，前景用 OnAmber（深棕），
-                // 浅深主题对琥珀底都有 ≥4.5:1 对比度，且文字入口更易发现、易点中。
-                Surface(
-                    onClick = { showConfig = true },
-                    color = AmberPrimary,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.heightIn(min = 32.dp)
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.Settings,
-                            contentDescription = null,
-                            tint = OnAmber,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            "自定义",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = OnAmber,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            // 单选分类标签（5 枚，横向可滚动防溢出）
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-            ) {
-                tabKinds.forEach { (kind, label) ->
-                    FilterChip(
-                        selected = tab == kind,
-                        onClick = { tab = kind },
-                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-                        modifier = Modifier.height(30.dp)
-                    )
-                }
-            }
-
-            if (shown.isEmpty()) {
-                EmptyHint(
-                    if (tab == "all") "暂无动态，去完成任务或解锁成就试试"
-                    else "该分类下暂无动态"
-                )
-            } else {
-                shown.forEach { act ->
-                    // v1.0.17：动态种类图标 emoji → 圆角矢量
-                    val actIcon = when (act.kind) {
-                        "ach" -> Icons.Rounded.EmojiEvents
-                        "task" -> Icons.Rounded.Checklist
-                        "item" -> Icons.Rounded.Backpack
-                        "custom" -> Icons.Rounded.Star
-                        else -> Icons.Rounded.ChatBubbleOutline
-                    }
-                    val verb = when (act.kind) {
-                        "ach" -> "解锁成就"
-                        "task" -> "完成任务"
-                        "item" -> "获得物品"
-                        "custom" -> "自定义事件"
-                        else -> "记录"
-                    }
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(act.time.take(10), style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Icon(
-                            actIcon,
-                            contentDescription = null,
-                            tint = AmberPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            "$verb「${act.title}」",
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                if (filtered.size > shown.size) {
-                    TextButton(onClick = onOpenAll, modifier = Modifier.fillMaxWidth()) {
-                        Text("查看全部 ${filtered.size} 条动态 ›", color = AmberPrimary)
-                    }
-                }
-            }
-        }
-    }
-
-    // 自定义配置面板（BottomSheet）：启用分类 / 显示条数 / 添加自定义动态 / 全部动态入口
-    if (showConfig) {
-        GlassDialog(onDismissRequest = { showConfig = false }) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text("自定义最近动态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                // 1) 启用分类（多选；自定义动态恒显示）
-                Text("要展示的分类", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    sheetKinds.forEach { (kind, label) ->
-                        val selected = kind in feedKinds
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                val next = if (selected) feedKinds - kind else feedKinds + kind
-                                // 至少保留一个分类，避免出现「全部隐藏」的死局面
-                                if (next.isNotEmpty()) onFeedKindsChange(next)
-                            },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                }
-                Text(
-                    "「全部」标签只显示勾选的分类；自定义动态（星标）始终显示。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // 2) 显示条数
-                Text("最多显示条数", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(5 to "5 条", 10 to "10 条", 20 to "20 条", 0 to "全部").forEach { (n, label) ->
-                        FilterChip(
-                            selected = feedLimit == n,
-                            onClick = { onFeedLimitChange(n) },
-                            label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                        )
-                    }
-                }
-
-                // 3) 添加自定义动态 + 完整列表入口
-                // 对比度修复：OutlinedButton 容器透明、与面板同色导致无法辨认。
-                // 主操作用 AmberPrimary 实心填充 + 白字；次操作用琥珀描边 + 琥珀字，与背景拉开层次。
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = { showConfig = false; showAdd = true },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AmberPrimary,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("添加自定义动态", fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-                    OutlinedButton(
-                        onClick = { showConfig = false; onOpenAll() },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = AmberPrimary
-                        ),
-                        border = BorderStroke(1.dp, AmberPrimary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("查看全部动态 ›", maxLines = 1)
-                    }
-                }
-            }
-        }
-    }
-
-    // 添加自定义动态对话框
-    if (showAdd) {
-        AddCustomActivityDialog(
-            onDismiss = { showAdd = false },
-            onConfirm = { title ->
-                onAddCustom(title)
-                showAdd = false
-            }
-        )
-    }
-}
-
 /** 添加一条自定义动态（kind=custom，随动态流与时间轴展示） */
 @Composable
 private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
@@ -1743,6 +1663,173 @@ private fun AddCustomActivityDialog(onDismiss: () -> Unit, onConfirm: (String) -
         },
         dismissButton = { TextButton(onDismiss) { Text("取消") } }
     )
+}
+
+/**
+ * v1.0.6.8（死命令 #2）：速览「记账」快捷输入面板。
+ * 点击速览「记账」瓦片直接弹出本面板（非页面跳转）：金额输入框自动聚焦并弹出数字键盘，
+ * 分类快选 chips + 可选备注；确认后以自定义动态落入动态流（星标条目，可查可删）。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickAccountingDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (amount: String, category: String, note: String) -> Unit
+) {
+    var amount by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("餐饮") }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    // 面板弹出即聚焦金额框并唤起数字键盘（用户要的就是「直接弹出键盘输入面板」）
+    LaunchedEffect(Unit) {
+        runCatching { focusRequester.requestFocus() }
+        keyboardController?.show()
+    }
+    val categories = listOf("餐饮", "交通", "购物", "居住", "娱乐", "其他")
+    GlassDialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("快速记账", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            GlassTextField(
+                value = amount,
+                onValueChange = { v -> amount = v.filter { it.isDigit() || it == '.' }.take(12) },
+                label = "金额（元）",
+                placeholder = "0.00",
+                singleLine = true,
+                leadingIcon = {
+                    Text(
+                        "¥",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AmberPrimary
+                    )
+                },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+            )
+            Text("分类", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            // v1.0.6.8（排版修复）：FlowRow 自动换行，杜绝定宽 Row 挤压标签成竖排
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                categories.forEach { c ->
+                    FilterChip(
+                        selected = category == c,
+                        onClick = { category = c },
+                        label = { Text(c, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+            GlassTextField(
+                value = note,
+                onValueChange = { note = it.take(40) },
+                label = "备注（可选）",
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "记账将记入「最近动态」（星标条目），可在全部动态页查看与删除。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("取消", maxLines = 1) }
+                Button(
+                    onClick = { onConfirm(amount, category, note) },
+                    enabled = amount.isNotBlank(),
+                    modifier = Modifier.weight(1.25f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AmberPrimary,
+                        contentColor = OnAmber
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("记一笔", fontWeight = FontWeight.SemiBold, maxLines = 1) }
+            }
+        }
+    }
+}
+
+/**
+ * v1.0.6.8（死命令 #2）：速览「Todo」新建任务弹窗。
+ * 点击速览「Todo」瓦片直接弹出（非页面跳转）：标题聚焦、键盘自动弹出，确认即建。
+ */
+@Composable
+private fun QuickTodoDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (title: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        runCatching { focusRequester.requestFocus() }
+        keyboardController?.show()
+    }
+    GlassDialog(onDismissRequest = onDismiss) {
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("新建 Todo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            GlassTextField(
+                value = title,
+                onValueChange = { title = it.take(60) },
+                label = "任务内容",
+                placeholder = "例如：给星球浇一次水",
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { if (title.isNotBlank()) onConfirm(title.trim()) }
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+            )
+            Text(
+                "任务将创建在任务页「Todo」分类，可随时去任务页补充截止日期与备注。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("取消", maxLines = 1) }
+                Button(
+                    onClick = { onConfirm(title.trim()) },
+                    enabled = title.isNotBlank(),
+                    modifier = Modifier.weight(1.25f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AmberPrimary,
+                        contentColor = OnAmber
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("创建", fontWeight = FontWeight.SemiBold, maxLines = 1) }
+            }
+        }
+    }
 }
 
 /**
@@ -1874,7 +1961,9 @@ private fun TimelineCard(
     streakStage: Int,
     streakDays: Int,
     onAdd: () -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    /** v1.0.6.8（死命令 #3）：堆叠区内纯展示 —— 隐藏「+」与删除按钮，点击整卡跳详情 */
+    pureDisplay: Boolean = false
 ) {
     // 与主页其他卡片（LifeCard / ActsCard / 世界日志等）完全同构：
     // 默认 Card + UiDimens.CardRadius 圆角 + 默认容器色（surfaceContainerLow），
@@ -1912,12 +2001,16 @@ private fun TimelineCard(
                         )
                     }
                 }
-                IconButton(onClick = onAdd, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Rounded.Add, contentDescription = "添加里程碑", tint = AmberPrimary)
+                if (!pureDisplay) {
+                    IconButton(onClick = onAdd, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Rounded.Add, contentDescription = "添加里程碑", tint = AmberPrimary)
+                    }
                 }
             }
             if (items.isEmpty()) {
-                EmptyHint("还没有重要事件，点右上角 + 记录一个里程碑吧")
+                EmptyHint(
+                    if (pureDisplay) "还没有重要事件" else "还没有重要事件，点右上角 + 记录一个里程碑吧"
+                )
             } else {
                 items.forEach { item ->
                     val isCustom = item.key in customIds
@@ -1952,7 +2045,7 @@ private fun TimelineCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        if (isCustom) {
+                        if (isCustom && !pureDisplay) {
                             IconButton(onClick = { onDelete(item.key) }, modifier = Modifier.size(28.dp)) {
                                 Icon(Icons.Rounded.Delete, contentDescription = "删除", modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant)

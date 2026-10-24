@@ -2,6 +2,8 @@ package com.example.earthonline.ui.home
 
 import com.example.earthonline.ui.theme.GlassCard
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -95,7 +97,7 @@ class AllActivitiesViewModel @Inject constructor(
  * - 顶部可设置首页显示条数（3/5/10/20/不限）
  * - 「+ 自定义」手动添加一条动态事件
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AllActivitiesRoute(
     onBack: () -> Unit,
@@ -111,7 +113,7 @@ fun AllActivitiesRoute(
     val filtered = state.acts
 
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -144,7 +146,13 @@ fun AllActivitiesRoute(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // v1.0.6.8（排版修复）：FlowRow 换行 —— 旧版定宽 Row 把 5 枚 chips
+                    // 挤压成竖排小字，现按内容宽度自动换行，标签完整可读。
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         listOf(3 to "3 条", 5 to "5 条", 10 to "10 条", 20 to "20 条", 0 to "不限").forEach { (n, label) ->
                             FilterChip(
                                 selected = state.feedLimit == n,
