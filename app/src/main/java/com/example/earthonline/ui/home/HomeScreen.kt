@@ -25,9 +25,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -46,17 +49,22 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Mood
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.PlaylistAddCheck
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -152,6 +160,7 @@ fun HomeRoute(
         onFeedKindsChange = vm::setFeedKinds,
         onFeedLimitChange = vm::setFeedLimit,
         onQuickEntriesChange = vm::setQuickEntries,
+        onStackCardsChange = vm::setStackCards,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -180,6 +189,8 @@ fun HomeScreen(
     onFeedLimitChange: (Int) -> Unit = {},
     /** 主页速览自定义入口（DataStore 持久化，至少保留一个） */
     onQuickEntriesChange: (Set<String>) -> Unit = {},
+    /** v1.0.6.7：主页卡片堆叠区自定义（哪些次要卡片入堆叠，DataStore 持久化） */
+    onStackCardsChange: (Set<String>) -> Unit = {},
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -199,6 +210,8 @@ fun HomeScreen(
     var showAddTimeline by remember { mutableStateOf(false) }
     // 主页速览「自定义入口」配置面板（BottomSheet）
     var showQuickEdit by remember { mutableStateOf(false) }
+    // v1.0.6.7：卡片堆叠区「自定义」（选择哪些次要卡片入堆叠）
+    var showStackEdit by remember { mutableStateOf(false) }
     // v1.0.6：速览「展开 / 收起」状态上提到主页层级 —— 只有用户主动点「收起」或触发
     //         特定页面跳转才折叠；点击其它区域 / 其它操作不会导致展开态被重组复位收起。
     var overviewExpanded by remember { mutableStateOf(false) }
@@ -308,25 +321,33 @@ fun HomeScreen(
             )
         }
 
-        item(key = "timeline", contentType = "card") {
-            TimelineCard(
-                items = state.timeline,
-                customIds = state.customTimeline.map { it.key }.toSet(),
-                streakStage = state.streakStage,
-                streakDays = state.streakDays,
-                onAdd = { showAddTimeline = true },
-                onDelete = onDeleteTimelineEvent
-            )
-        }
-
-        item(key = "lifecard", contentType = "card") {
-            LifeCard(
-                name = state.displayName,
-                level = state.life.age,
-                title = state.customTitle,
-                unlockedAch = state.unlockedAch,
-                locationCount = state.locationCount,
-                doneRatio = state.doneRatio
+        // v1.0.6.7（死命令 #3）：次要卡片（时间轴 / 人生卡片）收入「卡片堆叠」，
+        // 左右滑动切换、可自定义入堆叠的卡片。
+        item(key = "stack", contentType = "card") {
+            HomeStack(
+                showTimeline = "timeline" in state.stackCards,
+                showLife = "life" in state.stackCards,
+                timeline = {
+                    TimelineCard(
+                        items = state.timeline,
+                        customIds = state.customTimeline.map { it.key }.toSet(),
+                        streakStage = state.streakStage,
+                        streakDays = state.streakDays,
+                        onAdd = { showAddTimeline = true },
+                        onDelete = onDeleteTimelineEvent
+                    )
+                },
+                life = {
+                    LifeCard(
+                        name = state.displayName,
+                        level = state.life.age,
+                        title = state.customTitle,
+                        unlockedAch = state.unlockedAch,
+                        locationCount = state.locationCount,
+                        doneRatio = state.doneRatio
+                    )
+                },
+                onCustomize = { showStackEdit = true }
             )
         }
     }
@@ -403,6 +424,43 @@ fun HomeScreen(
                         if (next.isNotEmpty()) onQuickEntriesChange(next)
                     }
                 )
+            }
+        }
+
+        // v1.0.6.7（死命令 #3）：卡片堆叠自定义 —— 选择哪些次要卡片放入堆叠区
+        if (showStackEdit) {
+            GlassDialog(onDismissRequest = { showStackEdit = false }) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("卡片堆叠", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "勾选要放入堆叠区的卡片，左右滑动切换（至少保留一个）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    listOf("timeline" to "时间轴", "life" to "人生卡片").forEach { (id, label) ->
+                        val checked = id in state.stackCards
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { on ->
+                                    val next = if (on) state.stackCards + id else state.stackCards - id
+                                    if (next.isNotEmpty()) onStackCardsChange(next)
+                                }
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    TextButton(onClick = { showStackEdit = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text("完成")
+                    }
+                }
             }
         }
 
@@ -860,9 +918,9 @@ private fun HomeCalendarCard(
     val year = base.get(java.util.Calendar.YEAR)
     val month = base.get(java.util.Calendar.MONTH)
 
-    /** 有安排的日期集合（YYYY-MM-DD） */
+    /** 有安排的日期集合（YYYY-MM-DD；dueDate 可能带 " HH:mm" 时间后缀，取前 10 位日期） */
     val busyDays = remember(tasks) {
-        tasks.mapNotNull { it.dueDate?.takeIf { d -> d.isNotBlank() } }.toSet()
+        tasks.mapNotNull { it.dueDate?.take(10)?.takeIf { d -> d.isNotBlank() } }.toSet()
     }
     val todayKey = remember {
         val c = java.util.Calendar.getInstance()
@@ -875,7 +933,7 @@ private fun HomeCalendarCard(
     }
     // v1.0.6.6（死命令 #5）：日历卡支持点击任意日期，选中后高亮并刷新下方当天任务。
     var selectedKey by remember { mutableStateOf(todayKey) }
-    val selectedList = remember(tasks, selectedKey) { tasks.filter { it.dueDate == selectedKey } }
+    val selectedList = remember(tasks, selectedKey) { tasks.filter { it.dueDate?.take(10) == selectedKey } }
 
     val first = remember(year, month) {
         java.util.Calendar.getInstance().apply { set(year, month, 1) }
@@ -1036,6 +1094,86 @@ private fun HomeCalendarCard(
     }
 }
 
+/**
+ * v1.0.6.7（死命令 #3）：主页「卡片堆叠」—— 把次要卡片（时间轴 / 人生卡片）收进一个堆叠区，
+ * 左右滑动（HorizontalPager）切换，页码指示点 + 右上角自定义入口；每页内容可纵向滚动，
+ * 长卡片不溢出。用户可自定义把哪些次要卡片放入堆叠区（DataStore 持久化）。
+ */
+@Composable
+private fun HomeStack(
+    showTimeline: Boolean,
+    showLife: Boolean,
+    timeline: @Composable () -> Unit,
+    life: @Composable () -> Unit,
+    onCustomize: () -> Unit
+) {
+    val pages = remember(showTimeline, showLife) {
+        buildList {
+            if (showTimeline) add("timeline")
+            if (showLife) add("life")
+        }
+    }
+    if (pages.isEmpty()) {
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(UiDimens.CardPad)) {
+                Text("堆叠区是空的", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "把想常看的次要卡片放进堆叠，左右滑动切换。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = onCustomize) { Text("选择卡片") }
+            }
+        }
+        return
+    }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader("卡片堆叠", Modifier.weight(1f), icon = Icons.Rounded.Layers)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                repeat(pages.size) { idx ->
+                    val active = idx == pagerState.currentPage
+                    Box(
+                        Modifier
+                            .size(if (active) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (active) AmberPrimary else MaterialTheme.colorScheme.outlineVariant
+                            )
+                    )
+                }
+            }
+            IconButton(onClick = onCustomize, modifier = Modifier.size(30.dp)) {
+                Icon(Icons.Rounded.Tune, contentDescription = "自定义堆叠", modifier = Modifier.size(18.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth().height(360.dp),
+            pageSpacing = 10.dp
+        ) { page ->
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                when (pages[page]) {
+                    "timeline" -> timeline()
+                    "life" -> life()
+                }
+            }
+        }
+        Text(
+            "左右滑动切换卡片 · 点右上角图标自定义",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+    }
+}
+
 @Composable
 private fun OverviewGrid(
     state: HomeUiState,
@@ -1045,9 +1183,13 @@ private fun OverviewGrid(
     onAccounting: () -> Unit,
     onEditEntries: () -> Unit = {}
 ) {
+    // v1.0.6.7（死命令 #2 入口拆分）：原「任务」拆为「日常」+「Todo」两项，原「背包」拆为
+    // 「物品」+「收藏」两项。日常/Todo 同走任务页（内部按状态筛选），物品走背包页、收藏走收藏页。
     val allEntries = listOf(
-        HomeEntry("tasks", Icons.Rounded.Checklist, "任务", "完成率 ${state.doneRatio}%", "tasks", ModuleTints.Tasks),
-        HomeEntry("backpack", Icons.Rounded.Backpack, "背包", "${state.itemCount} 件物品", "backpack", ModuleTints.Backpack),
+        HomeEntry("daily", Icons.Rounded.Today, "日常", "完成率 ${state.doneRatio}%", "tasks", ModuleTints.Tasks),
+        HomeEntry("todo", Icons.Rounded.PlaylistAddCheck, "Todo", "${state.totalTasks - state.doneTasks} 待完成", "tasks", ModuleTints.Tasks),
+        HomeEntry("items", Icons.Rounded.Backpack, "物品", "${state.itemCount} 件物品", "backpack", ModuleTints.Backpack),
+        HomeEntry("collections", Icons.Rounded.Favorite, "收藏", "${state.collectionCount} 个收藏", "collections", ModuleTints.Backpack),
         HomeEntry("notes", Icons.Rounded.EditNote, "笔记", "${state.noteCount} 篇笔记", "notes", ModuleTints.Notes),
         HomeEntry("album", Icons.Rounded.PhotoLibrary, "相册", "${state.albumCount} 张照片", "album", ModuleTints.Album),
         HomeEntry("map", Icons.Rounded.Map, "地图", "${state.locationCount} 处足迹", "map", ModuleTints.Map),
@@ -1059,11 +1201,10 @@ private fun OverviewGrid(
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
 
-    // v1.0.7：速览改为「3x2 网格 + 右上角展开」——
-    //   收起态固定 6 格（任务/背包/笔记/相册/地图/记账），两行三列，不受历史自定义影响
-    //   （旧版本存过的显隐集合曾把网格挤成 4 格/2 列，违反 3x2 规格）；
-    //   其余入口（数据/成就/系统）由右上角「展开」按钮平滑放出/收回。
-    val DEFAULT_IDS = setOf("tasks", "backpack", "notes", "album", "map", "accounting")
+    // v1.0.7：速览改为「3 列网格 + 右上角展开」——
+    //   收起态固定主入口（日常/Todo/物品/收藏/笔记/相册/地图/记账，共 8 个，3 列排布），
+    //   不受历史自定义影响；其余入口（数据/成就/系统）由右上角「展开」按钮平滑放出/收回。
+    val DEFAULT_IDS = setOf("daily", "todo", "items", "collections", "notes", "album", "map", "accounting")
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
@@ -1176,8 +1317,10 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
     // 与 OverviewGrid 的 allEntries 保持同一份清单（含隐藏项，才能重新勾回来）
     // v1.0.19：图标改用模块语义色，与速览瓦片芯片同源
     val quickAll = listOf(
-        QuickEntryDef("tasks", Icons.Rounded.Checklist, "任务", ModuleTints.Tasks),
-        QuickEntryDef("backpack", Icons.Rounded.Backpack, "背包", ModuleTints.Backpack),
+        QuickEntryDef("daily", Icons.Rounded.Today, "日常", ModuleTints.Tasks),
+        QuickEntryDef("todo", Icons.Rounded.PlaylistAddCheck, "Todo", ModuleTints.Tasks),
+        QuickEntryDef("items", Icons.Rounded.Backpack, "物品", ModuleTints.Backpack),
+        QuickEntryDef("collections", Icons.Rounded.Favorite, "收藏", ModuleTints.Backpack),
         QuickEntryDef("notes", Icons.Rounded.EditNote, "笔记", ModuleTints.Notes),
         QuickEntryDef("album", Icons.Rounded.PhotoLibrary, "相册", ModuleTints.Album),
         QuickEntryDef("map", Icons.Rounded.Map, "地图", ModuleTints.Map),

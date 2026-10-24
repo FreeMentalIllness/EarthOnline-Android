@@ -12,9 +12,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AttachFile
@@ -27,25 +28,27 @@ import androidx.compose.material.icons.rounded.FormatListBulleted
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.FormatUnderlined
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Redo
 import androidx.compose.material.icons.rounded.Title
-import androidx.compose.material.icons.rounded.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,41 +60,27 @@ import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
 import com.example.earthonline.ui.theme.GlassSurface
 import com.example.earthonline.util.rememberImagePicker
-import com.example.earthonline.util.uid
-import com.mohamedrejeb.richeditor.model.RichTextState
-import com.mohamedrejeb.richeditor.ui.BasicRichTextEditor
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import androidx.compose.runtime.snapshots.SnapshotStateList
 
 /**
- * v1.0.6.6（死命令 #4）：笔记待办改为**标准 Compose Checkbox** 的独立清单，
- * 彻底废弃「- [ ] 」文字符号替换。勾选时文字加删除线、取消勾选恢复原状。
- * 存储仍序列化为 Markdown 待办行（跨端兼容），载入时解析回本结构。
+ * v1.0.6.7（死命令 #4）：笔记正文改为**行式编辑器 + 行内标准 Checkbox**。
+ * richeditor-compose 不支持在文本流中插入 Composable，故自研行式编辑器：
+ *  - 每个逻辑行是一个 [NoteLine]，待办行行首渲染**真实 Compose Checkbox**，勾选加删除线；
+ *  - 回车拆分为新行、行首退格与上一行合并；长行自动软换行；
+ *  - 存取仍是 Markdown：待办行序列化为 "- [ ] "/"- [x] "，跨端兼容，旧数据自动解析回行结构。
  */
-private data class TodoItem(
-    val id: String,
-    val text: String,
+private data class NoteLine(
+    val id: Long,
+    val value: TextFieldValue,
+    val todo: Boolean,
     val done: Boolean
-)
+) {
+    val text: String get() = value.text
+}
 
-/**
- * 笔记编辑页（v1.0.6.5 终版：richeditor-compose rc10 真实富文本）。
- *
- * 本轮按死命令彻底废弃上一版「Markdown 源码 + 透明标记」的手搓方案：
- *  - 正文唯一真相源是 [RichTextState]（真实富文本对象树），选中文字点 B 后
- *    文字立刻肉眼可见地变粗，取消选中后文本流连贯 —— 绝无隐藏符号占位或空白；
- *  - 存储层依旧 Markdown：载入 [RichTextState.setMarkdown]，保存 [RichTextState.toMarkdown]，
- *    跨端兼容与双写兜底完全不变；
- *  - 撤销 / 重做：rc10 库内未内建 undo/redo，这里维护 [RichTextState.copy] 快照栈
- *    （输入停顿 400ms 记一次，格式化动作即时落栈），出栈直接换状态实例；
- *  - 待办：行首插入 / 切换「- [ ] 」「- [x]」纯文本标记，原文字绝不清空；
- *  - 列表 / 标题样式走库内 toggleUnorderedList / toggleOrderedList 与 SpanStyle 切换。
- */
 @Composable
 fun NoteEditorRoute(
     id: String,
@@ -113,120 +102,71 @@ fun NoteEditorScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 正文：真实富文本状态（richeditor rc10）
-    var editorState by remember { mutableStateOf(RichTextState()) }
     var title by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(listOf<String>()) }
     var tagInput by remember { mutableStateOf("") }
     var showTagRow by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
-    // v1.0.6.6（死命令 #4）：笔记待办清单（标准 Checkbox，非文字符号）
-    var todos by remember { mutableStateOf(listOf<TodoItem>()) }
     var bodyScale by remember { mutableFloatStateOf(1f) }
-    val editorFocus = remember { FocusRequester() }
-    var historyJob by remember { mutableStateOf<Job?>(null) }
 
-    /* ---------- 撤销 / 重做：RichTextState 快照栈（rc10 无内建 undo/redo） ---------- */
-    val history = remember { SnapshotStateList<RichTextState>() }
-    var histIndex by remember { mutableIntStateOf(0) }
+    // v1.0.6.7（死命令 #4）：行式正文（含行内复选框）
+    val lines = remember { mutableStateListOf<NoteLine>() }
+    var nextId by remember { mutableLongStateOf(1L) }
+    var focusedId by remember { mutableLongStateOf(-1L) }
+    var pendingFocusId by remember { mutableLongStateOf(-1L) }
+    val focusRequesters = remember { mutableMapOf<Long, FocusRequester>() }
 
-    /** 入栈：纯文本与栈顶相同则跳过（避免 undo/redo 后防抖重复入栈污染 redo 分支） */
-    fun pushHistory(s: RichTextState) {
-        if (history.isNotEmpty() && history[histIndex].toText() == s.toText()) return
-        while (history.size > histIndex + 1) history.removeAt(history.lastIndex)
-        history.add(s.copy())
-        if (history.size > 200) history.removeAt(0)
-        histIndex = history.lastIndex
-    }
+    fun focusedIndex(): Int = lines.indexOfFirst { it.id == focusedId }
 
-    fun undo() {
-        if (histIndex > 0) {
-            histIndex--
-            editorState = history[histIndex].copy()
-        }
-    }
-
-    fun redo() {
-        if (histIndex < history.lastIndex) {
-            histIndex++
-            editorState = history[histIndex].copy()
-        }
-    }
-
-    /* ---------- 行内样式：真实富文本切换（B / I / U / 标题） ---------- */
-    fun toggleStyle(style: SpanStyle) {
-        editorState.toggleSpanStyle(style)
-        pushHistory(editorState)
-        runCatching { editorFocus.requestFocus() }
-    }
-
-    /**
-     * 加粗样式 = 字重（有 Bold 字重的字体直接真加粗）+「伪粗体（Fake Bold）」合成加粗。
-     *
-     * 两次踩坑的收敛结论（务必保持）：
-     *  ① 只写 fontWeight=FontWeight.Bold 时，无 Bold 字重的国产中文字体族渲染零变化
-     *     （Compose 不做合成加粗）→ 用户反馈「看不出加粗」；
-     *  ② 曾经用 drawStyle=Stroke 做假粗体：Compose 会切换到**描边模式**绘制字形，
-     *     只画轮廓不填充，中文笔画本就仅约 1px，结果整段字变成空心的浅色描边 ——
-     *     视觉上就是「加粗后字体变白看不见」（本次修复的根因）。
-     *
-     * 现在用 SpanStyle.shadow 做伪粗体：同色（[LocalContentColor]，随主题明/暗自动切换）
-     * 的投影向对角线偏移 ~0.9px 并带极小的 0.6 模糊半径，等效于把字形重描一遍加厚，
-     * 既能被任何字体族（含缺 Bold 字重的中文字体）肉眼识别为加粗，又完全不碰原本的文字颜色。
-     * 偏移 + 微模糊双管齐下，比纯 0.6px 横向位移更扎实，不会因设备 DPI 不同而「看不出」。
-     */
-    val BoldStyle = SpanStyle(
-        fontWeight = FontWeight.Bold,
-        shadow = Shadow(
-            color = LocalContentColor.current,
-            offset = Offset(x = 0.9f, y = 0.9f),
-            blurRadius = 0.6f
-        )
-    )
-
-    // 加粗激活态：以「是否带假粗体投影」为准 —— 避免与同为 Bold 字重的标题样式混淆
-    val boldActive = editorState.currentSpanStyle.shadow != null
-    val italicActive = editorState.currentSpanStyle.fontStyle == FontStyle.Italic
-    val underlineActive = editorState.currentSpanStyle.textDecoration == TextDecoration.Underline
-    val headingActive = editorState.currentSpanStyle.fontSize == 20.sp
-
-    /* ---------- 待办：独立 Checkbox 清单（死命令 #4，废弃文字符号） ---------- */
-    fun addTodo(text: String = "") {
-        todos = todos + TodoItem(uid("td"), text, false)
-    }
-    fun toggleTodoDone(index: Int) {
-        todos = todos.mapIndexed { i, it -> if (i == index) it.copy(done = !it.done) else it }
-    }
-    fun editTodoText(index: Int, text: String) {
-        todos = todos.mapIndexed { i, it -> if (i == index) it.copy(text = text) else it }
-    }
-    fun removeTodo(index: Int) {
-        todos = todos.filterIndexed { i, _ -> i != index }
-    }
-
-    /** 从 Markdown 正文解析出待办清单，返回「剔除待办行后的正文」与待办列表（兼容旧版已存的 - [ ] 行）。 */
-    fun extractTodos(md: String): Pair<String, List<TodoItem>> {
-        val kept = mutableListOf<String>()
-        val items = mutableListOf<TodoItem>()
-        val re = Regex("^\\s*-\\s*\\[([ xX])\\]\\s*(.*)$")
-        md.lines().forEach { line ->
-            val m = re.find(line)
-            if (m != null) {
-                items += TodoItem(
-                    uid("td"),
-                    m.groupValues[2],
-                    m.groupValues[1].equals("x", ignoreCase = true)
-                )
-            } else kept += line
-        }
-        return kept.joinToString("\n") to items
+    /** 在 index 之后插入新行并返回；调用方负责把 pendingFocusId 指向它以聚焦。 */
+    fun insertLine(afterIndex: Int, text: String = "", todo: Boolean = false, done: Boolean = false): NoteLine {
+        val nl = NoteLine(nextId++, TextFieldValue(text), todo, done)
+        lines.add((afterIndex + 1).coerceIn(0, lines.size), nl)
+        return nl
     }
 
     fun commitTag() {
         val t = tagInput.trim().trim('#')
         if (t.isNotBlank()) tags = NotesViewModel.normalizeTags(tags + t)
         tagInput = ""
+    }
+
+    /* ---------- 工具栏动作：作用于当前聚焦行（行级，Markdown 标记存取） ---------- */
+    fun wrapFocused(open: String, close: String = open) {
+        val i = focusedIndex(); if (i < 0) return
+        val txt = lines[i].text
+        val wrapped = if (txt.length >= open.length + close.length && txt.startsWith(open) && txt.endsWith(close))
+            txt.substring(open.length, txt.length - close.length) else "$open$txt$close"
+        lines[i] = lines[i].copy(value = TextFieldValue(wrapped))
+    }
+    fun toggleHeading() {
+        val i = focusedIndex(); if (i < 0) return
+        val txt = lines[i].text
+        val newText = if (txt.startsWith("# ")) txt.removePrefix("# ") else "# $txt"
+        lines[i] = lines[i].copy(value = TextFieldValue(newText))
+    }
+    fun toggleLineTodo() {
+        val i = focusedIndex(); if (i < 0) return
+        lines[i] = lines[i].copy(todo = !lines[i].todo)
+    }
+    fun toggleListPrefix(prefix: String) {
+        val i = focusedIndex(); if (i < 0) return
+        val cur = lines[i].text.trimStart()
+        val body = when {
+            cur.startsWith("- ") -> cur.removePrefix("- ")
+            cur.startsWith("* ") -> cur.removePrefix("* ")
+            cur.startsWith("1. ") -> cur.removePrefix("1. ")
+            else -> cur
+        }
+        val already = cur.startsWith(prefix)
+        val newText = if (already) body else "$prefix$body"
+        lines[i] = lines[i].copy(value = TextFieldValue(newText))
+    }
+    fun appendToFocused(snippet: String) {
+        val i = focusedIndex(); if (i < 0) return
+        val merged = lines[i].text + snippet
+        lines[i] = lines[i].copy(value = TextFieldValue(merged))
     }
 
     /* ---------- 图片 / 附件：复制到私有目录，正文中以 Markdown 链接文本呈现 ---------- */
@@ -256,16 +196,12 @@ fun NoteEditorScreen(
     }
 
     val pickImage = rememberImagePicker(onPicked = { uri ->
-        importIntoNoteMedia(uri, "image.jpg") { path ->
-            editorState.addTextAfterSelection("![图片](file://$path)")
-            pushHistory(editorState)
-        }
+        importIntoNoteMedia(uri, "image.jpg") { path -> appendToFocused("![图片](file://$path)") }
     })
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             importIntoNoteMedia(uri, "file") { path ->
-                editorState.addTextAfterSelection("[${path.substringAfterLast('_')}]($path)")
-                pushHistory(editorState)
+                appendToFocused("[${path.substringAfterLast('_')}]($path)")
             }
         }
     }
@@ -276,33 +212,51 @@ fun NoteEditorScreen(
                 val md = m.markdown?.takeIf { it.isNotBlank() } ?: m.text
                 val (t, rest) = splitTitle(md)
                 title = t
-                val (body, extracted) = extractTodos(rest)
-                todos = extracted
-                editorState.setMarkdown(body)
+                lines.clear()
+                val re = Regex("^\\s*-\\s*\\[([ xX])\\]\\s*(.*)$")
+                rest.lines().forEach { raw ->
+                    val mm = re.find(raw)
+                    if (mm != null) {
+                        lines += NoteLine(
+                            nextId++, TextFieldValue(mm.groupValues[2]), true,
+                            mm.groupValues[1].equals("x", ignoreCase = true)
+                        )
+                    } else {
+                        lines += NoteLine(nextId++, TextFieldValue(raw), false, false)
+                    }
+                }
+                if (lines.isEmpty()) lines += NoteLine(nextId++, TextFieldValue(""), false, false)
                 tags = NotesViewModel.tagsOf(m)
             }
+        } else {
+            if (lines.isEmpty()) lines += NoteLine(nextId++, TextFieldValue(""), false, false)
         }
-        history.clear()
-        history.add(editorState.copy())
-        histIndex = 0
+        // 载入后聚焦首行，工具栏立即可用
+        pendingFocusId = lines.firstOrNull()?.id ?: -1L
         loaded = true
     }
 
+    // 结构性变更（新增/删除/合并行）后聚焦目标行
+    LaunchedEffect(pendingFocusId) {
+        val pid = pendingFocusId
+        if (pid >= 0L) {
+            runCatching { focusRequesters[pid]?.requestFocus() }
+            pendingFocusId = -1L
+        }
+    }
+
     fun save() {
-        val bodyMarkdown = editorState.toMarkdown().trim()
-        val plain = editorState.toText().trim()
+        val bodyMd = lines.joinToString("\n") { l ->
+            if (l.todo) "- [${if (l.done) "x" else " "}] ${l.text}" else l.text
+        }.trim()
+        val plain = lines.joinToString("\n") { it.text }.trim()
         val t = title.trim()
-        if (t.isBlank() && plain.isBlank() && todos.none { it.text.isNotBlank() }) {
+        if (t.isBlank() && plain.isBlank()) {
             onBack()
             return
         }
         commitTag()
-        // v1.0.6.6（死命令 #4）：待办清单序列化为 Markdown 待办行，跨端兼容，不与正文混排。
-        val effectiveTodos = todos.filter { it.text.isNotBlank() }
-        val todoBlock = if (effectiveTodos.isEmpty()) "" else "\n\n" + effectiveTodos.joinToString("\n") {
-            "- [${if (it.done) "x" else " "}] ${it.text}"
-        }
-        val markdown = (if (t.isBlank()) bodyMarkdown else "# $t\n\n$bodyMarkdown") + todoBlock
+        val markdown = if (t.isBlank()) bodyMd else "# $t\n\n$bodyMd"
         val plainBody = if (t.isBlank()) plain
         else listOf(t, plain).filter { it.isNotBlank() }.joinToString("\n\n")
         scope.launch {
@@ -339,23 +293,13 @@ fun NoteEditorScreen(
                 )
                 EditorFormatBar(
                     modifier = Modifier,
-                    canUndo = histIndex > 0,
-                    canRedo = histIndex >= 0 && histIndex < history.lastIndex,
-                    boldActive = boldActive,
-                    italicActive = italicActive,
-                    underlineActive = underlineActive,
-                    headingActive = headingActive,
-                    bulletActive = editorState.isUnorderedList,
-                    orderedActive = editorState.isOrderedList,
-                    onUndo = { undo() },
-                    onRedo = { redo() },
-                    onBold = { toggleStyle(BoldStyle) },
-                    onItalic = { toggleStyle(SpanStyle(fontStyle = FontStyle.Italic)) },
-                    onUnderline = { toggleStyle(SpanStyle(textDecoration = TextDecoration.Underline)) },
-                    onHeading = { toggleStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp)) },
-                    onTodo = { addTodo() },
-                    onBullet = { editorState.toggleUnorderedList(); pushHistory(editorState) },
-                    onOrdered = { editorState.toggleOrderedList(); pushHistory(editorState) },
+                    onBold = { wrapFocused("**") },
+                    onItalic = { wrapFocused("*") },
+                    onUnderline = { wrapFocused("<u>", "</u>") },
+                    onHeading = { toggleHeading() },
+                    onTodo = { toggleLineTodo() },
+                    onBullet = { toggleListPrefix("- ") },
+                    onOrdered = { toggleListPrefix("1. ") },
                     onImage = { pickImage() },
                     onFile = { pickFile.launch("*/*") },
                     onFontSize = {
@@ -439,15 +383,7 @@ fun NoteEditorScreen(
                 )
             }
 
-            // v1.0.6.6（死命令 #4）：标准 Checkbox 待办清单（独立于正文富文本，勾选加删除线）
-            TodoSection(
-                todos = todos,
-                onToggle = { toggleTodoDone(it) },
-                onTextChange = { i, s -> editTodoText(i, s) },
-                onDelete = { removeTodo(it) },
-                onAdd = { addTodo(it) }
-            )
-
+            // v1.0.6.7（死命令 #4）：行式正文 —— 待办行行首真实 Checkbox，勾选加删除线
             GlassCard(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 shape = RoundedCornerShape(UiDimens.CardRadius)
@@ -461,39 +397,80 @@ fun NoteEditorScreen(
                         )
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    BasicRichTextEditor(
-                        state = editorState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .focusRequester(editorFocus),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            fontSize = (16 * bodyScale).sp,
-                            lineHeight = (28 * bodyScale).sp
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        decorationBox = { inner ->
-                            if (editorState.annotatedString.text.isEmpty()) {
-                                Text(
-                                    "写点什么…支持加粗、列表、待办、插图",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        val allBlank = lines.all { it.text.isBlank() }
+                        if (allBlank) {
+                            Text(
+                                "写点什么…支持加粗、列表、行内待办（工具栏 ☑）、插图",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    fontSize = (16 * bodyScale).sp
+                                )
+                            )
+                        }
+                        lines.forEachIndexed { i, line ->
+                            val fr = focusRequesters.getOrPut(line.id) { FocusRequester() }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                if (line.todo) {
+                                    Checkbox(
+                                        checked = line.done,
+                                        onCheckedChange = { lines[i] = line.copy(done = !line.done) },
+                                        modifier = Modifier.padding(top = 10.dp).size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                BasicTextField(
+                                    value = line.value,
+                                    onValueChange = { nv ->
+                                        if (nv.text.contains('\n')) {
+                                            // 回车拆行：在首个换行处切成两行，聚焦新行
+                                            val parts = nv.text.split("\n", limit = 2)
+                                            val before = parts[0]
+                                            val after = if (parts.size > 1) parts[1] else ""
+                                            lines[i] = line.copy(value = TextFieldValue(before))
+                                            val nl = NoteLine(nextId++, TextFieldValue(after), false, false)
+                                            lines.add(i + 1, nl)
+                                            pendingFocusId = nl.id
+                                        } else {
+                                            lines[i] = line.copy(value = nv)
+                                        }
+                                    },
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = (16 * bodyScale).sp,
+                                        lineHeight = (28 * bodyScale).sp,
+                                        textDecoration = if (line.done) TextDecoration.LineThrough else null,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(fr)
+                                        .onFocusChanged { if (it.isFocused) focusedId = line.id }
+                                        .onKeyEvent { ev ->
+                                            if (ev.type == KeyEventType.KeyDown && ev.key == Key.Backspace) {
+                                                if (line.value.selection.min == 0) {
+                                                    if (i > 0) {
+                                                        // 行首退格：与上一行合并
+                                                        val prev = lines[i - 1]
+                                                        val merged = prev.text + line.text
+                                                        lines[i - 1] = prev.copy(
+                                                            value = TextFieldValue(merged, TextRange(merged.length))
+                                                        )
+                                                        lines.removeAt(i)
+                                                        pendingFocusId = prev.id
+                                                        true
+                                                    } else false
+                                                } else false
+                                            } else false
+                                        }
                                 )
                             }
-                            inner()
+                            if (i < lines.lastIndex) Spacer(Modifier.height(2.dp))
                         }
-                    )
-                }
-            }
-        }
-    }
-
-    // 输入停顿 400ms 记一次快照（程序化 undo/redo 与格式化动作即时落栈）
-    LaunchedEffect(Unit) {
-        snapshotFlow { editorState.toText() }.collect {
-            if (loaded) {
-                historyJob?.cancel()
-                historyJob = scope.launch {
-                    delay(400)
-                    pushHistory(editorState)
+                    }
                 }
             }
         }
@@ -513,7 +490,9 @@ fun NoteEditorScreen(
                     }
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("取消") } }
+            dismissButton = {
+                TextButton(onClick = { showDelete = false }) { Text("取消") }
+            }
         )
     }
 }
@@ -528,130 +507,12 @@ private fun splitTitle(md: String): Pair<String, String> {
 }
 
 /**
- * v1.0.6.6（死命令 #4）：标准 Compose Checkbox 待办清单。
- * - 行首标准 Checkbox，勾选后文字加删除线、取消勾选恢复原状；
- * - 与正文富文本解耦，数据经 Markdown 待办行序列化（跨端兼容）；
- * - 高度上限 220dp、超出内部滚动，正文编辑区仍占据主要空间。
- */
-@Composable
-private fun TodoSection(
-    todos: List<TodoItem>,
-    onToggle: (Int) -> Unit,
-    onTextChange: (Int, String) -> Unit,
-    onDelete: (Int) -> Unit,
-    onAdd: (String) -> Unit
-) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
-        shape = RoundedCornerShape(UiDimens.CardRadius)
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Rounded.CheckBox,
-                    contentDescription = null,
-                    tint = AmberPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "待办清单",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            if (todos.isEmpty()) {
-                Text(
-                    "还没有待办。点下方「添加」，或点上方工具栏 ☑ 快速新建一条。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            todos.forEachIndexed { index, item ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = item.done,
-                        onCheckedChange = { onToggle(index) },
-                        modifier = Modifier.size(22.dp)
-                    )
-                    TextField(
-                        value = item.text,
-                        onValueChange = { onTextChange(index, it) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("待办事项") },
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            textDecoration = if (item.done) TextDecoration.LineThrough else null
-                        ),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent
-                        )
-                    )
-                    IconButton(onClick = { onDelete(index) }, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            Icons.Rounded.Delete,
-                            contentDescription = "删除待办",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(17.dp)
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            var newText by remember { mutableStateOf("") }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextField(
-                    value = newText,
-                    onValueChange = { newText = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = { Text("添加一项待办…") },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent
-                    )
-                )
-                Spacer(Modifier.width(6.dp))
-                TextButton(onClick = {
-                    if (newText.isNotBlank()) {
-                        onAdd(newText.trim())
-                        newText = ""
-                    }
-                }) { Text("添加") }
-            }
-        }
-    }
-}
-
-/**
- * 编辑工具栏（对标主流 Markdown 编辑器）：撤销 / 重做 | B I U H | ☑ 待办 • 列表 1. 有序 | 图片 附件 | A±。
- * 单行横向滚动，恒定可见；按钮直接作用于 [RichTextState]（真实富文本，无源码符号）。
+ * 编辑工具栏：B I U H | ☑ 行内待办 • 列表 1. 有序 | 图片 附件 | A±。
+ * 单行横向滚动，恒定可见；按钮作用于当前聚焦行（行级 Markdown 标记 / 行内复选框切换）。
  */
 @Composable
 private fun EditorFormatBar(
     modifier: Modifier = Modifier,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    boldActive: Boolean,
-    italicActive: Boolean,
-    underlineActive: Boolean,
-    headingActive: Boolean,
-    bulletActive: Boolean,
-    orderedActive: Boolean,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onBold: () -> Unit,
     onItalic: () -> Unit,
     onUnderline: () -> Unit,
@@ -676,17 +537,14 @@ private fun EditorFormatBar(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ToolIcon(Icons.Rounded.Undo, "撤销", canUndo, onClick = onUndo)
-            ToolIcon(Icons.Rounded.Redo, "重做", canRedo, onClick = onRedo)
+            ToolIcon(Icons.Rounded.FormatBold, "加粗", true, onClick = onBold)
+            ToolIcon(Icons.Rounded.FormatItalic, "斜体", true, onClick = onItalic)
+            ToolIcon(Icons.Rounded.FormatUnderlined, "下划线", true, onClick = onUnderline)
+            ToolIcon(Icons.Rounded.Title, "标题", true, onClick = onHeading)
             ToolDivider()
-            ToolIcon(Icons.Rounded.FormatBold, "加粗", true, boldActive, onBold)
-            ToolIcon(Icons.Rounded.FormatItalic, "斜体", true, italicActive, onItalic)
-            ToolIcon(Icons.Rounded.FormatUnderlined, "下划线", true, underlineActive, onUnderline)
-            ToolIcon(Icons.Rounded.Title, "标题", true, headingActive, onHeading)
-            ToolDivider()
-            ToolIcon(Icons.Rounded.CheckBox, "待办", true, onClick = onTodo)
-            ToolIcon(Icons.Rounded.FormatListBulleted, "无序列表", true, bulletActive, onBullet)
-            ToolIcon(Icons.Rounded.FormatListNumbered, "有序列表", true, orderedActive, onOrdered)
+            ToolIcon(Icons.Rounded.CheckBox, "行内待办", true, onClick = onTodo)
+            ToolIcon(Icons.Rounded.FormatListBulleted, "无序列表", true, onClick = onBullet)
+            ToolIcon(Icons.Rounded.FormatListNumbered, "有序列表", true, onClick = onOrdered)
             ToolDivider()
             ToolIcon(Icons.Rounded.Image, "插入图片", true, onClick = onImage)
             ToolIcon(Icons.Rounded.AttachFile, "插入附件", true, onClick = onFile)

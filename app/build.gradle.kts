@@ -86,7 +86,17 @@ android {
         //    Android 12+ 用 RenderEffect.createBlurEffect 真高斯模糊，随滑动产生折射光影变化。
         // ④ 笔记待办改为标准 Compose Checkbox 清单（勾选加删除线），废弃「- [ ] 」文字符号替换。
         // ⑤ 主页日历卡支持点击任意日期：选中高亮 + 下方任务列表同步刷新当天数据。
-        versionCode = 56
+        // versionCode 57 = v1.0.6（主页布局优化 + 渲染修复批）：
+        // ① 修复卡片灰/白相间色块断层：GlassSurface 精简为「单层 RenderEffect 模糊壁纸 +
+        //    单层平滑半透明遮罩」，废弃多层叠加 / 整屏 FillBounds / 每卡位置偏移；模糊半径提到 14dp。
+        // ② 主页速览入口拆分：「任务」→「日常」+「Todo」，「背包」→「物品」+「收藏」（旧键自动迁移）。
+        // ③ 主页卡片堆叠 Stack：时间轴 / 人生卡片收入堆叠区，HorizontalPager 左右滑动切换 +
+        //    页码指示 + 自定义入堆叠卡片（DataStore 持久化）。
+        // ④ 笔记行内复选框：取消独立待办清单，改为行式编辑器 + 行首真实 Compose Checkbox，
+        //    勾选加删除线；回车拆行、行首退格合并；Markdown 待办行存取跨端兼容。
+        // ⑤ 任务时间选择器增加钟表盘（Material3 TimePicker analog dial），时间追加进到期日 HH:mm。
+        // ⑥ 父子任务层级缩进优化：INDENT 18→26dp + 引导线加深 + 祖先列淡色「车道」底色。
+        versionCode = 57
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

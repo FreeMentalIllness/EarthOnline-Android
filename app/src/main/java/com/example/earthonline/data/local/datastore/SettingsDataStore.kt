@@ -82,6 +82,9 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         /** 主页速览（概览）自定义入口开关（JSON 字符串集合：tasks/backpack/achievements/map/accounting/ai） */
         val HOME_QUICK_ENTRIES = stringPreferencesKey("home_quick_entries")
 
+        /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（JSON 字符串集合：timeline/life；空 = 用默认全集） */
+        val HOME_STACK_CARDS = stringPreferencesKey("home_stack_cards")
+
         /* ————— v1.0.3 体验升级批次 ————— */
         /** 用户自定义称号（空 = 用默认「旅行者」） */
         val CUSTOM_TITLE = stringPreferencesKey("custom_title")
@@ -214,11 +217,15 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
     /** 主页速览自定义入口（JSON 字符串集合，空串 = 全部显示） */
     val homeQuickEntriesJson: Flow<String> = ds.data.map { it[HOME_QUICK_ENTRIES] ?: "" }
 
+    /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（JSON 字符串集合，空串 = 默认全集） */
+    val homeStackCardsJson: Flow<String> = ds.data.map { it[HOME_STACK_CARDS] ?: "" }
+
     suspend fun setAchSound(v: Boolean) = ds.edit { it[ACH_SOUND] = v }
     suspend fun setCustomTimelineJson(v: String) = ds.edit { it[CUSTOM_TIMELINE] = v }
     suspend fun setHomeFeedFilterJson(v: String) = ds.edit { it[HOME_FEED_FILTER] = v }
     suspend fun setHomeFeedLimit(v: Int) = ds.edit { it[HOME_FEED_LIMIT] = v.coerceIn(0, 200) }
     suspend fun setHomeQuickEntriesJson(v: String) = ds.edit { it[HOME_QUICK_ENTRIES] = v }
+    suspend fun setHomeStackCardsJson(v: String) = ds.edit { it[HOME_STACK_CARDS] = v }
 
     /* ————— v1.0.3 体验升级批次 ————— */
 
@@ -325,6 +332,7 @@ class SettingsDataStore @Inject constructor(@ApplicationContext private val cont
         it.remove(HOME_FEED_FILTER)
         it.remove(HOME_FEED_LIMIT)
         it.remove(HOME_QUICK_ENTRIES)
+        it.remove(HOME_STACK_CARDS)
         it.remove(CUSTOM_TITLE)
         it.remove(MEMORY_PHOTOS)
         it.remove(ALBUMS)

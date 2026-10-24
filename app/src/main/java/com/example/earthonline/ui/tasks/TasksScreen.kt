@@ -12,6 +12,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FormatListNumbered
 import androidx.compose.material.icons.rounded.List
 import androidx.compose.material.icons.rounded.ListAlt
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SubdirectoryArrowRight
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.UnfoldLess
@@ -49,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -99,7 +103,8 @@ private val STATUSES = listOf(
 private val DAY_FMT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
 /** 每层缩进宽度（与 TreeGuide 的单格宽度保持一致） */
-private val INDENT = 18.dp
+// v1.0.6.7（死命令 #6）：层级缩进步进由 18dp 加大到 26dp，子任务左缩进更明显
+private val INDENT = 26.dp
 
 @Composable
 fun TasksRoute(
@@ -668,14 +673,21 @@ private fun TodoTableRow(
 @Composable
 private fun TreeGuide(depth: Int, ancestorLast: List<Boolean>, isLast: Boolean) {
     if (depth <= 0) return
-    val line = MaterialTheme.colorScheme.outlineVariant
-    val corner = 24.dp
+    // v1.0.6.7（死命令 #6）：引导线加深 + 祖先列加淡色「车道」底色，层级关系一目了然
+    val line = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+    val lane = MaterialTheme.colorScheme.outline.copy(alpha = 0.05f)
+    val corner = 22.dp
     Row(Modifier.fillMaxHeight()) {
         repeat(depth) { level ->
             val isFinalLevel = level == depth - 1
             val hasFollowingSibling =
                 if (isFinalLevel) !isLast else !ancestorLast.getOrElse(level + 1) { true }
-            Box(Modifier.width(INDENT).fillMaxHeight()) {
+            Box(
+                Modifier
+                    .width(INDENT)
+                    .fillMaxHeight()
+                    .background(if (isFinalLevel) androidx.compose.ui.graphics.Color.Transparent else lane)
+            ) {
                 if (hasFollowingSibling) {
                     Box(
                         Modifier.fillMaxHeight().width(2.dp).align(Alignment.TopCenter).background(line)
@@ -912,6 +924,117 @@ private fun toggleTaskTodo(state: com.mohamedrejeb.richeditor.model.RichTextStat
 }
 
 /**
+ * v1.0.6.7（死命令 #5）：自绘钟表盘时间选择器（Analog Clock dial）。
+ * 受控组件：传入 hour / minute，用户拖动或点选表盘时回调 onChange；
+ * 「时针 / 分针」chip 决定当前在调哪个；表盘含 60 刻度 + 时针 / 分针。
+ */
+@Composable
+private fun AnalogClockPicker(
+    hour: Int,
+    minute: Int,
+    onChange: (Int, Int) -> Unit
+) {
+    var selectingHour by remember { mutableStateOf(true) }
+    val accent = AmberPrimary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val outline = MaterialTheme.colorScheme.outlineVariant
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            String.format(java.util.Locale.US, "%02d:%02d", hour, minute),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = accent
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = selectingHour, onClick = { selectingHour = true }, label = { Text("时针") })
+            FilterChip(selected = !selectingHour, onClick = { selectingHour = false }, label = { Text("分针") })
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier
+                .size(220.dp)
+                .pointerInput(selectingHour) {
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    fun set(px: Float, py: Float) {
+                        var ang = Math.toDegrees(
+                            Math.atan2((py - cy).toDouble(), (px - cx).toDouble())
+                        ).toFloat()
+                        ang = (ang + 90f + 360f) % 360f
+                        if (selectingHour) {
+                            var h = Math.round(ang / 30f) % 12
+                            if (h == 0) h = 12
+                            onChange(h, minute)
+                        } else {
+                            onChange(hour, Math.round(ang / 6f) % 60)
+                        }
+                    }
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        set(down.position.x, down.position.y)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.pressed } ?: break
+                            set(change.position.x, change.position.y)
+                        }
+                    }
+                }
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val r = size.minDimension / 2f
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                drawCircle(
+                    color = outline.copy(alpha = 0.35f),
+                    radius = r,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 3f)
+                )
+                for (i in 0 until 60) {
+                    val rad = Math.toRadians((i * 6).toDouble())
+                    val isHourTick = i % 5 == 0
+                    val outer = r - 6f
+                    val inner = if (isHourTick) r - 24f else r - 14f
+                    drawLine(
+                        color = if (isHourTick) onSurface else outline,
+                        start = Offset(cx + Math.cos(rad).toFloat() * outer, cy + Math.sin(rad).toFloat() * outer),
+                        end = Offset(cx + Math.cos(rad).toFloat() * inner, cy + Math.sin(rad).toFloat() * inner),
+                        strokeWidth = if (isHourTick) 3f else 1.5f
+                    )
+                }
+                val hourRad = Math.toRadians(((hour % 12) * 30 + minute * 0.5 - 90).toDouble())
+                val minRad = Math.toRadians((minute * 6 - 90).toDouble())
+                drawLine(
+                    color = accent,
+                    start = Offset(cx, cy),
+                    end = Offset(cx + Math.cos(hourRad).toFloat() * r * 0.5f, cy + Math.sin(hourRad).toFloat() * r * 0.5f),
+                    strokeWidth = 8f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = accent,
+                    start = Offset(cx, cy),
+                    end = Offset(cx + Math.cos(minRad).toFloat() * r * 0.72f, cy + Math.sin(minRad).toFloat() * r * 0.72f),
+                    strokeWidth = 5f,
+                    cap = StrokeCap.Round
+                )
+                drawCircle(color = accent, radius = 9f, center = Offset(cx, cy))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            if (selectingHour) "拖动或点选表盘设置小时" else "拖动或点选表盘设置分钟",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
  * 任务编辑 / 新增对话框。
  * 相比旧版补齐：父任务选择（决定层级）、状态选择、到期日不再限于 todo 分类。
  */
@@ -938,10 +1061,16 @@ private fun TaskEditDialog(
     LaunchedEffect(Unit) {
         if (!initialNote.isNullOrBlank()) runCatching { noteRich.setMarkdown(initialNote) }
     }
-    var due by remember { mutableStateOf(initialDue) }
+    // v1.0.6.7（死命令 #5）：到期日拆为「日期(YYYY-MM-DD)」+「时间(HH:mm，可选)」。
+    // dueDate 主体仍是日期串以兼容跨端与日历匹配；选了时间就追加 " HH:mm"。
+    var due by remember { mutableStateOf(initialDue?.take(10)) }
+    var dueTime by remember {
+        mutableStateOf(initialDue?.let { if (it.length >= 16) it.substring(11, 16) else null })
+    }
     var status by remember { mutableStateOf(initialStatus) }
     var parentId by remember { mutableStateOf(initialParentId) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var parentPickerOpen by remember { mutableStateOf(false) }
     // v1.0.5 QA：提交防重 —— 保存按钮在同一帧内被连点两次会重复落库，加一次性标志拦住
     var submitted by remember { mutableStateOf(false) }
@@ -956,7 +1085,8 @@ private fun TaskEditDialog(
                     if (submitted || title.isBlank()) return@TextButton
                     submitted = true
                     onSubmit(
-                        title.trim(), due,
+                        title.trim(),
+                        if (due != null && dueTime != null) "$due $dueTime" else due,
                         runCatching { noteRich.toMarkdown() }.getOrDefault("")
                             .trim().takeIf { it.isNotBlank() },
                         status, parentId
@@ -1050,7 +1180,19 @@ private fun TaskEditDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (due != null) {
-                    TextButton(onClick = { due = null }) { Text("清除到期日") }
+                    TextButton(onClick = { due = null; dueTime = null }) { Text("清除到期日") }
+                }
+
+                // v1.0.6.7（死命令 #5）：时间选择 —— 钟表盘（Analog Clock）视图，选了到期日后可再选具体时间
+                if (due != null) {
+                    OutlinedButton(
+                        onClick = { showTimePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (dueTime != null) "时间 $dueTime · 点击改表盘" else "设置具体时间（钟表盘，可选）")
+                    }
                 }
 
                 // 终极重构 · 工程二：备注 = 富文本（复用笔记编辑器），存 Markdown
@@ -1111,7 +1253,7 @@ private fun TaskEditDialog(
     )
 
     if (showDatePicker) {
-        val initialMillis = due?.let { runCatching { DAY_FMT.parse(it)?.time }.getOrNull() }
+        val initialMillis = due?.let { runCatching { DAY_FMT.parse(it.take(10))?.time }.getOrNull() }
         val state = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -1123,6 +1265,31 @@ private fun TaskEditDialog(
             },
             dismissButton = { TextButton({ showDatePicker = false }) { Text("取消") } }
         ) { DatePicker(state) }
+    }
+
+    // v1.0.6.7（死命令 #5）：时间选择器 —— 自绘钟表盘（Analog Clock dial），
+    // 拖动 / 点选表盘即可直观选时；确定后写回 dueTime(HH:mm)，与日期拼成 "YYYY-MM-DD HH:mm"。
+    if (showTimePicker) {
+        var tHour by remember { mutableIntStateOf(dueTime?.take(2)?.toIntOrNull() ?: 9) }
+        var tMinute by remember { mutableIntStateOf(dueTime?.takeLast(2)?.toIntOrNull() ?: 0) }
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = { Text("选择时间") },
+            text = {
+                AnalogClockPicker(
+                    hour = tHour,
+                    minute = tMinute,
+                    onChange = { h, m -> tHour = h; tMinute = m }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dueTime = String.format(java.util.Locale.US, "%02d:%02d", tHour, tMinute)
+                    showTimePicker = false
+                }) { Text("确定") }
+            },
+            dismissButton = { TextButton({ showTimePicker = false }) { Text("取消") } }
+        )
     }
 
     // 父任务选择：嵌套对话框（避免在 AlertDialog 内使用 Popup 类组件）

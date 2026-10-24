@@ -140,6 +140,8 @@ data class HomeUiState(
     val feedLimit: Int = 3,
     /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
+    /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（timeline=时间轴 / life=人生卡片） */
+    val stackCards: Set<String> = DEFAULT_STACK_CARDS,
     /**
      * v1.0.6.6 主页日历卡：**带到期日的未完成任务**（日程即"有到期日的任务"）。
      * 已在 ViewModel 里过滤好，UI 只管渲染（月历打点 + 当天清单）。
@@ -191,7 +193,19 @@ private data class LocStat(val total: Int, val recent: List<LocationEntity>)
 
 /** 主页速览全部入口 id（与 HomeScreen 的 HomeEntry 一一对应；DataStore 空值回落全集）。
  *  v1.0.7：新增「数据」入口（data），默认收进「更多」收纳区，确保数据看板在首页有入口。 */
-internal val DEFAULT_QUICK_ENTRIES = setOf("tasks", "backpack", "notes", "album", "achievements", "map", "accounting", "ai", "data")
+internal val DEFAULT_QUICK_ENTRIES = setOf("daily", "todo", "items", "collections", "notes", "album", "achievements", "map", "accounting", "ai", "data")
+
+/** v1.0.6.7（入口拆分）：把旧版持久化的速览键迁移到拆分后的新键，防止老用户升级后入口消失。
+ *  tasks → daily + todo；backpack → items + collections。 */
+internal fun migrateQuickEntries(src: Set<String>): Set<String> {
+    val out = src.toMutableSet()
+    if ("tasks" in out) { out -= "tasks"; out += "daily"; out += "todo" }
+    if ("backpack" in out) { out -= "backpack"; out += "items"; out += "collections" }
+    return out
+}
+
+/** v1.0.6.7（死命令 #3）：主页卡片堆叠区默认包含的次要卡片（timeline=时间轴 / life=人生卡片） */
+internal val DEFAULT_STACK_CARDS = setOf("timeline", "life")
 
 private data class Parts(
     val profile: ProfileEntity?,
@@ -209,6 +223,8 @@ private data class Parts(
     val feedLimit: Int = 3,
     /** 主页速览显示的入口 id 集合（DataStore 持久化，含数据看板共 9 个为默认） */
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
+    /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（timeline=时间轴 / life=人生卡片） */
+    val stackCards: Set<String> = DEFAULT_STACK_CARDS,
     /** v1.0.6.6：主页日历卡数据源 —— 带到期日且未完成的任务 */
     val scheduled: List<TaskEntity> = emptyList(),
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
@@ -314,7 +330,16 @@ class HomeViewModel @Inject constructor(
     private val quickEntriesFlow: Flow<Set<String>> = settingsDs.homeQuickEntriesJson.map { txt ->
         if (txt.isBlank()) DEFAULT_QUICK_ENTRIES
         else runCatching { json.decodeFromString(SetSerializer(String.serializer()), txt) }
-            .getOrNull()?.takeIf { it.isNotEmpty() } ?: DEFAULT_QUICK_ENTRIES
+            .getOrNull()?.takeIf { it.isNotEmpty() }
+            ?.let { migrateQuickEntries(it) }
+            ?: DEFAULT_QUICK_ENTRIES
+    }
+
+    /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（timeline=时间轴 / life=人生卡片） */
+    private val stackCardsFlow: Flow<Set<String>> = settingsDs.homeStackCardsJson.map { txt ->
+        if (txt.isBlank()) DEFAULT_STACK_CARDS
+        else runCatching { json.decodeFromString(SetSerializer(String.serializer()), txt) }
+            .getOrNull()?.takeIf { it.isNotEmpty() } ?: DEFAULT_STACK_CARDS
     }
 
     /** v1.0.3：自定义称号 */
@@ -346,6 +371,7 @@ class HomeViewModel @Inject constructor(
             .combine(feedFilterFlow) { parts, kinds -> parts.copy(feedKinds = kinds) }
             .combine(feedLimitFlow) { parts, limit -> parts.copy(feedLimit = limit) }
             .combine(quickEntriesFlow) { parts, quick -> parts.copy(quickEntries = quick) }
+            .combine(stackCardsFlow) { parts, stack -> parts.copy(stackCards = stack) }
             .combine(scheduledFlow) { parts, sched -> parts.copy(scheduled = sched) }
             .combine(bundleFlow) { parts, bundle -> parts.copy(bundle = bundle) }
             .combine(customTitleFlow) { parts, title -> parts.copy(customTitle = title) }
@@ -415,6 +441,16 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDs.setHomeQuickEntriesJson(
                 json.encodeToString(SetSerializer(String.serializer()), entries)
+            )
+        }
+    }
+
+    /** v1.0.6.7：设置主页卡片堆叠区包含的次要卡片（至少保留一个，空集忽略） */
+    fun setStackCards(cards: Set<String>) {
+        if (cards.isEmpty()) return
+        viewModelScope.launch {
+            settingsDs.setHomeStackCardsJson(
+                json.encodeToString(SetSerializer(String.serializer()), cards)
             )
         }
     }
@@ -598,6 +634,7 @@ class HomeViewModel @Inject constructor(
             feedKinds = feedKinds,
             feedLimit = feedLimit,
             quickEntries = quickEntries,
+            stackCards = stackCards,
             // v1.0.6.6：主页轻量日历卡的数据源（带到期日的未完成任务）
             calendarTasks = scheduled,
             // ————— v1.0.3 情绪价值与成长 —————

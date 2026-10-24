@@ -10,7 +10,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.MaterialTheme
@@ -21,19 +20,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.mutableStateOf
 import coil.compose.AsyncImage
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.bouncyClickable
@@ -140,32 +134,19 @@ fun GlassSurface(
     val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
-    // v1.0.6.6（死命令 #3）：**废除「100% 不透明就跳过壁纸模糊」的旧逻辑**。
-    // 旧逻辑让默认不透明度的卡片退化为纯色面板，完全不透出壁纸 —— 正是用户反馈的
-    // 「背景固定半透明色、没有折射透光」根因。现在只要设备支持 GPU 模糊（tier != FLAT）
-    // 且注入了壁纸路径，卡片一律实时采样并模糊壁纸，透出真实色彩、随滑动产生光影变化。
+    // v1.0.6.7（死命令 #1 断层修复）：精简为「单层毛玻璃底层 + 单层平滑半透明遮罩」。
+    // 旧版多层叠加（模糊壁纸 + 渐变 tint + scrim + 顶部高光），且壁纸图按整屏 FillBounds +
+    // 每卡位置偏移，导致灰/白相间的色块断层。现只保留：一层 RenderEffect 高斯模糊壁纸
+    // （matchParentSize + Crop，不偏移、不拉伸）+ 一层 surface 半透明遮罩 + 1dp 描边；
+    // 模糊半径加大到 14dp，色晕更平滑，彻底消除断层，同时平滑透出壁纸真实色彩。
     val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
-
-    /* 着色层改用「上深下浅」的竖向渐变。
-       - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
-       - FLAT 档（低端机）：高对比度半透明纯色底板，不透明度拉满，优先可读性、零 GPU 消费。
-       注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
-    // 着色层：壁纸开启时压低不透明度让壁纸透出（用户滑块仍可在范围内调节），
-    // 纯色降级档（FLAT）保持高不透明、可读性优先。
-    val backdropCap = if (useBackdrop) 0.66f else 1f
-    val (tintTop, tintBottom) = when {
-        tier == GlassTier.FLAT -> 0.94f to 0.94f
-        tintOverride != null -> tintOverride.coerceAtMost(backdropCap) to
-            (tintOverride - 0.10f).coerceAtLeast(0.20f).coerceAtMost(backdropCap)
-        // 无覆写（弹窗 / 按钮等）默认档：压低到 0.60/0.50，让壁纸透出又不失可读性
-        else -> 0.60f to 0.50f
+    // 单层平滑遮罩不透明度：壁纸开启时保持半透明以透出壁纸，「卡片不透明度」滑块在
+    // 0.34~0.66 区间微调；FLAT 降级档用高不透明纯色，优先可读性、零 GPU 开销。
+    val baseAlpha = tintOverride ?: LocalCardOpacity.current
+    val maskAlpha = when {
+        tier == GlassTier.FLAT -> 0.93f
+        else -> (0.34f + 0.26f * baseAlpha).coerceIn(0.34f, 0.66f)
     }
-    val tintBrush = Brush.verticalGradient(
-        colorStops = arrayOf(
-            0.0f to scheme.surface.copy(alpha = tintTop),
-            1.0f to scheme.surface.copy(alpha = tintBottom)
-        )
-    )
 
     Box(
         modifier = modifier
@@ -178,48 +159,33 @@ fun GlassSurface(
                 else Modifier
             )
     ) {
-        /* ⚠️ 装饰层一律用 matchParentSize()，绝不能用 fillMaxSize()。
+        /* 装饰层一律用 matchParentSize()，绝不能用 fillMaxSize()。
            fillMaxSize() 会向父级索取「最大可用高度」——当 GlassSurface 被放进
            Scaffold 的 bottomBar 这类只给 max 约束、不给 min 高度的槽位时，
            它会把整个 Box 撑成满屏高，进而把 innerPadding.bottom 顶到屏高，
            内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
+        // 1) 毛玻璃底层：实时采样壁纸 + RenderEffect 高斯模糊（GPU 档）。
+        //    matchParentSize + Crop 按卡片自身取景，绝不整屏拉伸、绝不按位置偏移 → 无断层。
         if (useBackdrop) {
-            // 1) 实时采样壁纸 + 位置感知模糊（GPU 档，API 31+）。
-            //    v1.0.6.6（死命令 #3）：废弃「固定半透明纯色」—— 卡片按自身在窗口中的位置对齐
-            //    背后同一张壁纸，配合 RenderEffect 高斯模糊，真正透出下方壁纸的真实色彩；
-            //    列表滚动时卡片位置改变 → 采样区域随之移动 → 折射光影随滑动而变化。
-            //    采样图放大到整屏尺寸并反向偏移卡片窗口坐标，使壁纸在卡片范围内「对位」显示。
-            val configuration = LocalConfiguration.current
             val wDensity = LocalDensity.current
-            val screenW = configuration.screenWidthDp.dp
-            val screenH = configuration.screenHeightDp.dp
             val blurPx = with(wDensity) { GLASS_BLUR_RADIUS_DP.toPx() }
-            val bgOffset = remember { mutableStateOf(Offset.Zero) }
             Box(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .onGloballyPositioned { coords: LayoutCoordinates ->
-                        // localToWindow(Offset.Zero) == positionInWindow()：取卡片左上角在窗口中的坐标
-                        bgOffset.value = coords.localToWindow(Offset.Zero)
-                    }
             ) {
                 AsyncImage(
                     model = coil.request.ImageRequest.Builder(LocalContext.current)
                         .data(File(wallPath!!))
-                        .size(420)
+                        .size(220)
                         .crossfade(false)
                         .build(),
                     contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     modifier = Modifier
-                        .size(screenW, screenH)
+                        .matchParentSize()
                         .graphicsLayer {
-                            translationX = -bgOffset.value.x
-                            translationY = -bgOffset.value.y
-                            // Android 12+：原生 RenderEffect 高斯模糊（真正的折射观感）
-                            // 平台 android.graphics.RenderEffect 需经 asComposeRenderEffect() 转为 Compose 类型
                             if (Build.VERSION.SDK_INT >= 31) {
                                 renderEffect = RenderEffect.createBlurEffect(
                                     blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
@@ -228,58 +194,15 @@ fun GlassSurface(
                         }
                 )
             }
-            // 2) 半透明着色层（上深下浅渐变，保证文字可读性 + 底缘溶解）
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(tintBrush)
-            )
-        } else {
-            // 降级档：纯色面板
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(tintBrush)
-            )
         }
-        // 3) 独立可读性遮罩（GlassAccessibilityMode 的核心）：
-        //    与模糊层解耦的纯色 surface 蒙层，无论壁纸多花、模糊多弱，都给文字一层稳定底色。
-        //    - 液态玻璃开启（GPU 档）：补 0.24 的 surface 蒙层（v1.0.12 由 0.18 上调），
-        //      把有效不透明度抬到 ~0.82，任意壁纸下正文对比度都在 WCAG AA 以上；
-        //      同时仍保留壁纸的色相与模糊层次，不会退化成死灰面板。
-        //    - FLAT 档（低端机 / 性能降级）：着色层已接近不透明，无需再叠蒙层（避免变成死灰面板）。
-        // v1.0.17：同色系可读性遮罩 0.24→0.28 —— 任何壁纸下正文都保持稳定对比度
-        // v1.0.18：随「卡片背景不透明度」滑块联动（滑得越透，遮罩越轻；默认 0.74 → 0.28）
-        val scrimAlpha = when {
-            tier == GlassTier.FLAT -> 0f
-            scrimOverride != null -> scrimOverride
-            else -> 0.28f
-        }
-        if (scrimAlpha > 0f) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(shape)
-                    .background(scheme.surface.copy(alpha = scrimAlpha))
-            )
-        }
-        // 4) 顶部高光（液态玻璃标志性边缘光，叠在遮罩之上保证边缘光清晰）
+        // 2) 单层平滑半透明遮罩（可读性 + 与壁纸融合）；FLAT 档即高不透明纯色底板。
         Box(
             Modifier
                 .matchParentSize()
                 .clip(shape)
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color.White.copy(alpha = 0.20f),
-                            0.18f to Color.White.copy(alpha = 0.05f),
-                            0.4f to Color.Transparent
-                        )
-                    )
-                )
+                .background(scheme.surface.copy(alpha = maskAlpha))
         )
+        // 3) 色散描边（玻璃边缘光，1dp 细线，零额外成本）
         if (showBorder) {
             /* v1.0.7：色散描边（dispersion edge）—— 白 → 琥珀 → 冷蓝的细渐变，
                模拟光线掠过玻璃棱镜时边缘的色散；比纯灰 outline 更有「液态」质感。
@@ -364,11 +287,10 @@ fun AppCard(
     )
 }
 
-/* 模糊半径：18dp(v1.0.6) → 10dp(v1.0.7) → 6dp(v1.0.6.7)。
-   低端降级档（FLAT 纯色）完全不走这里，零 GPU 开销。
-   v1.0.6.6（死命令 #3）：现直接用于 RenderEffect.createBlurEffect 的高斯模糊半径，
-   配合位置感知壁纸采样，实现真正随滑动变化的动态毛玻璃。 */
-val GLASS_BLUR_RADIUS_DP: Dp = 6.dp
+/* 模糊半径：v1.0.6.7 由 6dp 提到 14dp —— 用户反馈 6dp 仍能看出壁纸细节、与半透明遮罩
+   叠加后出现灰/白相间断层；加大半径让壁纸化成更平滑的色晕，从根上消除断层观感。
+   FLAT 降级档不走这里，零 GPU 开销。 */
+val GLASS_BLUR_RADIUS_DP: Dp = 14.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */
 @Composable
