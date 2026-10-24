@@ -1,5 +1,6 @@
 package com.example.earthonline.ui.steam
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -59,49 +61,44 @@ import com.example.earthonline.ui.design.EoSpace
  * v1.0.6.6（真机反馈 #8）：背包「收藏」页的**游戏库入口**。
  *
  * Steam 游戏数据不再内联展示在收藏列表里（会把收藏顶下去、语义也变杂），
- * 这里只留一张入口卡，点击跳 [SteamLibraryRoute] 独立二级页。
+ * 这里只留一个入口，点击跳 [SteamLibraryRoute] 独立二级页。
+ * vc62（真机反馈）：入口**缩小为紧凑胶囊** —— 旧版整宽双行卡片占了近两行高度，
+ * 现在只保留「图标 + 我的游戏库 + 箭头」单行小胶囊，随内容自适应宽度，不再喧宾夺主。
  */
 @Composable
 fun SteamLibraryEntry(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    EOGlassCard(
-        modifier = modifier,
-        onClick = onClick
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = EoSpace.Md, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 Icons.Rounded.SportsEsports,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(Modifier.width(EoSpace.Md))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "我的游戏库",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "接入 Steam，把玩过的游戏当作收藏品展示",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = "我的游戏库",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
             Icon(
                 Icons.Rounded.ChevronRight,
                 contentDescription = "进入游戏库",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(14.dp)
             )
         }
     }

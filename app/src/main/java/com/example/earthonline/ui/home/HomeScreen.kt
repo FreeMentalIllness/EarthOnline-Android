@@ -66,6 +66,8 @@ import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material.icons.rounded.Tune
@@ -131,6 +133,7 @@ import com.example.earthonline.ui.theme.GlassSpring
 import com.example.earthonline.ui.theme.GlassSpringIntSize
 import com.example.earthonline.ui.theme.pressScale
 import com.example.earthonline.ui.theme.OnAmber
+import kotlinx.coroutines.launch
 
 /** 主页 LazyColumn 中「人生时间轴」卡片的位置（0 基），供卡片内的「添加里程碑」定位 */
 
@@ -225,36 +228,15 @@ fun HomeScreen(
     // v1.0.6.8：最近动态配置（分类 / 条数 / 添加自定义动态）从 ActsCard 上提到主页层
     var showFeedConfig by remember { mutableStateOf(false) }
     var showAddCustomAct by remember { mutableStateOf(false) }
-    // v1.0.6：速览「展开 / 收起」状态上提到主页层级 —— 只有用户主动点「收起」或触发
-    //         特定页面跳转才折叠；点击其它区域 / 其它操作不会导致展开态被重组复位收起。
-    var overviewExpanded by remember { mutableStateOf(false) }
+    // v1.0.6：速览「展开 / 收起」状态上提到主页层级 —— 只有用户主动点「收起」才折叠。
+    // vc62：remember → rememberSaveable —— 旧版跳转二级页再返回时组合销毁、展开态被静默
+    // 复位成收起（正是「没点收起却自动收起」的根因）；现在跨导航持久保留。
+    var overviewExpanded by rememberSaveable { mutableStateOf(false) }
     // v1.0.19：AI 快捷中枢（右下角悬浮 + 按钮 → 液态玻璃底部抽屉）
     var showAiHub by remember { mutableStateOf(false) }
-    // v1.0.6 封板：搜索框是否聚焦 —— 聚焦时隐藏 AI 悬浮按钮（键盘顶起后它会压在速览瓦片上）
-    var searchFocused by remember { mutableStateOf(false) }
-    // v1.0.6.8（死命令 #4）：悬浮「+」滚动监听 —— 列表内容上滑（向底部读）时隐藏，
-    // 列表内容下滑（回顶）或停止时立即显示，防止遮挡内容。
-    // 死命令翻新：改用 derivedStateOf 直接派生 hideFab，同时观察 isScrollInProgress 与方向位 ——
-    // 滚动一停 isScrollInProgress 翻转，FAB 立即回显（旧实现只在 scrollingUp 变化时重组，
-    // 停滚后卡在隐藏态，正是「卡顿/不跟手」的根因）。方向判定阈值降到 +4，更跟手。
+    // vc62（死命令 #1）：AI 悬浮入口**永久常驻** —— 取消「滑动时隐藏」与「搜索聚焦隐藏」
+    // 的全部降显逻辑（灵敏度太高、来回跳变像卡顿）。搜索框聚焦/滚动时它也稳稳待在右下角。
     val homeListState = rememberLazyListState()
-    var lastFirst by remember { mutableStateOf(0 to 0) }
-    var scrollingUp by remember { mutableStateOf(false) }
-    LaunchedEffect(homeListState) {
-        snapshotFlow { homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset }
-            .collect { (i, o) ->
-                if (homeListState.isScrollInProgress) {
-                    val (li, lo) = lastFirst
-                    val up = i > li || (i == li && o > lo + 4)
-                    if (up != scrollingUp) scrollingUp = up
-                }
-                lastFirst = i to o
-            }
-    }
-    // derivedStateOf：向底读（内容上滑）且仍在滚 → 隐藏；回顶 / 停滚 → 立即显示，零掉帧。
-    val hideFab by remember {
-        derivedStateOf { homeListState.isScrollInProgress && scrollingUp }
-    }
 
     Box(Modifier.fillMaxSize()) {
         // v1.0.18（死命令 3）：顶部整块全幅出血 —— Column 包裹「实心顶块 + 内容列表」。
@@ -296,7 +278,7 @@ fun HomeScreen(
                 results = results,
                 onQueryChange = onQueryChange,
                 onPickResult = onPickResult,
-                onFocusChange = { searchFocused = it }
+                onFocusChange = { }
             )
         }
 
@@ -381,17 +363,13 @@ fun HomeScreen(
         } // v1.0.18：Column（实心顶块 + 内容列表）闭合
 
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
+        // vc62（死命令 #1）：**永久常驻**，不再随滚动/聚焦隐藏。
         // 悬浮在底部导航胶囊上方（58dp 胶囊 + 6dp 底距 + 间距 ≈ 96dp）；
         // v1.0.20：键盘让位由 MainScaffold 统一处理，这里不再自带 imePadding。
-        // v1.0.6.8（死命令 #4 翻新）：hideFab 已上移为 derivedStateOf（见上方声明），
-        // 滚动一停即恢复显示，避免卡在隐藏态。
-        AnimatedVisibility(
-            visible = !searchFocused && !hideFab,
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 18.dp, bottom = 96.dp),
-            enter = fadeIn(animationSpec = tween(180)),
-            exit = fadeOut(animationSpec = tween(160))
+                .padding(end = 18.dp, bottom = 96.dp)
         ) {
             Box(
                 Modifier
@@ -1061,13 +1039,17 @@ private fun HomeStack(
         }
         return
     }
-    // v1.0.6.11（死命令 #2）：卡片堆叠改为「前后层叠」—— 上层卡片居中、下层卡片边缘在
-    // 后方/下方露出，点击下层卡片把它翻到最前。默认最前卡片为「日程」。
+    // vc62（死命令 #5）：v1.0.6.11 的「前后层叠」没有任何手势处理（只有 clickable），
+    // 滑动完全无响应、点下层卡片翻面又与父级 LazyColumn 滚动冲突 —— 正是「堆叠划不动」的根因。
+    // 现更换为最稳定的 HorizontalPager + 缩放/位移动画模拟堆叠：当前页居中满幅，
+    // 前后页按页偏移收缩、下移、变淡，天然支持滑动 / 惯性 / 回弹，手势零冲突。
+    // 默认最前卡片仍为「日程」。
     val defaultFront = remember(pages) {
         val i = pages.indexOf("calendar")
         if (i < 0) 0 else i
     }
-    var front by remember(pages) { mutableStateOf(defaultFront) }
+    val pagerState = rememberPagerState(initialPage = defaultFront, pageCount = { pages.size })
+    val pagerScope = rememberCoroutineScope()
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("卡片堆叠", Modifier.weight(1f), icon = Icons.Rounded.Layers)
@@ -1076,7 +1058,7 @@ private fun HomeStack(
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 repeat(pages.size) { idx ->
-                    val active = idx == front
+                    val active = idx == pagerState.currentPage
                     Box(
                         Modifier
                             .size(if (active) 8.dp else 6.dp)
@@ -1092,73 +1074,65 @@ private fun HomeStack(
             }
         }
         Spacer(Modifier.height(14.dp))
-        // 前后层叠卡片台：固定高度容器内，各卡按相对最前位置的纵深排布（纵移 + 缩放 + 透明度）。
-        BoxWithConstraints(
-            Modifier
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
                 .fillMaxWidth()
-                .height(356.dp)
-                .padding(horizontal = 16.dp)
-        ) {
-            // 倒序遍历：越靠后（rel 越大）越先绘制，最前卡片最后画、压在最上层。
-            pages.forEachIndexed { i, key ->
-                val rel = i - front
-                val absRel = kotlin.math.abs(rel)
-                val offsetY by animateDpAsState(
-                    targetValue = (rel * 30).dp,
-                    animationSpec = tween(320), label = "stackOffset$i"
-                )
-                val scale by animateFloatAsState(
-                    targetValue = (1f - absRel * 0.05f).coerceAtLeast(0.82f),
-                    animationSpec = tween(320), label = "stackScale$i"
-                )
-                val alpha by animateFloatAsState(
-                    targetValue = if (absRel > 2) 0f else (1f - absRel * 0.18f).coerceAtLeast(0f),
-                    animationSpec = tween(320), label = "stackAlpha$i"
-                )
-                val onClick = if (rel == 0) {
-                    // 最前卡片：点击进入对应详情（仅 一签/动态/日程 有跳转；时间轴/人生卡纯展示）
-                    {
-                        when (key) {
-                            "dailydraw" -> dailyDraw?.let { onOpenDraw(it) }
-                            "acts" -> onOpenActs()
-                            "calendar" -> onOpenCalendar()
+                .height(356.dp),
+            pageSpacing = 12.dp,
+            beyondViewportPageCount = 1
+        ) { page ->
+            // 页偏移（0 = 当前页，1 = 相邻页）：驱动缩放 / 下移 / 透明度的堆叠景深
+            val pageOffset = kotlin.math.abs(
+                (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+            )
+            GlassCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(330.dp)
+                    .graphicsLayer {
+                        val f = pageOffset.coerceIn(0f, 1f)
+                        val s = 1f - f * 0.07f
+                        scaleX = s
+                        scaleY = s
+                        alpha = 1f - f * 0.35f
+                        translationY = f * 18.dp.toPx()
+                    }
+                    .clickable {
+                        if (page == pagerState.currentPage) {
+                            // 当前页：点击进入对应详情（一签/动态/日程；时间轴/人生卡纯展示）
+                            when (pages[page]) {
+                                "dailydraw" -> dailyDraw?.let { onOpenDraw(it) }
+                                "acts" -> onOpenActs()
+                                "calendar" -> onOpenCalendar()
+                            }
+                        } else {
+                            // 相邻页：点击把它翻到最前（带弹簧动画）
+                            pagerScope.launch { pagerState.animateScrollToPage(page) }
                         }
                     }
-                } else {
-                    { front = i }
-                }
-                GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .zIndex(-absRel.toFloat())
-                        .graphicsLayer { this.alpha = alpha }
-                        .offset { IntOffset(0, offsetY.roundToPx()) }
-                        .scale(scale)
-                        .clickable(onClick = onClick)
-                        .height(330.dp)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        when (key) {
-                            "dailydraw" -> {
-                                val draw = dailyDraw
-                                if (draw != null) DailyDrawCard(item = draw)
-                                else EmptyHint("今天没有抽到记录，明天再来")
-                            }
-                            "acts" -> ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
-                            "calendar" -> CalendarCardPure(tasks = calendarTasks)
-                            "timeline" -> timeline()
-                            "life" -> life()
+                    when (pages[page]) {
+                        "dailydraw" -> {
+                            val draw = dailyDraw
+                            if (draw != null) DailyDrawCard(item = draw)
+                            else EmptyHint("今天没有抽到记录，明天再来")
                         }
+                        "acts" -> ActsFeedPure(allActs = acts, feedKinds = feedKinds, feedLimit = feedLimit)
+                        "calendar" -> CalendarCardPure(tasks = calendarTasks)
+                        "timeline" -> timeline()
+                        "life" -> life()
                     }
                 }
             }
         }
         Text(
-            "点击下层卡片切换到最前 · 点击「日程」卡片查看详情 · 右上角自定义",
+            "左右滑动翻页 · 点击当前卡片查看详情 · 右上角自定义",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp)
@@ -1385,12 +1359,17 @@ private fun OverviewGrid(
     var showAccDialog by remember { mutableStateOf(false) }
     // v1.0.6.7（死命令 #2 入口拆分）：原「任务」拆为「日常」+「Todo」两项，原「背包」拆为
     // 「物品」+「收藏」两项。日常/Todo 同走任务页（内部按状态筛选），物品走背包页、收藏走收藏页。
+    // vc62（跳转修复）：Todo 的 route 直挂 "new_todo"（任务页 Todo Tab + 自动弹新建对话框）——
+    // 旧版 route 写死 "tasks"，收起态走特殊分支没错、展开区走通用 route 却跳成普通任务页，
+    // 正是「点 Todo 跳转错误」的根因；现在收起/展开两条路径同一个语义。
+    // vc62：新增「游戏库」入口（Steam 游戏库独立页）。
     val allEntries = listOf(
         HomeEntry("daily", Icons.Rounded.Today, "日常", "完成率 ${state.doneRatio}%", "tasks", ModuleTints.Tasks),
-        HomeEntry("todo", Icons.Rounded.PlaylistAddCheck, "Todo", "${state.totalTasks - state.doneTasks} 待完成", "tasks", ModuleTints.Tasks),
+        HomeEntry("todo", Icons.Rounded.PlaylistAddCheck, "Todo", "${state.totalTasks - state.doneTasks} 待完成", "new_todo", ModuleTints.Tasks),
         HomeEntry("items", Icons.Rounded.Backpack, "物品", "${state.itemCount} 件物品", "backpack", ModuleTints.Backpack),
         HomeEntry("collections", Icons.Rounded.Favorite, "收藏", "${state.collectionCount} 个收藏", "collections", ModuleTints.Backpack),
         HomeEntry("notes", Icons.Rounded.EditNote, "笔记", "${state.noteCount} 篇笔记", "notes", ModuleTints.Notes),
+        HomeEntry("games", Icons.Rounded.SportsEsports, "游戏库", "Steam 游戏收藏", "steam_library", ModuleTints.Data),
         HomeEntry("album", Icons.Rounded.PhotoLibrary, "相册", "${state.albumCount} 张照片", "album", ModuleTints.Album),
         HomeEntry("map", Icons.Rounded.Map, "地图", "${state.locationCount} 处足迹", "map", ModuleTints.Map),
         HomeEntry("accounting", Icons.Rounded.BarChart, "记账", "账本与导出", null, ModuleTints.Accounting),
@@ -1401,10 +1380,10 @@ private fun OverviewGrid(
     // 用户自定义显隐（DataStore）；异常空集时回落全部，防止入口全灭
     val visible = allEntries.filter { it.id in state.quickEntries }.ifEmpty { allEntries }
 
-    // 死命令 #5（v1.0.6.x）：速览默认收起 —— 收起态只固定 6 个核心入口
-    // （相册/地图/记账/数据/成就/系统，3 列 × 2 行），不受历史自定义影响；
-    // 其余入口（日常/Todo/物品/收藏/笔记，共 5 个）默认收进「展开 / 更多」区，点按钮平滑放出/收回。
-    val DEFAULT_IDS = setOf("album", "map", "accounting", "data", "achievements", "ai")
+    // 死命令 #5（v1.0.6.x）：速览默认收起 —— 收起态固定核心入口（3 列 × 3 行），
+    // 不受历史自定义影响；其余入口默认收进「展开 / 更多」区，点按钮平滑放出/收回。
+    // vc62：默认集加入「游戏库」（todo 仍在展开区，跳转语义已统一）。
+    val DEFAULT_IDS = setOf("album", "map", "accounting", "data", "achievements", "ai", "games")
     val defaultEntries = allEntries.filter { it.id in DEFAULT_IDS }
     val moreEntries = visible.filter { it.id !in DEFAULT_IDS }
 
@@ -1449,12 +1428,12 @@ private fun OverviewGrid(
                         modifier = Modifier.weight(1f)
                     ) {
                         // 死命令 #1（v1.0.6.x）：速览 = 先跳对应二级主页面，再自动弹出该功能的操作面板。
-                        // 记账 → 唤起外部记账 App / 下载页（外链跳转，非应用内页）；
-                        // Todo → 任务页 Todo Tab + 新建任务弹窗；
-                        // 日常 → 任务页；笔记 → 直达新建笔记编辑页；其余保持原跳转。
+                        // 记账 → 唤起外部记账 App（其记账页自带键盘输入，即「记一笔」）；
+                        //        目标 App 未安装时弹下载渠道弹窗（网盘 + GitHub）。
+                        // Todo → route 已直挂 new_todo：任务页 Todo Tab + 自动弹新建任务框；
+                        // 日常 → 任务页；笔记 → 直达新建笔记编辑页；其余按 route 跳转。
                         when (entry.id) {
                             "accounting" -> { if (!launchAccounting(context)) showAccDialog = true }
-                            "todo" -> onNavigate("new_todo")
                             "daily" -> onNavigate("tasks")
                             "notes" -> onNavigate("note_editor?id=&folder=")
                             else -> if (entry.route != null) onNavigate(entry.route)
@@ -1539,6 +1518,7 @@ private fun QuickEntriesSheet(enabled: Set<String>, onToggle: (String, Boolean) 
         QuickEntryDef("items", Icons.Rounded.Backpack, "物品", ModuleTints.Backpack),
         QuickEntryDef("collections", Icons.Rounded.Favorite, "收藏", ModuleTints.Backpack),
         QuickEntryDef("notes", Icons.Rounded.EditNote, "笔记", ModuleTints.Notes),
+        QuickEntryDef("games", Icons.Rounded.SportsEsports, "游戏库", ModuleTints.Data),
         QuickEntryDef("album", Icons.Rounded.PhotoLibrary, "相册", ModuleTints.Album),
         QuickEntryDef("map", Icons.Rounded.Map, "地图", ModuleTints.Map),
         QuickEntryDef("accounting", Icons.Rounded.BarChart, "记账", ModuleTints.Accounting),

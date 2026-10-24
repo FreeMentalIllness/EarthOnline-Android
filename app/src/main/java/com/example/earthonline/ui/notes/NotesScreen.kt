@@ -1,9 +1,11 @@
 package com.example.earthonline.ui.notes
 
 import com.example.earthonline.ui.components.AnimatedAlertDialog
+import com.example.earthonline.ui.components.bouncyPress
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,12 +90,13 @@ fun NotesScreen(
     val folders by vm.folders.collectAsStateWithLifecycle(initialValue = emptyList())
     val folderMap by vm.folderMap.collectAsStateWithLifecycle(initialValue = emptyMap())
 
-    var searchOpen by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<String?>(null) }
     // v1.0.6.9：分类相关弹窗状态
     var showCreateFolder by remember { mutableStateOf(false) }
     // v1.0.6.11：顶栏「分类管理」入口（对齐背包页右上角），集中管理全部笔记分类
     var showFolderManager by remember { mutableStateOf(false) }
+    // vc62（UI 统一批）：右下角悬浮「+」→ 新建笔记/分类选项面板（对齐背包页 FAB 交互）
+    var showCreatePanel by remember { mutableStateOf(false) }
     var manageFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var confirmDeleteFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var moveTarget by remember { mutableStateOf<MemoEntity?>(null) }
@@ -108,6 +111,7 @@ fun NotesScreen(
         notes.filter { val fid = folderMap[it.id]; fid.isNullOrBlank() || fid !in folderIds }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -116,21 +120,28 @@ fun NotesScreen(
                 // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
-                    IconButton(onClick = {
-                        searchOpen = !searchOpen
-                        if (!searchOpen) vm.setQuery("")
-                    }) {
-                        Icon(
-                            imageVector = if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
-                            contentDescription = "搜索"
-                        )
-                    }
                     // v1.0.6.11：分类管理入口（对齐背包页右上角 Tune 图标）
+                    // vc62：搜索改为页面顶部常驻搜索框（对齐背包页），顶栏搜索开关移除
                     IconButton(onClick = { showFolderManager = true }) {
                         Icon(Icons.Rounded.Tune, contentDescription = "分类管理")
                     }
                 }
             )
+        },
+        floatingActionButton = {
+            // vc62：右下角悬浮「+」—— 弹出「新建笔记 / 新建分类」选项面板
+            FloatingActionButton(
+                onClick = { showCreatePanel = !showCreatePanel },
+                containerColor = AmberPrimary,
+                shape = androidx.compose.foundation.shape.CircleShape,
+                modifier = Modifier.bouncyPress()
+            ) {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = "新建笔记或分类",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     ) { padding ->
         Column(
@@ -138,17 +149,25 @@ fun NotesScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (searchOpen) {
-                GlassTextField(
-                    value = query,
-                    onValueChange = vm::setQuery,
-                    placeholder = "搜正文或标签",
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
+            // vc62（UI 统一批）：顶部常驻搜索框 —— 与背包页同一套玻璃输入条风格，
+            // 不再「点放大镜才出现」；取消搜索时点输入框末端的清空键即可。
+            GlassTextField(
+                value = query,
+                onValueChange = vm::setQuery,
+                placeholder = "搜正文或标签",
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "搜索") },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { vm.setQuery("") }) {
+                            Icon(Icons.Rounded.Close, contentDescription = "清空")
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
             // 标签筛选：全部 + 已用过的标签（按使用次数排序）
             if (allTags.isNotEmpty()) {
@@ -183,13 +202,8 @@ fun NotesScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 顶部两个常驻入口：新建笔记（落未分类）/ 新建分类
-                item(key = "new_note") {
-                    NewNoteEntry(onClick = { onEdit(null, null) })
-                }
-                item(key = "new_folder") {
-                    NewFolderEntry(onClick = { showCreateFolder = true })
-                }
+                // vc62（UI 统一批）：取消顶部「新建笔记」「新建分类」两大块常驻卡片 ——
+                // 新建入口统一收进右下角悬浮「+」选项面板，列表直接以分类/笔记开头。
 
                 if (filtering) {
                     // 筛选态：平铺结果，不分组（避免空分类干扰筛选）
@@ -322,6 +336,80 @@ fun NotesScreen(
             }
         }
     }
+
+        // vc62：新建选项面板（右下角 FAB 弹出）—— 半透明遮罩 + 两张玻璃选项卡
+        if (showCreatePanel) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = 0.24f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { showCreatePanel = false }
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = 108.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                Surface(
+                    onClick = { showCreatePanel = false; onEdit(null, null) },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, MaterialTheme.colorScheme.outlineVariant
+                    )
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.EditNote,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            "新建笔记",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                Surface(
+                    onClick = { showCreatePanel = false; showCreateFolder = true },
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, MaterialTheme.colorScheme.outlineVariant
+                    )
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Add,
+                            contentDescription = null,
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            "新建分类",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    } // vc62：外层 Box（面板覆盖层）闭合
 
     toDelete?.let { id ->
         AnimatedAlertDialog(
@@ -663,102 +751,6 @@ private fun NewNoteInFolderRow(folderName: String, onClick: () -> Unit) {
                 "在「$folderName」里写一篇",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-/**
- * v1.0.6.9：新建笔记入口卡（落入「未分类」）。
- * 点击直接进入完整编辑页 —— 标题输入 + 格式化工具栏 + 正文区一步到位，
- * 不再在列表页内联输入（内联框没有工具栏，格式根本用不了）。
- */
-@Composable
-private fun NewNoteEntry(onClick: () -> Unit) {
-    AppCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Rounded.Edit, contentDescription = "编辑", tint = AmberPrimary, modifier = Modifier.size(18.dp)) }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "新建笔记",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "标题 · 正文 · 加粗 / 列表 / 待办 / 插图",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary) {
-                Text(
-                    "＋ 写",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
-                )
-            }
-        }
-    }
-}
-
-/** v1.0.6.9：新建分类入口卡（「先建分类，再建笔记」的第一入口） */
-@Composable
-private fun NewFolderEntry(onClick: () -> Unit) {
-    AppCard(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = onClick
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(AmberPrimary.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Rounded.Add,
-                    contentDescription = null,
-                    tint = AmberPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "新建分类",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "先建文件夹，再把笔记归进去",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                "＋",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = AmberPrimary
             )
         }
     }

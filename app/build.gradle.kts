@@ -154,7 +154,16 @@ android {
         // ④ 恢复旧版记账外链跳转（已配包名 Intent 直启，否则弹网盘/GitHub 双下载引导）；
         // ⑤ 任务页 Tab 对齐背包分段控件样式；
         // ⑥ 笔记页顶栏加分类管理 + 待办打勾行级切换（点一次☑ 再点□）。
-        versionCode = 61
+        // versionCode 62 = v1.0.6（液态玻璃质感 + 速览逻辑大修批）：
+        // ① 顶级液态玻璃（参考 zhengfang-apk / Kyant Backdrop）：API33+ AGSL 边缘折射 + RGB 色散
+        //    链式 RenderEffect；DrawScope 手绘顶部极细高光 + 底部内阴影（玻璃厚度感）；
+        // ② AI 悬浮入口永久常驻（取消滑动/聚焦隐藏）；速览展开态 rememberSaveable（跳页返回不收起）；
+        // ③ 速览 Todo 跳转修复（route 直挂 new_todo：任务页 Todo Tab + 自动弹新建框）；主页速览新增「游戏库」入口；
+        // ④ 背包收藏页 Steam 入口缩小为紧凑胶囊；
+        // ⑤ 笔记页 UI 统一：取消顶部两张新建大卡，顶部常驻搜索框（对齐背包），右下角悬浮「+」
+        //    弹新建笔记/分类选项面板；
+        // ⑥ 卡片堆叠修复：HorizontalPager + 缩放/位移动画模拟堆叠（滑动/惯性/回弹零冲突）。
+        versionCode = 62
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

@@ -3,12 +3,17 @@ package com.example.earthonline.ui.theme
 import android.app.ActivityManager
 import android.content.Context
 import android.graphics.RenderEffect
+import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import java.io.File
@@ -84,6 +89,61 @@ val LocalLiquidGlass = compositionLocalOf { true }
  */
 enum class GlassTier { FULL, BLUR, FLAT }
 
+/* ============================================================
+ * v1.0.6 vc62（顶级液态玻璃质感批）—— 深度参考开源项目 zhengfang-apk
+ * （znjhahaha/zhengfang-apk，Kyant Backdrop 的 blur + lens + vibrancy 渲染栈）：
+ *  - 折射（lens）：卡片边缘 refractionHeight 带内，按圆角矩形 SDF 法线把采样点向内推，
+ *    背景在边缘被「弯折放大」，玻璃有厚度与透光感；
+ *  - 色散（chromatic aberration）：R/G/B 三通道按法线方向做 ±uAberr 的错位采样，
+ *    边缘出现棱镜式彩色镶边；
+ *  - 顶部极细高光（Top-edge highlight）：DrawScope 手绘 1.5px 渐变高光线 +
+ *    底部内阴影，模拟左上打光的玻璃倒角。
+ * AGSL RuntimeShader 仅 API 33+ 可用；API 31/32 回落纯高斯模糊；低版本纯半透明。
+ * ============================================================ */
+private const val GLASS_LENS_AGSL = """
+    uniform shader uContent;
+    uniform float2 uSize;
+    uniform float uRadius;
+    uniform float uRefH;
+    uniform float uRefAmt;
+    uniform float uAberr;
+
+    float sdRoundRect(float2 p, float2 hs, float r) {
+        float2 q = abs(p) - hs + r;
+        return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    }
+
+    half4 main(float2 fragCoord) {
+        float2 c = uSize * 0.5;
+        float d = sdRoundRect(fragCoord - c, c, uRadius);
+        float e = 0.5;
+        float2 g = float2(
+            sdRoundRect(fragCoord - c + float2(e, 0.0), c, uRadius) - d,
+            sdRoundRect(fragCoord - c + float2(0.0, e), c, uRadius) - d
+        );
+        float gl = length(g);
+        g = gl > 0.0001 ? g / gl : float2(0.0);
+        float t = clamp(1.0 + d / uRefH, 0.0, 1.0);
+        float k = t * t * uRefAmt;
+        float2 uv = fragCoord - g * k;
+        half4 col = half4(0.0);
+        col.r = uContent.eval(uv - g * uAberr * t).r;
+        col.g = uContent.eval(uv).g;
+        col.b = uContent.eval(uv + g * uAberr * t).b;
+        col.a = 1.0;
+        return col;
+    }
+"""
+
+/** 折射带高度（边缘往内多少像素开始弯折） */
+val GLASS_REFRACTION_HEIGHT_DP: Dp = 12.dp
+
+/** 折射强度（边缘最大位移像素） */
+val GLASS_REFRACTION_AMOUNT_DP: Dp = 12.dp
+
+/** 色散错位（RGB 三通道边缘错位像素） */
+const val GLASS_ABERRATION_PX = 1.5f
+
 @Composable
 fun rememberGlassTier(): GlassTier {
     val context = LocalContext.current
@@ -126,6 +186,8 @@ fun GlassSurface(
     scrimOverride: Float? = null,
     /** v1.0.6.9（死命令）：true = 弹窗档，0.97 近不透明纯色、不采样壁纸 */
     solid: Boolean = false,
+    /** vc62：折射 SDF 用的圆角半径（与 shape 视觉圆角一致即可；仅 API33+ 折射档消费） */
+    fxRadius: Dp = 20.dp,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -146,6 +208,8 @@ fun GlassSurface(
     // 量级）+ 极轻可读性遮罩。弹窗(solid=0.97 近不透明) 与 无壁纸 / 性能模式 回落近不透明纯色。
     val useBackdrop = !solid && liquid && !wallPath.isNullOrBlank()
     val frostAlpha = if (solid) 0.97f else 0.66f
+    // vc62：高光/折射共用的圆角像素半径（函数级，供 drawBehind 与 shader 共用）
+    val fxRadiusPx = with(LocalDensity.current) { fxRadius.toPx() }
 
     Box(
         modifier = modifier
@@ -166,8 +230,15 @@ fun GlassSurface(
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
         if (useBackdrop) {
             // 1) 毛玻璃底层：采样壁纸 + 高斯模糊（GPU 档，API31+；低版本跳过模糊只透色相）
+            //    vc62：API33+ 追加 AGSL lens 折射 + 色散（blur → RuntimeShader 链式 RenderEffect）
             val wDensity = LocalDensity.current
             val blurPx = with(wDensity) { GLASS_BLUR_RADIUS_DP.toPx() }
+            val refHPx = with(wDensity) { GLASS_REFRACTION_HEIGHT_DP.toPx() }
+            val refAmtPx = with(wDensity) { GLASS_REFRACTION_AMOUNT_DP.toPx() }
+            // AGSL 折射 shader：API 33+ 才有 RuntimeShader；编译失败静默回落纯模糊
+            val lensShader = if (Build.VERSION.SDK_INT >= 33) {
+                runCatching { RuntimeShader(GLASS_LENS_AGSL) }.getOrNull()
+            } else null
             Box(Modifier.matchParentSize().clip(shape)) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -181,9 +252,20 @@ fun GlassSurface(
                         .matchParentSize()
                         .graphicsLayer {
                             renderEffect = if (Build.VERSION.SDK_INT >= 31) {
-                                RenderEffect.createBlurEffect(
+                                val blur = RenderEffect.createBlurEffect(
                                     blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
-                                ).asComposeRenderEffect()
+                                )
+                                if (lensShader != null && size.width > 0f && size.height > 0f) {
+                                    runCatching {
+                                        lensShader.setFloatUniform("uSize", size.width, size.height)
+                                        lensShader.setFloatUniform("uRadius", fxRadiusPx)
+                                        lensShader.setFloatUniform("uRefH", refHPx)
+                                        lensShader.setFloatUniform("uRefAmt", refAmtPx)
+                                        lensShader.setFloatUniform("uAberr", GLASS_ABERRATION_PX)
+                                        val lens = RenderEffect.createRuntimeShaderEffect(lensShader, "uContent")
+                                        RenderEffect.createChainEffect(lens, blur).asComposeRenderEffect()
+                                    }.getOrElse { blur.asComposeRenderEffect() }
+                                } else blur.asComposeRenderEffect()
                             } else null
                         }
                 )
@@ -205,6 +287,51 @@ fun GlassSurface(
                     .background(scheme.surface.copy(alpha = frostAlpha))
             )
         }
+        // vc62：顶部极细高光 + 底部内阴影 —— DrawScope 手绘的玻璃倒角，
+        // 模拟左上打光：顶边 1.5px 白色渐变高光线（左亮右暗），底部 20dp 极轻内阴影，
+        // 让玻璃「有厚度」。纯 drawBehind，零额外合成开销；solid 弹窗档同样保留。
+        Box(
+            Modifier
+                .matchParentSize()
+                .drawBehind {
+                    val hi = 1.5.dp.toPx()
+                    val inset = fxRadiusPx * 0.55f
+                    // 顶边高光线：白 → 透明，左上角最亮
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.70f),
+                                Color.White.copy(alpha = 0.28f),
+                                Color.Transparent
+                            )
+                        ),
+                        topLeft = Offset(inset, 0f),
+                        size = Size(size.width - inset * 2f, hi)
+                    )
+                    // 高光下方 2px 柔光晕，增强「倒角」立体感
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.16f),
+                                Color.Transparent
+                            )
+                        ),
+                        topLeft = Offset(inset, hi),
+                        size = Size(size.width - inset * 2f, 3.dp.toPx())
+                    )
+                    // 底部内阴影（玻璃厚度）
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.06f)
+                            )
+                        ),
+                        topLeft = Offset(0f, size.height - 20.dp.toPx()),
+                        size = Size(size.width, 20.dp.toPx())
+                    )
+                }
+        )
         // 3) 色散描边（玻璃边缘光，1dp 细线，零额外成本）
         if (showBorder) {
             /* v1.0.7：色散描边（dispersion edge）—— 白 → 琥珀 → 冷蓝的细渐变，
@@ -261,7 +388,9 @@ fun GlassCard(
         tintOverride = userAlpha,
         // v1.0.6.6（死命令 #3）：壁纸开启时始终保留一层可读性遮罩（下限 0.22），
         // 即便用户把卡片不透明度拉到 100%，也保证文字对比度稳定、同时透出壁纸色相。
-        scrimOverride = (0.28f * (userAlpha / 0.74f)).coerceIn(0.22f, 0.42f)
+        scrimOverride = (0.28f * (userAlpha / 0.74f)).coerceIn(0.22f, 0.42f),
+        // vc62：折射 SDF 圆角与卡片视觉圆角同源
+        fxRadius = UiDimens.CardRadius
     ) {
         // v1.0.6 封板：删掉内层 10% 黑色暗化层 —— 它正是「卡片发灰、和速览瓦片不是一种白」的真凶。
         // 可读性已由 GlassSurface 内部的 surface 蒙层（scrim）负责，无需再叠一层黑。

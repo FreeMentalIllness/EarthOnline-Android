@@ -495,10 +495,10 @@ private fun CollectionsPane(
         )
         ViewModeToggle(grid = grid, onToggle = { grid = !grid })
         /* v1.0.6.6（真机反馈 #8）：Steam 游戏数据**移出收藏页**，只保留一个入口。
-           内联展示会把收藏列表顶下去、也让「收藏」语义变杂；游戏库现在是独立二级页。 */
+           内联展示会把收藏列表顶下去、也让「收藏」语义变杂；游戏库现在是独立二级页。
+           vc62：入口缩小为紧凑胶囊（随内容自适应宽度，不再占整行）。 */
         SteamLibraryEntry(
             modifier = Modifier
-                .fillMaxWidth()
                 .padding(horizontal = UiDimens.ListPad)
                 .padding(top = 8.dp),
             onClick = onOpenSteamLibrary
