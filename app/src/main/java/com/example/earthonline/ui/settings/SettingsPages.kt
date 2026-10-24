@@ -533,7 +533,6 @@ fun BackupSyncRoute(
             title = { Text("隐私政策") },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
@@ -880,7 +879,6 @@ fun AboutRoute(
             title = { Text("更新说明") },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     AppInfo.changelog.forEach { (ver, date, items) ->

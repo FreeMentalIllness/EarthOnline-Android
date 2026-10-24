@@ -2,6 +2,7 @@ package com.example.earthonline.ui.theme
 
 import android.app.ActivityManager
 import android.content.Context
+import android.graphics.RenderEffect
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,6 +10,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.MaterialTheme
@@ -18,14 +20,20 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.mutableStateOf
 import coil.compose.AsyncImage
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.bouncyClickable
@@ -132,24 +140,25 @@ fun GlassSurface(
     val tier = deviceTier
     val scheme = MaterialTheme.colorScheme
     val wallPath = LocalWallpaperPath.current
-    // v1.0.19：卡片不透明度拉满（100% 纯色档）时跳过壁纸模糊采样 ——
-    // 纯色底下采样结果完全被盖住，纯属 GPU 浪费；跳过后卡片走零采样纯色渲染。
-    // v1.0.6.6：滚动不再影响本开关 —— 液态玻璃常驻，滑动中也是满模糊。
-    val cardOpaque = (tintOverride ?: 0f) >= CARD_OPAQUE_THRESHOLD
-    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank() && !cardOpaque
+    // v1.0.6.6（死命令 #3）：**废除「100% 不透明就跳过壁纸模糊」的旧逻辑**。
+    // 旧逻辑让默认不透明度的卡片退化为纯色面板，完全不透出壁纸 —— 正是用户反馈的
+    // 「背景固定半透明色、没有折射透光」根因。现在只要设备支持 GPU 模糊（tier != FLAT）
+    // 且注入了壁纸路径，卡片一律实时采样并模糊壁纸，透出真实色彩、随滑动产生光影变化。
+    val useBackdrop = tier != GlassTier.FLAT && !wallPath.isNullOrBlank()
 
     /* 着色层改用「上深下浅」的竖向渐变。
        - GPU 档（FULL/BLUR）：顶部略深、底部略透，顶部托住标题/正文，底部与背景柔和溶解；
        - FLAT 档（低端机）：高对比度半透明纯色底板，不透明度拉满，优先可读性、零 GPU 消费。
        注意：下方还有一层「独立可读性遮罩（scrim）」与模糊层解耦，进一步兜底任意壁纸下的对比度。 */
+    // 着色层：壁纸开启时压低不透明度让壁纸透出（用户滑块仍可在范围内调节），
+    // 纯色降级档（FLAT）保持高不透明、可读性优先。
+    val backdropCap = if (useBackdrop) 0.66f else 1f
     val (tintTop, tintBottom) = when {
         tier == GlassTier.FLAT -> 0.94f to 0.94f
-        // v1.0.19：100% 档 = 上下都拉满 1.0，卡片成为真正的 surface 纯色底
-        tintOverride != null && tintOverride >= CARD_OPAQUE_THRESHOLD -> 1f to 1f
-        // v1.0.18：卡片不透明度滑块覆写（上深下浅的梯度差收窄为 0.08）
-        tintOverride != null -> tintOverride to (tintOverride - 0.08f).coerceAtLeast(0.30f)
-        // v1.0.17：底部着色下限 0.62→0.66 —— 用户反馈可读性优先，Alpha 收敛进 60%~80% 区间上沿
-        else -> 0.74f to 0.66f
+        tintOverride != null -> tintOverride.coerceAtMost(backdropCap) to
+            (tintOverride - 0.10f).coerceAtLeast(0.20f).coerceAtMost(backdropCap)
+        // 无覆写（弹窗 / 按钮等）默认档：压低到 0.60/0.50，让壁纸透出又不失可读性
+        else -> 0.60f to 0.50f
     }
     val tintBrush = Brush.verticalGradient(
         colorStops = arrayOf(
@@ -176,26 +185,47 @@ fun GlassSurface(
            内容区被完全挤出可视范围（v1.0.7 首页全空白的根因）。
            matchParentSize() 只「跟随」最终尺寸、不参与测量，语义才正确。 */
         if (useBackdrop) {
-            // 1) 模糊壁纸背景（GPU 档）。
-            //    v1.0.7 性能关键：毛玻璃底图按 160px 小图采样 —— 模糊之后反正是一团色晕，
-            //    小图的视觉结果与全尺寸图完全一致，但每帧的上传带宽 / 采样开销大幅下降；
-            //    之前直接用 File 全尺寸解码，N 个玻璃卡片 = N 张全尺寸位图常驻显存，是卡顿主源之一。
+            // 1) 实时采样壁纸 + 位置感知模糊（GPU 档，API 31+）。
+            //    v1.0.6.6（死命令 #3）：废弃「固定半透明纯色」—— 卡片按自身在窗口中的位置对齐
+            //    背后同一张壁纸，配合 RenderEffect 高斯模糊，真正透出下方壁纸的真实色彩；
+            //    列表滚动时卡片位置改变 → 采样区域随之移动 → 折射光影随滑动而变化。
+            //    采样图放大到整屏尺寸并反向偏移卡片窗口坐标，使壁纸在卡片范围内「对位」显示。
+            val configuration = LocalConfiguration.current
+            val wDensity = LocalDensity.current
+            val screenW = configuration.screenWidthDp.dp
+            val screenH = configuration.screenHeightDp.dp
+            val blurPx = with(wDensity) { GLASS_BLUR_RADIUS_DP.toPx() }
+            val bgOffset = remember { mutableStateOf(Offset.Zero) }
             Box(
                 Modifier
                     .matchParentSize()
                     .clip(shape)
-                    .backdrop(tier)
-                    .background(Color.Transparent)
+                    .onGloballyPositioned { coords: LayoutCoordinates ->
+                        // localToWindow(Offset.Zero) == positionInWindow()：取卡片左上角在窗口中的坐标
+                        bgOffset.value = coords.localToWindow(Offset.Zero)
+                    }
             ) {
                 AsyncImage(
                     model = coil.request.ImageRequest.Builder(LocalContext.current)
                         .data(File(wallPath!!))
-                        .size(160)
+                        .size(420)
                         .crossfade(false)
                         .build(),
                     contentDescription = null,
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    modifier = Modifier.matchParentSize()
+                    contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+                    modifier = Modifier
+                        .size(screenW, screenH)
+                        .graphicsLayer {
+                            translationX = -bgOffset.value.x
+                            translationY = -bgOffset.value.y
+                            // Android 12+：原生 RenderEffect 高斯模糊（真正的折射观感）
+                            // 平台 android.graphics.RenderEffect 需经 asComposeRenderEffect() 转为 Compose 类型
+                            if (Build.VERSION.SDK_INT >= 31) {
+                                renderEffect = RenderEffect.createBlurEffect(
+                                    blurPx, blurPx, android.graphics.Shader.TileMode.CLAMP
+                                ).asComposeRenderEffect()
+                            }
+                        }
                 )
             }
             // 2) 半透明着色层（上深下浅渐变，保证文字可读性 + 底缘溶解）
@@ -297,14 +327,15 @@ fun GlassCard(
     // v1.0.20：圆角全局统一 16dp（UiDimens.CardRadius 同值），且 GlassSurface 内部强制
     // clip(shape) —— 背景与内容都锁进圆弧，任何调用点都不可能再出现方形直角。
     val userAlpha = LocalCardOpacity.current
-    val opaque = userAlpha >= CARD_OPAQUE_THRESHOLD
     GlassSurface(
         modifier = modifier,
         shape = shape,
         showBorder = true,
         onClick = onClick,
         tintOverride = userAlpha,
-        scrimOverride = if (opaque) 0f else (0.28f * (userAlpha / 0.74f)).coerceIn(0f, 0.4f)
+        // v1.0.6.6（死命令 #3）：壁纸开启时始终保留一层可读性遮罩（下限 0.22），
+        // 即便用户把卡片不透明度拉到 100%，也保证文字对比度稳定、同时透出壁纸色相。
+        scrimOverride = (0.28f * (userAlpha / 0.74f)).coerceIn(0.22f, 0.42f)
     ) {
         // v1.0.6 封板：删掉内层 10% 黑色暗化层 —— 它正是「卡片发灰、和速览瓦片不是一种白」的真凶。
         // 可读性已由 GlassSurface 内部的 surface 蒙层（scrim）负责，无需再叠一层黑。
@@ -333,29 +364,10 @@ fun AppCard(
     )
 }
 
-/**
- * 背景模糊 / 折射修饰符。所有 GPU 调用均门控于 SDK 版本，低版本返回原修饰符（纯色面板照常）。
- * FULL 档额外做轻微放大，模拟透镜折射观感（安全、零 RenderEffect 类型摩擦）。
- *
- * v1.0.6.7 性能调优：
- *  - 模糊开销随半径**非线性**增长，且每个玻璃卡片每帧都要跑一次；这里从 10dp 再降到 6dp，
- *    6dp 配合下面的半透明着色层观感几乎无损，但列表滚动时的 GPU 帧时间显著下降；
- *  - FULL 档此前漏了 SDK 版本门控（API < 31 上 Modifier.blur 无实现，白白多一次图层合成），
- *    现在两个分支统一先判版本。
- */
-private fun Modifier.backdrop(tier: GlassTier, blurDp: Dp = GLASS_BLUR_RADIUS_DP): Modifier {
-    if (Build.VERSION.SDK_INT < 31) return this
-    val radius = blurDp.coerceAtLeast(0.dp)
-    val blurred = this.blur(radius)
-    return if (tier == GlassTier.FULL) {
-        // 折射：先轻微放大再模糊，避免采样到边缘拉伸露白
-        this.graphicsLayer { scaleX = 1.04f; scaleY = 1.04f }.blur(radius)
-    } else blurred
-}
-
 /* 模糊半径：18dp(v1.0.6) → 10dp(v1.0.7) → 6dp(v1.0.6.7)。
    低端降级档（FLAT 纯色）完全不走这里，零 GPU 开销。
-   v1.0.6.5：对外暴露为 GLASS_BLUR_RADIUS_DP，供 [glassScrollBlurRadius] 默认与滚动降级复用同一数值。 */
+   v1.0.6.6（死命令 #3）：现直接用于 RenderEffect.createBlurEffect 的高斯模糊半径，
+   配合位置感知壁纸采样，实现真正随滑动变化的动态毛玻璃。 */
 val GLASS_BLUR_RADIUS_DP: Dp = 6.dp
 
 /** 在主框架注入全局壁纸路径，供各处 [GlassSurface] 就地采样毛玻璃背景。 */

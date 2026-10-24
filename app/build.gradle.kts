@@ -76,7 +76,17 @@ android {
         // AI 页只留一个导入入口 + 模型加载失败红字明示(架构/内存/文件损坏)+MNN 加载链路修复；
         // 撤销列表滚动模糊降级(液态玻璃常驻)；取消默认 Emoji 头像改矢量占位；
         // 主页新增轻量日历卡；任务备注工具栏去 B/I/U；Steam 游戏库独立二级页；笔记待办打勾不吞字
-        versionCode = 55
+        // versionCode 56 = v1.0.6（四处闪退根治 + 四项体验修复批）：[真机 Logcat 实证]
+        // ① 修复四处闪退(任务页加号/隐私政策/更新日志/AI配置) —— 根因为 GlassDialog 外层
+        //    verticalScroll 与各弹窗 text 槽内层 verticalScroll 同向嵌套，被 Compose 以 infinity
+        //    约束抛 IllegalStateException；统一去掉弹窗内层滚动，改由 GlassDialog 单层滚动承载。
+        // ② 彻底清除默认 Emoji 头像预设（删除 AvatarPresets emoji 数组），更换头像弹窗仅保留
+        //    「从相册上传图片」与「重置为默认（极简 User 轮廓矢量图标）」两项。
+        // ③ 卡片动态毛玻璃：废除「100% 不透明跳过壁纸采样」逻辑，GlassSurface 常驻按位置实时采样壁纸，
+        //    Android 12+ 用 RenderEffect.createBlurEffect 真高斯模糊，随滑动产生折射光影变化。
+        // ④ 笔记待办改为标准 Compose Checkbox 清单（勾选加删除线），废弃「- [ ] 」文字符号替换。
+        // ⑤ 主页日历卡支持点击任意日期：选中高亮 + 下方任务列表同步刷新当天数据。
+        versionCode = 56
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）

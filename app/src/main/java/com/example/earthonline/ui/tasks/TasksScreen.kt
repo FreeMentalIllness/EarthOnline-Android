@@ -975,10 +975,11 @@ private fun TaskEditDialog(
         },
         title = { Text(if (onDelete != null) "编辑任务" else "新增任务") },
         text = {
-            // v1.0.4：内容可滚动 —— 父任务卡 + 状态 FlowRow + 日期 + 备注在长内容 / 大字号下不溢出
+            // v1.0.4：内容可滚动 —— 父任务卡 + 状态 FlowRow + 日期 + 备注在长内容 / 大字号下不溢出。
+            // 注意：外层 GlassDialog 已提供整卡纵向滚动，这里**禁止再套一层 verticalScroll**，
+            // 否则同方向嵌套滚动会被 Compose 以 infinity 约束直接抛 IllegalStateException 闪退。
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.verticalScroll(rememberScrollState())
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 GlassTextField(
                     value = title, onValueChange = { title = it },

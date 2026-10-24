@@ -873,7 +873,9 @@ private fun HomeCalendarCard(
             c.get(java.util.Calendar.DAY_OF_MONTH)
         )
     }
-    val todayList = remember(tasks, todayKey) { tasks.filter { it.dueDate == todayKey } }
+    // v1.0.6.6（死命令 #5）：日历卡支持点击任意日期，选中后高亮并刷新下方当天任务。
+    var selectedKey by remember { mutableStateOf(todayKey) }
+    val selectedList = remember(tasks, selectedKey) { tasks.filter { it.dueDate == selectedKey } }
 
     val first = remember(year, month) {
         java.util.Calendar.getInstance().apply { set(year, month, 1) }
@@ -936,6 +938,7 @@ private fun HomeCalendarCard(
                                 if (idx in 0 until daysInMonth) {
                                     val key = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, idx + 1)
                                     val isToday = key == todayKey
+                                    val isSelected = key == selectedKey
                                     val busy = key in busyDays
                                     Box(
                                         modifier = Modifier
@@ -943,22 +946,29 @@ private fun HomeCalendarCard(
                                             .clip(CircleShape)
                                             .background(
                                                 when {
+                                                    isSelected -> AmberPrimary
                                                     isToday -> AmberPrimary
                                                     busy -> AmberPrimary.copy(alpha = 0.14f)
                                                     else -> Color.Transparent
                                                 }
-                                            ),
+                                            )
+                                            .then(
+                                                if (isSelected) Modifier.border(
+                                                    2.5.dp, MaterialTheme.colorScheme.onBackground, CircleShape
+                                                ) else Modifier
+                                            )
+                                            .clickable { selectedKey = key },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             "${idx + 1}",
                                             style = MaterialTheme.typography.labelMedium,
                                             color = when {
-                                                isToday -> Color.White
+                                                isSelected || isToday -> Color.White
                                                 busy -> AmberPrimary
                                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                                             },
-                                            fontWeight = if (isToday || busy) FontWeight.Bold else FontWeight.Normal
+                                            fontWeight = if (isSelected || isToday || busy) FontWeight.Bold else FontWeight.Normal
                                         )
                                     }
                                 }
@@ -973,21 +983,23 @@ private fun HomeCalendarCard(
                 modifier = Modifier.padding(vertical = 10.dp)
             )
 
-            /* —— 当天安排 —— */
+            /* —— 选中日期的安排（死命令 #5：随日历选中日期刷新） —— */
+            val selM = selectedKey.substring(5, 7).toInt()
+            val selD = selectedKey.substring(8, 10).toInt()
             Text(
-                "今天（${todayKey.takeLast(5).replace("-", "月")}日）",
+                if (selectedKey == todayKey) "今天（${selM}月${selD}日）" else "${selM}月${selD}日",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(6.dp))
-            if (todayList.isEmpty()) {
+            if (selectedList.isEmpty()) {
                 Text(
-                    "今天没有安排，安心过一天。",
+                    if (selectedKey == todayKey) "今天没有安排，安心过一天。" else "这一天没有安排。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                todayList.take(3).forEach { t ->
+                selectedList.take(3).forEach { t ->
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1008,9 +1020,9 @@ private fun HomeCalendarCard(
                         )
                     }
                 }
-                if (todayList.size > 3) {
+                if (selectedList.size > 3) {
                     Text(
-                        "还有 ${todayList.size - 3} 项…",
+                        "还有 ${selectedList.size - 3} 项…",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

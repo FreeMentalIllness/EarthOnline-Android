@@ -125,7 +125,6 @@ fun AiConfigDialog(
         },
         text = {
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // 三态开关：关闭 / 云端模型 / 本地模型（DataStore 持久化 runMode）
@@ -743,7 +742,6 @@ private fun LocalModelGuide(onDismiss: () -> Unit) {
         },
         text = {
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Text(

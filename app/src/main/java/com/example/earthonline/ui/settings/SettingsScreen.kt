@@ -234,7 +234,7 @@ private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("隐私政策") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column {
                 AppInfo.privacyPolicy.forEach { (title, body) ->
                     Text(
                         title,

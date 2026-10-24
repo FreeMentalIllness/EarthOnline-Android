@@ -35,22 +35,20 @@ import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.GlassCard
-import com.example.earthonline.util.AVATAR_PRESET_OPTIONS
 import com.example.earthonline.ui.components.UserAvatar
 import com.example.earthonline.util.IMAGE_TYPES_HINT
 import com.example.earthonline.util.ImageStore
 import com.example.earthonline.util.ShareCardRenderer
 import com.example.earthonline.util.ageFromBirthDate
-import com.example.earthonline.util.avatarEmoji
 import com.example.earthonline.util.millisToDayStr
 import com.example.earthonline.util.rememberImagePicker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/* v1.0.0：预设头像改为单一来源 util/AvatarPresets.kt（桌面小组件也用它取兜底 emoji），
-   不再每个界面各抄一份 map —— 之前资料页与主页各有一份，加新预设必漏一处。 */
-private val AVATAR_PRESETS = AVATAR_PRESET_OPTIONS
+/* v1.0.6.6（死命令 #2）：彻底清除默认 Emoji 头像预设。
+   更换头像弹窗只保留「从相册上传图片」与「重置为默认头像（极简 User 轮廓矢量图标）」两项，
+   不再提供任何 Emoji 预设选项。 */
 
 private val PROVINCES = listOf(
     "北京", "上海", "广东", "江苏", "浙江", "四川", "湖北", "湖南", "山东", "河南",
@@ -267,10 +265,6 @@ fun ProfileScreen(vm: ProfileViewModel, moreActions: MoreMenuActions) {
             title = { Text("选择头像") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AVATAR_PRESETS.forEach { (key, label) ->
-                        OutlinedButton(onClick = { vm.selectPresetAvatar(key); showAvatarPicker = false },
-                            modifier = Modifier.fillMaxWidth()) { Text(label) }
-                    }
                     HorizontalDivider()
                     OutlinedButton(onClick = { showAvatarPicker = false; pickAvatar() },
                         modifier = Modifier.fillMaxWidth()) { Text("从相册上传图片") }

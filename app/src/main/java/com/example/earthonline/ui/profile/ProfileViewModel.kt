@@ -177,13 +177,7 @@ class ProfileViewModel @Inject constructor(
         avatarKey = "" // 上传优先；清空预设 key
     }
 
-    fun selectPresetAvatar(key: String) {
-        avatarKey = key
-        avatarData = null
-        avatarPath = null
-    }
-
-    /** 重置为默认头像（预设 emoji）：清掉路径与字节 */
+    /** 重置为默认头像：清掉路径与字节，由 ui/components/Avatar.kt 用极简 User 轮廓矢量图标兜底。 */
     fun resetAvatar() {
         avatarKey = ""
         avatarData = null
