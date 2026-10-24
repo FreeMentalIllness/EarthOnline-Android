@@ -31,7 +31,6 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.rounded.Celebration
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.CheckBox
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.Delete
@@ -82,7 +81,7 @@ import com.example.earthonline.ui.components.EmptyState
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
-import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.theme.HazeScrollAware
 import com.example.earthonline.ui.components.MarkdownRemark
 import com.example.earthonline.ui.design.EOConfirmDialog
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -207,7 +206,6 @@ fun TasksScreen(
 
     // ————— v1.0.3 长按拖拽排序：仅允许在同级兄弟间交换（不破坏任务树结构） —————
     val listState = rememberLazyListState()
-    TrackScrollBlur(listState)
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffset by remember { mutableStateOf(0f) }
 
@@ -405,6 +403,7 @@ fun TasksScreen(
                     )
                 }
             } else {
+                HazeScrollAware(listState) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -526,6 +525,7 @@ fun TasksScreen(
                         }
                     }
                 }
+                }  // vc64：滚动降级作用域闭合
             }
         }
     }
@@ -967,31 +967,6 @@ private fun StatusChip(status: String) {
     )
 }
 
-/**
- * 任务备注「待办」按钮：在光标处插入标准 Checkbox 结构（`[ ]` / `[x]`）。
- *
- * 与笔记编辑器 [NoteEditorScreen] 完全同一套语义 —— 一律用**空区间 replaceTextRange** 插入，
- * 删除长度为 0，绝不可能吃掉已有文字（早期 `addTextAtIndex` 在存在选区时会替换选区，即"吞字"）。
- * 光标所在行已是待办行时，按行首切换未勾选 / 已勾选。
- */
-private fun toggleTaskTodo(state: com.mohamedrejeb.richeditor.model.RichTextState) {
-    val text = state.toText()
-    val caret = state.selection.min.coerceIn(0, text.length)
-    val nl = text.lastIndexOf('\n', (caret - 1).coerceAtLeast(0))
-    val ls = if (nl < 0) 0 else nl + 1
-    val ne = text.indexOf('\n', caret)
-    val le = if (ne < 0) text.length else ne
-    val line = text.substring(ls, le)
-    val prefixLen = "- [ ] ".length
-    when {
-        line.startsWith("- [ ] ") ->
-            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [x] ")
-        line.startsWith("- [x] ") || line.startsWith("- [X] ") ->
-            state.replaceTextRange(TextRange(ls, ls + prefixLen), "- [ ] ")
-        else ->
-            state.replaceTextRange(TextRange(caret, caret), "- [ ] ")
-    }
-}
 
 /**
  * v1.0.6.7（死命令 #5）：自绘钟表盘时间选择器（Analog Clock dial）。
@@ -1271,9 +1246,10 @@ private fun TaskEditDialog(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                /* v1.0.6.6（死命令 #7）：任务备注**去掉加粗 / 斜体 / 下划线**。
-                   备注是随手记的短文本，行内字重样式既用不上，又会把整段文字搞得花哨；
-                   只保留「无序列表 / 有序列表 / 待办」三类**基础结构格式**。 */
+                /* v1.0.6.6（死命令 #7）+ vc64：任务备注只保留**基础结构格式**
+                   —— 无序列表 / 有序列表。vc64 起**彻底移除「待办 / 打勾」**：
+                   备注是随手记的短文本，塞一个复选框进去既用不上，又会把
+                   「任务本身有完成态」与「备注里有打勾」两件事混在一起（语义打架）。 */
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1290,12 +1266,6 @@ private fun TaskEditDialog(
                     ) {
                         Icon(Icons.Rounded.FormatListNumbered, contentDescription = "有序列表", modifier = Modifier.size(18.dp))
                     }
-                    IconButton(
-                        onClick = { toggleTaskTodo(noteRich) },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Rounded.CheckBox, contentDescription = "待办", modifier = Modifier.size(18.dp))
-                    }
                 }
                 BasicRichTextEditor(
                     state = noteRich,
@@ -1307,7 +1277,7 @@ private fun TaskEditDialog(
                     ),
                     decorationBox = { inner ->
                         if (noteRich.annotatedString.text.isEmpty()) {
-                            Text("备注…支持列表 / 待办", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("备注…支持列表等基础 Markdown", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         inner()
                     }

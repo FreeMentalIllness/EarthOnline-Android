@@ -1,6 +1,7 @@
 package com.example.earthonline.ui.settings
 
 import com.example.earthonline.ui.theme.GlassCard
+import com.example.earthonline.ui.theme.AmberPrimary
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -878,10 +879,35 @@ fun AboutRoute(
             onDismissRequest = { showChangelog = false },
             title = { Text("更新说明") },
             text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
+                /* vc64：编年史按**版本号分段**展示 ——
+                   同一条版本线（如 1.0.6.x）只在段首出现一次「段标」，
+                   下面各版本再依次列出，长列表不再是一眼望不到头的纯文字流。 */
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    var lastSegment = ""
                     AppInfo.changelog.forEach { (ver, date, items) ->
+                        val segment = ver.substringBeforeLast('.')
+                        if (segment != lastSegment) {
+                            lastSegment = segment
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = AmberPrimary.copy(alpha = 0.14f)
+                                ) {
+                                    Text(
+                                        "v$segment.x",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AmberPrimary,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                HorizontalDivider(modifier = Modifier.weight(1f))
+                            }
+                        }
                         Text(
                             "v$ver · $date",
                             style = MaterialTheme.typography.labelLarge,

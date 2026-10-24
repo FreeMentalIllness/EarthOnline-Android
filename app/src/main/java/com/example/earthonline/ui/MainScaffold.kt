@@ -43,7 +43,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.Color
@@ -78,6 +77,9 @@ import com.example.earthonline.ui.navigation.bottomNavItems
 import com.example.earthonline.ui.navigation.settingsSubRoutes
 import com.example.earthonline.ui.theme.ProvideWallpaper
 import com.example.earthonline.ui.theme.ProvideLiquidGlass
+import com.example.earthonline.ui.theme.ProvideHazeState
+import com.example.earthonline.ui.theme.ProvideHazeBlurScale
+import dev.chrisbanes.haze.hazeSource
 import com.example.earthonline.ui.settings.SettingsViewModel
 import com.example.earthonline.util.AchievementSound
 import com.example.earthonline.util.launchAccounting
@@ -217,7 +219,17 @@ fun MainScaffold(
         }
     }
 
+    /* vc64：Haze 全局取景源 —— 一个 App 生命周期内只创建一次，全站玻璃共享同一份背景层。
+       壁纸层（AsyncImage + 背景色蒙版）挂 hazeSource，之后所有 GlassSurface / GlassCard
+       只做「取景 + 模糊」，不再各自解码 / 采样壁纸（灰块断层与卡顿的根因彻底消失）。 */
+    val hazeState = remember { dev.chrisbanes.haze.HazeState() }
     ProvideLiquidGlass(liquidGlass) {
+        ProvideHazeState(hazeState) {
+        /* vc64：「壁纸模糊度」滑块改挂到 Haze 的模糊强度上（不再对整屏图片做 Compose blur）。
+           整屏 Modifier.blur 是全项目最贵的一处 GPU 操作（每帧一次全屏高斯），
+           现在由 Haze 在小得多的卡片区域上做真模糊，同样甚至更好的质感、开销低一个数量级。
+           列表页滚动时会在此基础上再降一档（见各列表的 ProvideHazeBlurScale）。 */
+        ProvideHazeBlurScale((0.72f + (wallpaperBlur / 24f) * 0.48f).coerceIn(0.55f, 1f)) {
         Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         /* v1.0.12：全面屏（edge-to-edge）适配。
@@ -292,25 +304,21 @@ fun MainScaffold(
         )
         Box(Modifier.fillMaxSize()) {
             if (wallpaperRequest != null) {
-                AsyncImage(
-                    model = wallpaperRequest,
-                    contentDescription = null,
-                    modifier = Modifier
+                /* vc64：壁纸层 = Haze 取景源。整块（图片 + 背景色蒙版）一起被抓进共享层，
+                   卡片拿到的模糊背景与肉眼看到的壁纸是同一张、同一位置 —— 彻底消除
+                   「每卡各自采样 / 各自偏移」造成的灰 / 白色块断层。
+                   注意：这里绝不能再挂 Modifier.blur（每帧全屏高斯，最贵的 GPU 操作，已删除）。 */
+                Box(
+                    Modifier
                         .fillMaxSize()
-                        // v1.0.11：壁纸模糊度滑块（0 时不挂 blur，避免无谓的离屏合成开销）
-                        // v1.0.6.7：全屏 blur 是本项目最贵的一处 GPU 操作（每帧一次全屏高斯），
-                        // 这里给半径加 12dp 硬上限 —— 超出部分观感收益极低但开销指数上升。
-                        // v1.0.6.14（死命令 #2 防卡顿）：FLAT / BLUR 档（低内存 / 旧机型）直接不挂
-                        // 全屏高斯 —— 壁纸以清晰图 + 蒙层呈现，列表滚动稳 60FPS。
-                        .then(
-                            if (wallpaperBlur > 0.5f &&
-                                com.example.earthonline.ui.theme.rememberGlassTier() ==
-                                com.example.earthonline.ui.theme.GlassTier.FULL
-                            ) Modifier.blur(wallpaperBlur.coerceAtMost(MAX_WALLPAPER_BLUR_DP).dp)
-                            else Modifier
-                        ),
-                    contentScale = ContentScale.Crop
-                )
+                        .hazeSource(hazeState)
+                ) {
+                    AsyncImage(
+                        model = wallpaperRequest,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
                 /* 性能：用「背景色蒙层」表达不透明度，而不是给图片设 alpha。
                    alpha < 1 会为整张全屏图创建离屏图层（saveLayer），每帧多一次全屏合成；
                    蒙层只是一个半透明矩形，几乎零成本。
@@ -326,6 +334,7 @@ fun MainScaffold(
                             )
                         )
                 )
+                } // vc64：hazeSource 容器闭合
             }
             /* v1.0.14：顶部硬遮挡（应用户要求撤销状态栏沉浸透出壁纸的设计）。
                状态栏区域（时间/电量处）用主题基础背景色实心填充 —— 绝不透出壁纸，
@@ -387,6 +396,8 @@ fun MainScaffold(
             AchievementUnlockHost(vm = achVm)
         }
     }
+        } // vc64：ProvideHazeBlurScale 闭合
+        } // vc64：ProvideHazeState 闭合
     }
 }
 

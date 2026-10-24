@@ -163,6 +163,18 @@ android {
         // ⑤ 笔记页 UI 统一：取消顶部两张新建大卡，顶部常驻搜索框（对齐背包），右下角悬浮「+」
         //    弹新建笔记/分类选项面板；
         // ⑥ 卡片堆叠修复：HorizontalPager + 缩放/位移动画模拟堆叠（滑动/惯性/回弹零冲突）。
+        // versionCode 64 = v1.0.6（Haze 液态玻璃重构 + 笔记块级任务列表批）：
+        // ① 引入 Haze（dev.chrisbanes.haze 1.3.1，对齐本项目 Compose 1.7.x）彻底重构全局液态玻璃 ——
+        //    主页壁纸层挂 hazeSource，全站 GlassCard / GlassSurface / 弹窗 / 底栏统一走 hazeEffect +
+        //    极细高光描边；删除 vc62 手写 AGSL 折射 / RenderEffect / Modifier.blur 全部旧代码（灰块与断层的根因）；
+        //    列表滚动时按 isScrollInProgress 动态降低模糊半径，Android 12 以下自动降级为半透明纯色（Haze fallbackTint）。
+        // ② 堆叠卡片：取消「大/中/小」三档预设，改为平滑尺寸滑块（0.6x~1.6x，任意尺寸不变形），
+        //    并排查 Haze 模糊层与卡片 Box 层级冲突，消除中间那条灰色横向断层。
+        // ③ 笔记待办行内化：废弃「独立待办区 + 字符替换」，改为块级任务列表（块编辑器，原生 Checkbox
+        //    在行首，勾选即加删除线），存储仍是标准 Markdown「- [x] 」行，跨端契约零改动。
+        // ④ 收藏页把「Steam 游戏库」移出列表主体，改在右上角独立「游戏库」图标按钮；
+        //    新建任务备注移除「待办 / 打勾」格式化选项（仅保留加粗 / 斜体 / 列表等基础 Markdown）。
+        // ⑤ 补全更新日志（编年史）：v1.0.0 → 当前版本全量分段展示。
         // versionCode 63 = v1.0.6（真机截图五项修复批）：
         // ① 根治卡片底部「灰砖」：vc62 底部内阴影的 verticalGradient 未映射矩形（铺满全绘制区），
         //    实测渲染为恒定 6% 黑的 20dp 灰带；删除之，玻璃卡仅留 1.5px 极细顶边高光（渐变已锁定矩形内）；
@@ -172,7 +184,7 @@ android {
         // ④ 笔记待办改真实复选框：独立待办区 + Compose 原生 Checkbox（点击打勾/取消 + 删除线），
         //    存储仍为标准 "- [ ]/- [x] " Markdown 行（跨端契约零改动），编辑态绝无「□」字符；
         // ⑤ 堆叠卡片尺寸自适应：大/中/小三档切换（DataStore 持久化），全卡统一宽高比例。
-        versionCode = 63
+        versionCode = 64
         versionName = "1.0.6"
         vectorDrawables { useSupportLibrary = true }
         // 高德 SDK 需要原生 so 库，按需裁剪 ABI（阶段3 接入地图前可放行全部）
@@ -303,4 +315,7 @@ dependencies {
     implementation(libs.richeditor)
     // v1.0.6.5：本地离线推理引擎（llama.cpp 绑定，GGUF；预编译 so 随包分发，无需 NDK 自编译）
     implementation(libs.inferkt)
+    // vc64：Haze —— 全局液态玻璃（blur + tint + noise），取代手写 AGSL / RenderEffect 实现。
+    // 版本锁 1.3.1（对齐本项目 Compose 1.7.x），升级前务必先看 libs.versions.toml 里的兼容说明。
+    implementation(libs.haze)
 }

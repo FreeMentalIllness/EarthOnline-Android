@@ -45,7 +45,7 @@ import com.example.earthonline.ui.components.GlassDialog
 import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
-import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.theme.HazeScrollAware
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AppCard
 import com.example.earthonline.ui.theme.AmberPrimary
@@ -192,7 +192,7 @@ fun NotesScreen(
             }
 
             val listState = rememberLazyListState()
-            TrackScrollBlur(listState)
+            HazeScrollAware(listState) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -333,6 +333,7 @@ fun NotesScreen(
                     }
                 }
             }
+            }  // vc64：滚动降级作用域闭合
         }
     }
 

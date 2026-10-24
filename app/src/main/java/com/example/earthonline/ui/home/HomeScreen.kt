@@ -122,7 +122,7 @@ import com.example.earthonline.ui.components.IconChip
 import com.example.earthonline.ui.components.ModuleTints
 import com.example.earthonline.ui.components.SectionHeader
 import com.example.earthonline.ui.components.TagChip
-import com.example.earthonline.ui.components.TrackScrollBlur
+import com.example.earthonline.ui.theme.HazeScrollAware
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.UserAvatar
@@ -174,7 +174,7 @@ fun HomeRoute(
         onFeedLimitChange = vm::setFeedLimit,
         onQuickEntriesChange = vm::setQuickEntries,
         onStackCardsChange = vm::setStackCards,
-        onStackSizeChange = vm::setStackSize,
+        onStackScaleChange = vm::setStackScale,
         onAddCustomActivity = vm::addCustomActivity,
         onThrowbackSeen = vm::onThrowbackSeen,
         query = query,
@@ -205,8 +205,8 @@ fun HomeScreen(
     onQuickEntriesChange: (Set<String>) -> Unit = {},
     /** v1.0.6.7：主页卡片堆叠区自定义（哪些次要卡片入堆叠，DataStore 持久化） */
     onStackCardsChange: (Set<String>) -> Unit = {},
-    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大，DataStore 持久化） */
-    onStackSizeChange: (Int) -> Unit = {},
+    /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，滑块任意值，DataStore 持久化） */
+    onStackScaleChange: (Float) -> Unit = {},
     onAddCustomActivity: (String) -> Unit = {},
     /** v1.0.3：翻开「历年今日」卡（彩蛋计数） */
     onThrowbackSeen: () -> Unit = {},
@@ -261,7 +261,7 @@ fun HomeScreen(
             }
         }
     // homeListState 声明在 HomeScreen 外层作用域（FAB 滚动监听共用），这里只挂滑动模糊追踪
-    TrackScrollBlur(homeListState)
+    HazeScrollAware(homeListState) {
     LazyColumn(
         state = homeListState,
         // v1.0.20：键盘让位已上收到 MainScaffold（bottomBar 高度与 IME 取大者）——
@@ -319,8 +319,8 @@ fun HomeScreen(
         item(key = "stack", contentType = "card") {
             HomeStack(
                 stackCards = state.stackCards,
-                stackSize = state.stackSize,
-                onStackSizeChange = onStackSizeChange,
+                stackScale = state.stackScale,
+                onStackScaleChange = onStackScaleChange,
                 dailyDraw = state.dailyDraw,
                 acts = state.allActs,
                 feedKinds = state.feedKinds,
@@ -365,6 +365,7 @@ fun HomeScreen(
             )
         }
     }
+    }  // vc64：滚动降级作用域闭合
         } // v1.0.18：Column（实心顶块 + 内容列表）闭合
 
         // v1.0.19（核心功能）：右下角悬浮「+」按钮 —— AI 快捷中枢入口。
@@ -1013,9 +1014,9 @@ private fun AvatarWithBadge(
 @Composable
 private fun HomeStack(
     stackCards: Set<String>,
-    /** vc63：尺寸档（0=小 / 1=中 / 2=大），DataStore 持久化 */
-    stackSize: Int,
-    onStackSizeChange: (Int) -> Unit,
+    /** vc64：平滑缩放（0.6~1.6，1.0 = 基准 356dp；滑块可停任意值，DataStore 持久化） */
+    stackScale: Float,
+    onStackScaleChange: (Float) -> Unit,
     dailyDraw: ThrowbackItem?,
     acts: List<ActivityEntity>,
     feedKinds: Set<String>,
@@ -1058,33 +1059,36 @@ private fun HomeStack(
     }
     val pagerState = rememberPagerState(initialPage = defaultFront, pageCount = { pages.size })
     val pagerScope = rememberCoroutineScope()
-    // vc63：尺寸自适应 —— 小/中/大三档（DataStore 持久化），容器与卡片同高、宽高比例全卡统一
-    val stackHeight = when (stackSize.coerceIn(0, 2)) { 0 -> 280.dp; 2 -> 440.dp; else -> 356.dp }
+    /* vc64：尺寸改为**平滑缩放滑块**（0.6x ~ 1.6x），取代 vc63 的大/中/小三档预设 ——
+       滑块可停在任意值，卡片只整体按高度缩放（内部内容按比例让位），绝不变形。
+       同时**根除中间那条灰色横向断层**：旧实现是每张卡各自 AsyncImage 采样壁纸（240px 缩略图）
+       + RenderEffect 模糊 + 半透明白蒙版，卡片尺寸一大，缩放采样与模糊半径就会在卡片中段
+       压出一条与上下不同色的横向色带（真机截图里的「灰杠」）。现在全站共用 Haze 的
+       一张共享背景层按屏幕位置取景，卡片上只剩一层玻璃材质，断层无从产生。 */
+    val scale = stackScale.coerceIn(0.6f, 1.6f)
+    val stackHeight = 356.dp * scale
     val cardHeight = stackHeight - 26.dp
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SectionHeader("卡片堆叠", Modifier.weight(1f), icon = Icons.Rounded.Layers)
-            // vc63：大 / 中 / 小尺寸切换（统一所有堆叠卡片的基础宽高比例）
+            // vc64：平滑尺寸滑块（紧凑，只占 96dp 宽，拖动即时生效）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf(2 to "大", 1 to "中", 0 to "小").forEach { (v, label) ->
-                    val active = stackSize.coerceIn(0, 2) == v
-                    Surface(
-                        onClick = { onStackSizeChange(v) },
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (active) AmberPrimary.copy(alpha = 0.16f) else Color.Transparent
-                    ) {
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                            color = if (active) AmberPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
+                Text(
+                    "高",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = scale,
+                    onValueChange = onStackScaleChange,
+                    valueRange = 0.6f..1.6f,
+                    modifier = Modifier
+                        .width(96.dp)
+                        .height(22.dp)
+                )
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

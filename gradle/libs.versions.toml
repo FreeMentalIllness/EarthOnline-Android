@@ -33,6 +33,12 @@ richEditor = "1.0.0-rc10"
 # v1.0.6.5：本地离线推理引擎（llama.cpp 的 Kotlin Multiplatform 绑定，Maven Central 发布，
 # 内含 Android 预编译 .so；CPU 推理 GGUF 模型，Qwen2.5-1.5B q4_k_m 量级无压力）
 inferkt = "0.0.2"
+# vc64：Haze（dev.chrisbanes.haze）—— 全局液态玻璃的**工业级实现**（blur + tint + noise）。
+# ⚠️ 版本锁 1.3.1 是硬约束，勿随手升级：本项目 Compose BOM 为 2024.10.01（Compose 运行时 1.7.x），
+#    而 Haze 1.6.x 起编译时对齐 Compose 1.8.0、2.x/3.x 更是要求 Kotlin 2.4 + Compose 1.12，
+#    会直接引发「编译期 API 缺失 / metadata 版本不兼容」的连锁崩（AGP、KSP、Room、Hilt 全要跟着升）。
+#    1.3.1 的 POM 明确对齐 Compose 1.7.3 + Kotlin 2.1.0，与本项目栈完全同源。
+haze = "1.3.1"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -75,6 +81,8 @@ amap = { group = "com.amap.api", name = "3dmap-location-search", version.ref = "
 richeditor = { group = "com.mohamedrejeb.richeditor", name = "richeditor-compose", version.ref = "richEditor" }
 # v1.0.6.5：本地离线推理（llama.cpp 绑定，GGUF 模型；预编译 so 随包分发，无需 NDK 自编译）
 inferkt = { group = "com.dilivva", name = "inferkt", version.ref = "inferkt" }
+# vc64：全局液态玻璃（Haze）—— 取代 vc62 手写 AGSL 折射与 Modifier.blur 灰块实现
+haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

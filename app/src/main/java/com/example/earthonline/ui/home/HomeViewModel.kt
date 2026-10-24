@@ -142,8 +142,8 @@ data class HomeUiState(
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
     /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（timeline=时间轴 / life=人生卡片） */
     val stackCards: Set<String> = DEFAULT_STACK_CARDS,
-    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大） */
-    val stackSize: Int = 1,
+    /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，1.0 = 基准高度） */
+    val stackScale: Float = 1f,
     /**
      * v1.0.6.6 主页日历卡：**带到期日的未完成任务**（日程即"有到期日的任务"）。
      * 已在 ViewModel 里过滤好，UI 只管渲染（月历打点 + 当天清单）。
@@ -244,8 +244,8 @@ private data class Parts(
     val quickEntries: Set<String> = DEFAULT_QUICK_ENTRIES,
     /** v1.0.6.7：主页卡片堆叠区包含的次要卡片（timeline=时间轴 / life=人生卡片） */
     val stackCards: Set<String> = DEFAULT_STACK_CARDS,
-    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大） */
-    val stackSize: Int = 1,
+    /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，1.0 = 基准高度） */
+    val stackScale: Float = 1f,
     /** v1.0.6.6：主页日历卡数据源 —— 带到期日且未完成的任务 */
     val scheduled: List<TaskEntity> = emptyList(),
     /** v1.0.3：全量数据包（历年今日 / 今日一签 / 连续成长都要全量口径） */
@@ -365,8 +365,8 @@ class HomeViewModel @Inject constructor(
             ?: DEFAULT_STACK_CARDS
     }
 
-    /** vc63：主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大） */
-    private val stackSizeFlow: Flow<Int> = settingsDs.homeStackSize
+    /** vc64：主页卡片堆叠平滑缩放（取代 vc63 三档预设） */
+    private val stackScaleFlow: Flow<Float> = settingsDs.homeStackScale
 
     /** v1.0.3：自定义称号 */
     private val customTitleFlow: Flow<String> = settingsDs.customTitle
@@ -398,7 +398,7 @@ class HomeViewModel @Inject constructor(
             .combine(feedLimitFlow) { parts, limit -> parts.copy(feedLimit = limit) }
             .combine(quickEntriesFlow) { parts, quick -> parts.copy(quickEntries = quick) }
             .combine(stackCardsFlow) { parts, stack -> parts.copy(stackCards = stack) }
-            .combine(stackSizeFlow) { parts, size -> parts.copy(stackSize = size) }
+            .combine(stackScaleFlow) { parts, scale -> parts.copy(stackScale = scale) }
             .combine(scheduledFlow) { parts, sched -> parts.copy(scheduled = sched) }
             .combine(bundleFlow) { parts, bundle -> parts.copy(bundle = bundle) }
             .combine(customTitleFlow) { parts, title -> parts.copy(customTitle = title) }
@@ -473,9 +473,9 @@ class HomeViewModel @Inject constructor(
     }
 
     /** v1.0.6.7：设置主页卡片堆叠区包含的次要卡片（至少保留一个，空集忽略） */
-    /** vc63：切换主页卡片堆叠尺寸档（0=小 / 1=中 / 2=大，DataStore 持久化） */
-    fun setStackSize(size: Int) {
-        viewModelScope.launch { settingsDs.setHomeStackSize(size) }
+    /** vc64：主页卡片堆叠平滑缩放（0.6~1.6，滑块可停任意值，DataStore 持久化） */
+    fun setStackScale(scale: Float) {
+        viewModelScope.launch { settingsDs.setHomeStackScale(scale) }
     }
 
     fun setStackCards(cards: Set<String>) {
@@ -667,7 +667,7 @@ class HomeViewModel @Inject constructor(
             feedLimit = feedLimit,
             quickEntries = quickEntries,
             stackCards = stackCards,
-            stackSize = stackSize,
+            stackScale = stackScale,
             // v1.0.6.6：主页轻量日历卡的数据源（带到期日的未完成任务）
             calendarTasks = scheduled,
             // ————— v1.0.3 情绪价值与成长 —————

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.LocalLibrary
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.ViewList
 import androidx.compose.material3.*
@@ -65,7 +66,6 @@ import com.example.earthonline.ui.components.GlassTextField
 import com.example.earthonline.ui.components.MoreMenuActions
 import com.example.earthonline.ui.components.UiDimens
 import com.example.earthonline.ui.components.TrackScrollBlur
-import com.example.earthonline.ui.steam.SteamLibraryEntry
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.example.earthonline.ui.theme.AmberPrimary
 import com.example.earthonline.ui.theme.AppCard
@@ -127,6 +127,16 @@ fun BackpackScreen(
                 // v1.0.11：Header 透明化，与主页一致透出壁纸，去掉顶部悬浮覆盖感
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 actions = {
+                    /* vc64：收藏页右上角独立的「游戏库」图标按钮 ——
+                       Steam 入口从收藏列表主体里彻底移出，不再占用一条列表位、
+                       也不会随着收藏一起被搜索/筛选影响语义。 */
+                    if (tab == 1) {
+                        IconButton(onClick = {
+                            moreActions.onNavigate(com.example.earthonline.ui.navigation.Screen.SteamLibrary.route)
+                        }) {
+                            Icon(Icons.Rounded.SportsEsports, contentDescription = "游戏库")
+                        }
+                    }
                     // v1.2.3：分类管理入口移到右上角，与筛选条解耦，避免「筛选」与「管理」入口重叠
                     IconButton(onClick = { showCategoryManager = true }) {
                         Icon(Icons.Rounded.Tune, contentDescription = "分类管理")
@@ -164,9 +174,7 @@ fun BackpackScreen(
                     context = context,
                     onAddCollection = { showCollection = true },
                     onOpenCollection = { openCollection(it) },
-                    onEditCollection = { editCollection = it },
-                    // v1.0.6.6：Steam 游戏数据不再内联展示，改为入口跳独立页
-                    onOpenSteamLibrary = { moreActions.onNavigate(com.example.earthonline.ui.navigation.Screen.SteamLibrary.route) }
+                    onEditCollection = { editCollection = it }
                 )
             }
         }
@@ -459,8 +467,6 @@ private fun CollectionsPane(
     onAddCollection: () -> Unit,
     onOpenCollection: (CollectionEntity) -> Unit,
     onEditCollection: (CollectionEntity) -> Unit,
-    /** v1.0.6.6：Steam 游戏库独立页入口（收藏页只留入口，不再内联展示游戏数据） */
-    onOpenSteamLibrary: () -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     var cat by remember { mutableStateOf<String?>(null) }
@@ -494,15 +500,9 @@ private fun CollectionsPane(
             onSelect = { cat = it }
         )
         ViewModeToggle(grid = grid, onToggle = { grid = !grid })
-        /* v1.0.6.6（真机反馈 #8）：Steam 游戏数据**移出收藏页**，只保留一个入口。
-           内联展示会把收藏列表顶下去、也让「收藏」语义变杂；游戏库现在是独立二级页。
-           vc62：入口缩小为紧凑胶囊（随内容自适应宽度，不再占整行）。 */
-        SteamLibraryEntry(
-            modifier = Modifier
-                .padding(horizontal = UiDimens.ListPad)
-                .padding(top = 8.dp),
-            onClick = onOpenSteamLibrary
-        )
+        /* vc64：Steam 游戏库入口**彻底移出列表主体** ——
+           它既不是一条收藏，也不该被搜索/分类筛选影响；现在只通过右上角
+           独立的「游戏库」图标按钮进入（见 BackpackScreen 的 TopAppBar actions）。 */
         if (filtered.isEmpty()) {
             if (collections.isEmpty()) {
                 EmptyState(
